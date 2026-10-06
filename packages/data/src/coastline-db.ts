@@ -127,20 +127,57 @@ export async function markImportedTiles(keys: string[]): Promise<void> {
   }
 }
 
+// ── Inland water (Geofabrik country extracts, track 027 P15) ───────────────────────────────────
+
+/** Start a region's inland import: its previous lakes, rivers and their shores go. */
+export async function clearInlandRegion(region: string): Promise<void> {
+  await db().$executeRaw`DELETE FROM inland_shore WHERE region = ${region}`
+  await db().$executeRaw`DELETE FROM inland_water WHERE region = ${region}`
+}
+
+/** Insert inland water polygons (WKT MULTIPOLYGON), made valid on the way in. */
+export async function insertInlandWater(region: string, rows: { fclass: string; wkt: string }[]): Promise<void> {
+  if (!rows.length) return
+  const values = Prisma.join(rows.map((r) => Prisma.sql`(${region}, ${r.fclass}, ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_GeomFromText(${r.wkt}, 4326)), 3)))`))
+  await db().$executeRaw`INSERT INTO inland_water (region, fclass, geom) VALUES ${values}`
+}
+
+/** Insert inland shore lines (WKT LINESTRING, water on the RIGHT). */
+export async function insertInlandShores(region: string, wkts: string[]): Promise<void> {
+  if (!wkts.length) return
+  const values = Prisma.join(wkts.map((w) => Prisma.sql`(${region}, ST_GeomFromText(${w}, 4326))`))
+  await db().$executeRaw`INSERT INTO inland_shore (region, geom) VALUES ${values}`
+}
+
+/** Lake and river shores within `radiusM` of a point, water on the right — like `coastlineNear`. */
+export async function inlandShoreNear(lat: number, lng: number, radiusM: number): Promise<CoastPoint[][]> {
+  const dLat = radiusM / 111_320
+  const dLng = radiusM / (111_320 * Math.max(0.01, Math.cos((lat * Math.PI) / 180)))
+  const rows = await db().$queryRaw<{ geojson: string }[]>`
+    SELECT ST_AsGeoJSON(geom) AS geojson
+    FROM inland_shore
+    WHERE geom && ST_MakeEnvelope(${lng - dLng}, ${lat - dLat}, ${lng + dLng}, ${lat + dLat}, 4326)
+      AND ST_DWithin(geom::geography, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography, ${radiusM})`
+  return rows.map((r) => (JSON.parse(r.geojson) as { coordinates: [number, number][] }).coordinates.map(([x, y]) => ({ lat: y, lng: x })))
+}
+
 /**
- * The sea within `radiusM` of a point, clipped to that square, as rings of points (outer rings
- * and holes alike — an even-odd point-in-polygon test over all of them answers "in the sea?").
- * Empty where no region was imported.
+ * The water — sea AND inland — within `radiusM` of a point, clipped to that square, as rings of
+ * points (outer rings and holes alike). Everything is UNIONED first, so overlapping pieces (a
+ * river polygon running into the sea, two split sea pieces sharing an edge) never cancel each
+ * other in the even-odd point-in-polygon test. Empty where nothing was imported.
  */
 export async function waterNear(lat: number, lng: number, radiusM: number): Promise<CoastPoint[][]> {
   const dLat = radiusM / 111_320
   const dLng = radiusM / (111_320 * Math.max(0.01, Math.cos((lat * Math.PI) / 180)))
   const box = envelope({ south: lat - dLat, west: lng - dLng, north: lat + dLat, east: lng + dLng })
-  const rows = await db().$queryRaw<{ geojson: string }[]>`
-    SELECT ST_AsGeoJSON(ST_CollectionExtract(ST_Intersection(geom, ${box}), 3), 6) AS geojson
-    FROM coast_water WHERE geom && ${box}`
+  const rows = await db().$queryRaw<{ geojson: string | null }[]>`
+    SELECT ST_AsGeoJSON(ST_CollectionExtract(ST_UnaryUnion(ST_Collect(ST_CollectionExtract(ST_Intersection(geom, ${box}), 3))), 3), 6) AS geojson
+    FROM (SELECT geom FROM coast_water WHERE geom && ${box}
+          UNION ALL SELECT geom FROM inland_water WHERE geom && ${box}) w`
   const rings: CoastPoint[][] = []
   for (const r of rows) {
+    if (!r.geojson) continue
     const g = JSON.parse(r.geojson) as { type: string; coordinates: number[][][] | number[][][][] }
     const polys = (g.type === 'Polygon' ? [g.coordinates] : g.coordinates) as number[][][][]
     for (const poly of polys) for (const ring of poly) if (ring.length >= 4) rings.push(ring.map(([x, y]) => ({ lat: y!, lng: x! })))

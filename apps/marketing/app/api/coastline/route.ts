@@ -18,7 +18,7 @@ import { allow } from '@/lib/limits.ts'
 import { nearestShoreFrame, trimShore, verifyShoreFrame, type GeoPoint } from '@/lib/coastline.ts'
 import { clientIp } from '@/lib/places.ts'
 import { fetchCoastTile } from '@/lib/overpass.ts'
-import { coastlineNear, storeCoastTile, uncoveredCoastTiles, waterNear } from '@repo/data/coastline-db'
+import { coastlineNear, inlandShoreNear, storeCoastTile, uncoveredCoastTiles, waterNear } from '@repo/data/coastline-db'
 import { coastTilesAround } from '@repo/data/coastline-tiles'
 
 /** Google's beach point can sit in the dunes behind the sand; beyond this there is no beach to snap to. */
@@ -46,7 +46,8 @@ export async function GET(request: NextRequest) {
     // 1. Bulk-imported regions (scripts/import-coastline.ts — OSM coastlines + water polygons):
     //    answered from our own tables, never touching Overpass. Recognised by the imported rows
     //    themselves (negative ids), so a world import needs no per-tile bookkeeping.
-    let found = await coastlineNear(lat, lng, SHORE_RADIUS_M)
+    // Lakes, reservoirs and rivers (P15) come only from imported regions; read them alongside.
+    let [found, inland] = await Promise.all([coastlineNear(lat, lng, SHORE_RADIUS_M), inlandShoreNear(lat, lng, SHORE_RADIUS_M)])
     let imported = found.filter((w) => w.id < 0)
     if (!imported.length) {
       // 2. Elsewhere: read-through cache, one Overpass request per never-fetched ~10 km tile.
@@ -62,8 +63,10 @@ export async function GET(request: NextRequest) {
       imported = found.filter((w) => w.id < 0)
     }
     // Imported and Overpass copies of the same shore can coexist; prefer one consistent source.
-    const ways: GeoPoint[][] = (imported.length ? imported : found).map((w) => w.points)
-    const water = imported.length ? await waterNear(lat, lng, SHORE_RADIUS_M + 200) : []
+    // Lake and river shores follow the same water-on-the-right convention, so the nearest shore
+    // wins whichever water it borders.
+    const ways: GeoPoint[][] = [...(imported.length ? imported : found).map((w) => w.points), ...inland]
+    const water = imported.length || inland.length ? await waterNear(lat, lng, SHORE_RADIUS_M + 200) : []
     const raw = nearestShoreFrame(ways, { lat, lng })
     if (!raw || raw.distanceM > SEARCH_RADIUS_M) return Response.json({ frame: null, shore: [], water: [] })
     const frame = verifyShoreFrame(raw, water)

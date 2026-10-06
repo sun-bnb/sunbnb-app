@@ -62,6 +62,8 @@ yarn-error.log*
 
 # Ad-hoc read-only diag scripts (tracked tooling here is .ts/.sh)
 packages/data/scripts/*.mjs
+# …except the coastline DB schema applier, which npm scripts depend on (track 027).
+!packages/data/scripts/coastline-schema.mjs
 
 # Local-only competitor-app reference model (private feature-migration source)
 .claude/alonso/

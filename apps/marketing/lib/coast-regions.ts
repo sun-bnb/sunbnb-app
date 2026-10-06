@@ -1,7 +1,10 @@
 /**
  * Named coastline regions (track 027): what the bulk import and the Overpass seeding cover.
  * Boxes are generous — inland area costs nothing (no coastline rows; tiles marked "no coast").
- * Add a country by adding its boxes here; `world` covers everything.
+ *
+ * Adding a country = its boxes in COAST_REGIONS (the sea, from the global osmdata files) and, if
+ * it has lake or river beaches, its Geofabrik extract in INLAND_EXTRACTS (P15). Then run the import
+ * (scripts/import-coastline.ts) — both layers in one go. `world` covers the sea everywhere.
  */
 export interface Box {
   south: number
@@ -26,7 +29,19 @@ export const COAST_REGIONS: Record<string, Box[]> = {
   'costa-del-sol': [{ south: 36.4, west: -5.4, north: 36.8, east: -4.2 }],
   'costa-blanca': [{ south: 37.85, west: -0.8, north: 38.85, east: 0.25 }],
   'costa-brava': [{ south: 41.65, west: 2.75, north: 42.45, east: 3.35 }],
+  // Landlocked: the sea step imports nothing and marks the tiles "no coast" (so the route never
+  // asks Overpass); the shores come from the inland layer.
+  austria: [{ south: 46.36, west: 9.52, north: 49.03, east: 17.17 }],
   world: [{ south: -90, west: -180, north: 90, east: 180 }],
+}
+
+/**
+ * Lakes, reservoirs and river areas per region (P15): the Geofabrik extract path, i.e.
+ * https://download.geofabrik.de/<path>-latest-free.shp.zip. The import reads only its
+ * gis_osm_water_a_free_1 layer, unzipped into <--inland folder>/<region>/.
+ */
+export const INLAND_EXTRACTS: Record<string, string> = {
+  austria: 'europe/austria',
 }
 
 export function regionBoxes(names: string[]): [string, Box][] {

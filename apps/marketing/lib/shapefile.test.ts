@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { isClockwise, readShapes, toWkt } from './shapefile.ts'
+import { isClockwise, openDbf, readShapes, toWkt } from './shapefile.ts'
 
 /** Build a .shp in memory: records of [type, parts] (parts = arrays of [x, y]). */
 function shp(records: [3 | 5, [number, number][][]][]): Buffer {
@@ -55,5 +55,38 @@ describe('toWkt', () => {
     expect(isClockwise(outer)).toBe(true)
     expect(isClockwise(hole)).toBe(false)
     expect(toWkt({ n: 1, type: 5, box: { south: 0, west: 0, north: 1, east: 1 }, parts: [outer, hole] })).toMatch(/^MULTIPOLYGON\(\(\(0 0,.*\),\(0\.2 0\.2,.*\)\)\)$/)
+  })
+})
+
+/** Build a .dbf in memory with character fields. */
+function dbf(fields: [string, number][], rows: string[][]): Buffer {
+  const headerLength = 32 + fields.length * 32 + 1
+  const recordLength = 1 + fields.reduce((s, [, l]) => s + l, 0)
+  const head = Buffer.alloc(headerLength)
+  head[0] = 3
+  head.writeUInt32LE(rows.length, 4)
+  head.writeUInt16LE(headerLength, 8)
+  head.writeUInt16LE(recordLength, 10)
+  fields.forEach(([name, len], i) => { head.write(name, 32 + i * 32, 'latin1'); head[32 + i * 32 + 11] = 0x43; head[32 + i * 32 + 16] = len })
+  head[headerLength - 1] = 0x0d
+  const recs = rows.map((r) => {
+    const b = Buffer.alloc(recordLength, 0x20)
+    let o = 1
+    r.forEach((v, i) => { b.write(v, o, 'utf8'); o += fields[i]![1] })
+    return b
+  })
+  return Buffer.concat([head, ...recs])
+}
+
+describe('openDbf', () => {
+  const path = (() => { const p = join(mkdtempSync(join(tmpdir(), 'dbf-')), 'x.dbf'); writeFileSync(p, dbf([['osm_id', 12], ['fclass', 20], ['name', 30]], [['1', 'water', 'Wörthersee'], ['2', 'wetland', ''], ['3', 'river', 'Donau']])); return p })()
+  it('reads fields and records by .shp record number, UTF-8 and trimmed', () => {
+    const t = openDbf(path)
+    expect(t.fields).toEqual(['osm_id', 'fclass', 'name'])
+    expect(t.records).toBe(3)
+    expect(t.read(1)).toEqual({ osm_id: '1', fclass: 'water', name: 'Wörthersee' })
+    expect(t.read(3).fclass).toBe('river')
+    expect(() => t.read(4)).toThrow()
+    t.close()
   })
 })

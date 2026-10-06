@@ -295,7 +295,7 @@ pure layout generator (location TBD — see Q2)
 - ☐ **P12 — Local intelligence brief** (tiered fetchers + research agent + citation verifier).
 - ☐ **P13 — Variant B automated claim + A/B on** (partner `/claim/[token]`).
 - ☐ **P14 — Server-side conversions + localized ad variants.**
-- ☐ **P15 — Inland water: lake and river beaches** (founder, 2026-10-05: "will Austria handle Danube
+- ◐ **P15 — Inland water: lake and river beaches** — Austria BUILT 2026-10-06 (local coastline DB; production import pending). Next regions: Finland (`europe/finland`), Spain's reservoirs (`europe/spain`). Not done: Overpass fallback for inland water outside imported regions. (founder, 2026-10-05: "will Austria handle Danube
   beaches?" — no). OSM `natural=coastline` / osmdata water polygons are the SEA only; a landlocked
   country imports nothing, and the Overpass fallback asks for coastline only, so lake/river beaches
   (Danube, Wörthersee, Neusiedler See, Saimaa) get no snap — the visitor turns the beds by hand.
@@ -352,6 +352,23 @@ pure layout generator (location TBD — see Q2)
 
 ## Log
 
+- **2026-10-06** — **P15 inland water: Austria.** A region now names its Geofabrik extract
+  (`INLAND_EXTRACTS` in `lib/coast-regions.ts`), and one import run does the sea (osmdata; Austria
+  gets none, and its 2 079 tiles are marked "no coast" so Overpass is never asked) and the inland
+  layer (`gis_osm_water_a_free_1`, read with the new `openDbf`). New coastline-DB tables:
+  `inland_water` holds the polygons and `inland_shore` their edges in pieces of 200 points or
+  fewer. Shapefile winding already puts the water on the right, the coast_line convention, so
+  `nearestShoreFrame`, `keepOnLand` and `shoreBand` are unchanged. `waterNear` now UNIONs sea and
+  inland water, so overlaps (river mouths, split sea pieces) cannot cancel in the even-odd test;
+  sea bearings are identical before and after. Filters: fclass water / reservoir / riverbank
+  (Geofabrik files the Danube as `riverbank`, not `river`), area ≥ 0.5 ha, and mean width
+  (2A/P) ≥ 20 m. The width floor exists because the 12 m-wide Lendkanal out-snapped the
+  Wörthersee. Austria keeps 5 973 of 70 821 polygons: 24 MB, imported in 11 s. Verified with
+  PostGIS probes (water 15 m ahead, land 15 m behind) at Velden, Klagenfurt, Podersdorf,
+  Gänsehäufel, Donauinsel, St. Gilgen and Attersee, and in the browser (rows parallel to the
+  shore, facing the water). Copy: "facing the sea" → "facing the water" (EN/ES/FI).
+  Found: `packages/data/scripts/coastline-schema.mjs` had never been committed (gitignored by
+  `scripts/*.mjs`); now excepted.
 - **2026-10-06** — **Bot protection (Q6), third-party-free per the 2026-10-04 decision.** Every
   marketing limit moved off the in-memory limiter, which reset on each cold start, onto
   `@repo/data/rate-limit-shared`. It is a fixed-window counter in `rate_limit_counter` (migration

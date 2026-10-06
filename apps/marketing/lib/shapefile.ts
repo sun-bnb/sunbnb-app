@@ -108,3 +108,48 @@ export function toWkt(rec: ShapeRecord): string {
   }
   return `MULTIPOLYGON(${polys.map((p) => `(${p.map((r) => `(${r.map(pt).join(',')})`).join(',')})`).join(',')})`
 }
+
+// ── .dbf attributes (dBASE III, as written next to a .shp) ─────────────────────────────────────
+
+export interface DbfTable {
+  fields: string[]
+  records: number
+  /** Field values of record `n` (1-based, the .shp record number), trimmed. */
+  read(n: number): Record<string, string>
+  close(): void
+}
+
+/**
+ * Random access to a shapefile's attribute table — record `n` of the .dbf belongs to record `n`
+ * of the .shp, so a region-filtered `readShapes` can look up only the records it keeps. Text is
+ * read as UTF-8 (what Geofabrik writes; its .cpg says so).
+ */
+export function openDbf(path: string): DbfTable {
+  const fd = openSync(path, 'r')
+  const head = Buffer.alloc(32)
+  readSync(fd, head, 0, 32, 0)
+  const records = head.readUInt32LE(4)
+  const headerLength = head.readUInt16LE(8)
+  const recordLength = head.readUInt16LE(10)
+  const desc = Buffer.alloc(headerLength - 32)
+  readSync(fd, desc, 0, desc.length, 32)
+  const cols: { name: string; offset: number; length: number }[] = []
+  let offset = 1 // byte 0 of each record is the deletion flag
+  for (let i = 0; i + 32 <= desc.length && desc[i] !== 0x0d; i += 32) {
+    const name = desc.subarray(i, i + 11).toString('latin1').replace(/\0.*$/, '')
+    const length = desc[i + 16]!
+    cols.push({ name, offset, length })
+    offset += length
+  }
+  const rec = Buffer.alloc(recordLength)
+  return {
+    fields: cols.map((c) => c.name),
+    records,
+    read(n) {
+      if (n < 1 || n > records) throw new Error(`${path}: no record ${n}`)
+      readSync(fd, rec, 0, recordLength, headerLength + (n - 1) * recordLength)
+      return Object.fromEntries(cols.map((c) => [c.name, rec.subarray(c.offset, c.offset + c.length).toString('utf8').trim()]))
+    },
+    close: () => closeSync(fd),
+  }
+}
