@@ -341,5 +341,13 @@
     "costA": "Starter has no monthly fee: Sunbnb takes {pct}% only of what it sells for you. Pro and Business lower the commission to {pro}% and {business}% for a monthly fee.",
     "languagesQ": "Which languages does it speak?",
     "languagesA": "English, Spanish and Finnish, for you, your staff and your guests."
+  },
+  "Email": {
+    "subject": "Your beach on Sunbnb: {beach}",
+    "hi": "Hi,",
+    "hiName": "Hi {name},",
+    "body": "Thanks for your interest in Sunbnb. Here is the link to {beach} as you built it, so you can open it again or share it with your team. We’ll be in touch soon about your demo.",
+    "cta": "Open {beach} on Sunbnb",
+    "signoff": "The Sunbnb team"
   }
 }

@@ -341,5 +341,13 @@
     "costA": "Starterissa ei ole kuukausimaksua: Sunbnb ottaa {pct} % vain siitä, mitä se myy puolestasi. Pro ja Business laskevat provision {pro} %:iin ja {business} %:iin kuukausimaksua vastaan.",
     "languagesQ": "Millä kielillä se toimii?",
     "languagesA": "Englanniksi, espanjaksi ja suomeksi – sinulle, henkilökunnallesi ja asiakkaillesi."
+  },
+  "Email": {
+    "subject": "Rantasi Sunbnb:ssä: {beach}",
+    "hi": "Hei,",
+    "hiName": "Hei {name},",
+    "body": "Kiitos kiinnostuksestasi Sunbnb:hen. Tässä linkki rantaan {beach} sellaisena kuin rakensit sen – voit avata sen uudelleen tai jakaa sen tiimillesi. Otamme pian yhteyttä demoa varten.",
+    "cta": "Avaa {beach} Sunbnb:ssä",
+    "signoff": "Sunbnb-tiimi"
   }
 }

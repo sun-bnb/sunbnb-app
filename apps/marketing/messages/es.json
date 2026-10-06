@@ -341,5 +341,13 @@
     "costA": "Starter no tiene cuota mensual: Sunbnb se queda un {pct} % solo de lo que vende por ti. Pro y Business bajan la comisión al {pro} % y al {business} % por una cuota mensual.",
     "languagesQ": "¿En qué idiomas funciona?",
     "languagesA": "Inglés, español y finés, para ti, tu personal y tus clientes."
+  },
+  "Email": {
+    "subject": "Tu playa en Sunbnb: {beach}",
+    "hi": "Hola:",
+    "hiName": "Hola, {name}:",
+    "body": "Gracias por tu interés en Sunbnb. Aquí tienes el enlace a {beach} tal como la construiste, para volver a abrirla o compartirla con tu equipo. Nos pondremos en contacto pronto para tu demo.",
+    "cta": "Abrir {beach} en Sunbnb",
+    "signoff": "El equipo de Sunbnb"
   }
 }

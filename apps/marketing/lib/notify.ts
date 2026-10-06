@@ -1,5 +1,7 @@
 import 'server-only'
 import { sendEmail } from '@repo/data/email'
+import { getTranslations } from 'next-intl/server'
+import { adminUrlFor } from './admin-url.ts'
 
 const NOTIFY_TO = process.env.LEADS_NOTIFY_EMAIL || 'info@sunbnb.app'
 
@@ -30,7 +32,7 @@ export async function notifyDemoRequest(input: {
   token: string
   host: string
   via: 'form' | 'chat'
-  lead: { beachName: string; beachAddress: string; sunbedCount: number; runs?: string[]; projection?: unknown; utmSource: string | null; utmCampaign: string | null }
+  lead: { id?: string; locale?: string; beachName: string; beachAddress: string; sunbedCount: number; runs?: string[]; projection?: unknown; utmSource: string | null; utmCampaign: string | null }
   contact: { contactName?: string | null; businessName?: string | null; email?: string | null; phone?: string | null; message?: string | null }
 }): Promise<void> {
   const { lead, contact } = input
@@ -53,9 +55,33 @@ export async function notifyDemoRequest(input: {
       subject: `Demo request: ${lead.beachName} (${lead.sunbedCount} sunbeds)`,
       html:
         `<table>${rows.filter(([, v]) => v).map(([k, v]) => `<tr><td><b>${k}</b></td><td>${esc(v!)}</td></tr>`).join('')}</table>` +
-        `<p><a href="https://${esc(input.host)}/m/${input.token}">Open their mockup</a></p>`,
+        `<p><a href="https://${esc(input.host)}/m/${input.token}">Open their mockup</a>` +
+        (lead.id && adminUrlFor(input.host) ? ` · <a href="${adminUrlFor(input.host)}/leads/${encodeURIComponent(lead.id)}">Open the lead in admin</a> (score, funnel, chat)` : '') +
+        `</p>`,
     })
   } catch (err) {
     console.error('[marketing] demo request notification failed', err)
+  }
+}
+
+/**
+ * The prospect's own link back to their beach, sent when they request a demo with an email (they
+ * asked to be contacted; this is the reply, not marketing). In their page language. Never throws.
+ */
+export async function emailProspectTheirBeach(input: { to: string; host: string; token: string; locale: string; beachName: string; name?: string | null }): Promise<void> {
+  try {
+    const t = await getTranslations({ locale: input.locale, namespace: 'Email' })
+    const link = `https://${input.host}/m/${input.token}`
+    await sendEmail({
+      to: input.to,
+      subject: t('subject', { beach: input.beachName }),
+      html:
+        `<p>${esc(input.name ? t('hiName', { name: input.name }) : t('hi'))}</p>` +
+        `<p>${esc(t('body', { beach: input.beachName }))}</p>` +
+        `<p><a href="${esc(link)}">${esc(t('cta', { beach: input.beachName }))}</a></p>` +
+        `<p>${esc(t('signoff'))}</p>`,
+    })
+  } catch (err) {
+    console.error('[marketing] prospect email failed', err)
   }
 }

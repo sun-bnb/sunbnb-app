@@ -152,3 +152,45 @@ export function parseLeadRuns(raw: unknown): LeadRun[] {
   const runs = [...new Set(raw.split(',').map((r) => r.trim()))].filter((r): r is LeadRun => (LEAD_RUNS as readonly string[]).includes(r))
   return runs.includes('none') ? (runs.length === 1 ? ['none'] : runs.filter((r) => r !== 'none')) : runs
 }
+
+// ── Lead score (track 027 P6) ───────────────────────────────────────────────
+
+export interface LeadScoreInput {
+  status: string
+  sunbedCount: number
+  hasContact: boolean
+  runs: readonly string[]
+  hasProjection: boolean
+  chatTurns: number
+  /** Names of the lead's funnel events (any order, repeats allowed). */
+  events: readonly string[]
+}
+
+export interface LeadScore {
+  /** 0–100: how far the prospect went, and how big the venue is. */
+  score: number
+  /** Why — one entry per point source, so the number is never a black box. */
+  reasons: { label: string; points: number }[]
+}
+
+/**
+ * Deterministic and explainable on purpose (no model): the team must be able to see why a lead
+ * ranks where it does. Points for intent (demo request, contact), engagement (played the guest
+ * booking / staff / numbers, used the chat) and size (sunbeds, extra services).
+ */
+export function scoreLead(l: LeadScoreInput): LeadScore {
+  const reasons: LeadScore['reasons'] = []
+  const add = (label: string, points: number, when: boolean) => when && reasons.push({ label, points })
+  const ev = new Set(l.events)
+  add('demo requested', 35, l.status !== LEAD_STATUS.MOCKUP || ev.has('demo_requested'))
+  add('left contact details', 15, l.hasContact)
+  add('booked as a guest', 8, ev.has('guest_demo_done'))
+  add('checked a guest in', 6, ev.has('operator_checked_in'))
+  add('looked at their numbers', 8, l.hasProjection || ev.has('projection_view'))
+  add('used the AI chat', 6, l.chatTurns > 0)
+  add('runs more than sunbeds', 6, l.runs.some((r) => r !== 'none'))
+  add('100+ sunbeds', 16, l.sunbedCount >= 100)
+  add('40–99 sunbeds', 10, l.sunbedCount >= 40 && l.sunbedCount < 100)
+  add('under 40 sunbeds', 4, l.sunbedCount < 40)
+  return { score: Math.min(100, reasons.reduce((s, r) => s + r.points, 0)), reasons }
+}

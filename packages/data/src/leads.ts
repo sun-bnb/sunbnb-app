@@ -4,7 +4,7 @@
  */
 import type { Prisma } from '@prisma/client'
 import prisma from '../index'
-import { assignVariant, generateLeadToken, LEAD_STATUS, retentionCutoffs, type AdAngle, type LeadEventName, type LeadLayout, type LeadRun, type LeadVariant } from './lead-model'
+import { assignVariant, generateLeadToken, LEAD_STATUS, retentionCutoffs, scoreLead, type LeadScore, type LeadStatus, type AdAngle, type LeadEventName, type LeadLayout, type LeadRun, type LeadVariant } from './lead-model'
 
 export interface NewLeadMockup {
   placeId: string
@@ -134,7 +134,7 @@ export interface DemoRequest {
 export async function requestLeadDemo(
   token: string,
   req: DemoRequest,
-): Promise<{ ok: false } | { ok: true; firstRequest: boolean; lead: { beachName: string; beachAddress: string; sunbedCount: number; utmSource: string | null; utmCampaign: string | null } }> {
+): Promise<{ ok: false } | { ok: true; firstRequest: boolean; lead: { id: string; locale: string; beachName: string; beachAddress: string; sunbedCount: number; runs: string[]; projection: Prisma.JsonValue; utmSource: string | null; utmCampaign: string | null } }> {
   return prisma.$transaction(async (tx) => {
     const current = await tx.lead.findUnique({ where: { token }, select: { status: true } })
     if (!current) return { ok: false as const }
@@ -153,7 +153,7 @@ export async function requestLeadDemo(
         lastActivityAt: now,
         ...(firstRequest ? { status: LEAD_STATUS.DEMO_REQUESTED, demoRequestedAt: now } : {}),
       },
-      select: { beachName: true, beachAddress: true, sunbedCount: true, runs: true, projection: true, utmSource: true, utmCampaign: true },
+      select: { id: true, locale: true, beachName: true, beachAddress: true, sunbedCount: true, runs: true, projection: true, utmSource: true, utmCampaign: true },
     })
     return { ok: true as const, firstRequest, lead }
   })
@@ -242,7 +242,7 @@ export async function saveLeadChatTurn(token: string, u: ChatTurnUpdate) {
         ...(firstRequest ? { status: LEAD_STATUS.DEMO_REQUESTED, demoRequestedAt: now } : {}),
       },
       select: {
-        beachName: true, beachAddress: true, sunbedCount: true, runs: true, projection: true, contactName: true, email: true, phone: true,
+        id: true, locale: true, beachName: true, beachAddress: true, sunbedCount: true, runs: true, projection: true, contactName: true, email: true, phone: true,
         businessName: true, utmSource: true, utmCampaign: true,
       },
     })
@@ -283,6 +283,96 @@ export async function recordMarketingConsent(token: string): Promise<void> {
 
 /** Store the prospect's projection (already recomputed server-side from validated inputs). */
 export async function saveLeadProjection(token: string, projection: Prisma.InputJsonValue): Promise<boolean> {
-  const res = await prisma.lead.updateMany({ where: { token }, data: { projection } })
+  const res = await prisma.lead.updateMany({ where: { token }, data: { projection, projectionAt: new Date() } })
+  return res.count > 0
+}
+
+// ── Admin (track 027 P6) — sudo-gated in apps/admin; these return contact data ──────────────
+
+const ADMIN_LIST_LIMIT = 200
+
+export interface AdminLeadRow {
+  id: string
+  token: string
+  status: string
+  beachName: string
+  beachAddress: string
+  sunbedCount: number
+  runs: string[]
+  contactName: string | null
+  email: string | null
+  phone: string | null
+  variant: string | null
+  angle: string | null
+  utmSource: string | null
+  utmCampaign: string | null
+  createdAt: Date
+  lastActivityAt: Date
+  demoRequestedAt: Date | null
+  score: LeadScore
+}
+
+/**
+ * Leads for the admin list, newest activity first, scored. `onlyContact` = leads that left a way
+ * to reach them (the ones to work); `status` filters exactly.
+ */
+export async function listLeadsForAdmin(filter: { status?: string; onlyContact?: boolean; q?: string } = {}): Promise<AdminLeadRow[]> {
+  const q = filter.q?.trim()
+  const leads = await prisma.lead.findMany({
+    where: {
+      ...(filter.status ? { status: filter.status } : {}),
+      ...(filter.onlyContact ? { OR: [{ email: { not: null } }, { phone: { not: null } }] } : {}),
+      ...(q
+        ? { AND: [{ OR: [{ beachName: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }, { contactName: { contains: q, mode: 'insensitive' } }, { businessName: { contains: q, mode: 'insensitive' } }] }] }
+        : {}),
+    },
+    orderBy: { lastActivityAt: 'desc' },
+    take: ADMIN_LIST_LIMIT,
+    select: {
+      id: true, token: true, status: true, beachName: true, beachAddress: true, sunbedCount: true, runs: true,
+      contactName: true, email: true, phone: true, variant: true, angle: true, utmSource: true, utmCampaign: true,
+      createdAt: true, lastActivityAt: true, demoRequestedAt: true, projection: true, chatTurns: true,
+      events: { select: { name: true } },
+    },
+  })
+  return leads.map(({ events, projection, chatTurns, ...l }) => ({
+    ...l,
+    score: scoreLead({
+      status: l.status,
+      sunbedCount: l.sunbedCount,
+      hasContact: Boolean(l.email || l.phone),
+      runs: l.runs,
+      hasProjection: projection !== null,
+      chatTurns,
+      events: events.map((e) => e.name),
+    }),
+  }))
+}
+
+/** One lead with everything the team needs before calling: contact, numbers, funnel, transcript. */
+export async function getLeadForAdmin(id: string) {
+  const lead = await prisma.lead.findUnique({
+    where: { id },
+    include: { events: { orderBy: { createdAt: 'asc' }, select: { name: true, props: true, createdAt: true } } },
+  })
+  if (!lead) return null
+  const score = scoreLead({
+    status: lead.status,
+    sunbedCount: lead.sunbedCount,
+    hasContact: Boolean(lead.email || lead.phone),
+    runs: lead.runs,
+    hasProjection: lead.projection !== null,
+    chatTurns: lead.chatTurns,
+    events: lead.events.map((e) => e.name),
+  })
+  return { ...lead, score }
+}
+
+const ADMIN_SETTABLE: readonly LeadStatus[] = [LEAD_STATUS.DEMO_REQUESTED, LEAD_STATUS.CONTACTED, LEAD_STATUS.CONVERTED, LEAD_STATUS.CLOSED]
+
+/** The team moves a lead along its pipeline. Unknown statuses are refused. */
+export async function setLeadStatus(id: string, status: string): Promise<boolean> {
+  if (!(ADMIN_SETTABLE as readonly string[]).includes(status)) return false
+  const res = await prisma.lead.updateMany({ where: { id }, data: { status } })
   return res.count > 0
 }

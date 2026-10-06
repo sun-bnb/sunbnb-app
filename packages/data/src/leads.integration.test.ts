@@ -6,7 +6,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import prisma from '../index'
 import { cleanDatabase } from './test/setup'
-import { createLeadMockup, getLeadChatContext, recordLeadEvent, recordMarketingConsent, getLeadMockup, purgeExpiredLeads, requestLeadDemo, saveLeadChatTurn, saveLeadLayout, saveLeadProjection } from './leads'
+import { createLeadMockup, getLeadChatContext, recordLeadEvent, recordMarketingConsent, getLeadMockup, purgeExpiredLeads, requestLeadDemo, saveLeadChatTurn, saveLeadLayout, saveLeadProjection, listLeadsForAdmin, getLeadForAdmin, setLeadStatus } from './leads'
 
 beforeEach(async () => { await cleanDatabase() })
 afterAll(async () => { await cleanDatabase(); await prisma.$disconnect() })
@@ -226,5 +226,36 @@ describe('saveLeadProjection', () => {
     expect(await saveLeadProjection(token, { input: { price: 22 } })).toBe(true)
     expect((await prisma.lead.findUnique({ where: { token }, select: { projection: true } }))?.projection).toEqual({ input: { price: 22 } })
     expect(await saveLeadProjection('nopenopenope', { a: 1 })).toBe(false)
+  })
+})
+
+describe('admin leads (P6)', () => {
+  it('lists leads scored, newest activity first, with filters', async () => {
+    const quiet = await createLeadMockup({ ...mockup, beachName: 'Quiet Beach', sunbedCount: 300 })
+    const hot = await createLeadMockup({ ...mockup, beachName: 'Hot Beach', sunbedCount: 40, runs: ['fnb'] })
+    await recordLeadEvent({ name: 'guest_demo_done', token: hot.token })
+    await requestLeadDemo(hot.token, demo)
+    const all = await listLeadsForAdmin()
+    expect(all.map((l) => l.beachName)).toEqual(['Hot Beach', 'Quiet Beach'])
+    const hotRow = all[0]!
+    expect(hotRow.score.reasons.map((r) => r.label)).toEqual(expect.arrayContaining(['demo requested', 'left contact details', 'booked as a guest', 'runs more than sunbeds']))
+    expect(hotRow.score.score).toBeGreaterThan(all[1]!.score.score)
+    expect((await listLeadsForAdmin({ onlyContact: true })).map((l) => l.token)).toEqual([hot.token])
+    expect((await listLeadsForAdmin({ q: 'quiet' })).map((l) => l.token)).toEqual([quiet.token])
+    expect((await listLeadsForAdmin({ status: 'demo_requested' })).map((l) => l.token)).toEqual([hot.token])
+  })
+
+  it('a lead in detail carries its events in order; the team moves it along the pipeline', async () => {
+    const { token } = await createLeadMockup(mockup)
+    await recordLeadEvent({ name: 'guest_demo_start', token })
+    await recordLeadEvent({ name: 'guest_demo_done', token })
+    const id = (await listLeadsForAdmin())[0]!.id
+    const lead = await getLeadForAdmin(id)
+    expect(lead!.events.map((e) => e.name)).toEqual(['guest_demo_start', 'guest_demo_done'])
+    expect(await setLeadStatus(id, 'contacted')).toBe(true)
+    expect((await getLeadForAdmin(id))!.status).toBe('contacted')
+    expect(await setLeadStatus(id, 'mockup')).toBe(false)
+    expect(await setLeadStatus(id, 'hacked')).toBe(false)
+    expect(await getLeadForAdmin('nope')).toBeNull()
   })
 })

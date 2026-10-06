@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assignVariant, generateLeadToken, isLeadEventName, LEAD_TOKEN_RE, parseAngle, parseClickId, parseEventProps, parseLeadLayout, parseLeadRuns, parseVariants, retentionCutoffs } from './lead-model'
+import { assignVariant, generateLeadToken, isLeadEventName, LEAD_TOKEN_RE, parseAngle, parseClickId, parseEventProps, parseLeadLayout, parseLeadRuns, parseVariants, scoreLead, retentionCutoffs } from './lead-model'
 
 describe('retentionCutoffs — the periods the privacy notice promises', () => {
   const now = new Date('2026-10-04T12:00:00Z')
@@ -119,5 +119,25 @@ describe('parseLeadRuns — the qualifier answer from a public form', () => {
     expect(parseLeadRuns('fnb,<script>,casino')).toEqual(['fnb'])
     expect(parseLeadRuns(null)).toEqual([])
     expect(parseLeadRuns('fnb,'.repeat(40))).toEqual([])
+  })
+})
+
+describe('scoreLead — explainable, ranks intent and size', () => {
+  const base = { status: 'mockup', sunbedCount: 20, hasContact: false, runs: [], hasProjection: false, chatTurns: 0, events: [] }
+  it('a bare small mockup scores low; every point has a reason', () => {
+    const s = scoreLead(base)
+    expect(s.score).toBe(4)
+    expect(s.reasons).toEqual([{ label: 'under 40 sunbeds', points: 4 }])
+  })
+  it('a big venue that played everything and asked for a demo scores at the top, capped at 100', () => {
+    const s = scoreLead({ status: 'demo_requested', sunbedCount: 250, hasContact: true, runs: ['fnb'], hasProjection: true, chatTurns: 3, events: ['guest_demo_done', 'operator_checked_in'] })
+    expect(s.score).toBe(100)
+    expect(s.reasons.reduce((n, r) => n + r.points, 0)).toBe(100)
+  })
+  it('intent outranks size: a 30-bed demo request beats a silent 300-bed mockup', () => {
+    expect(scoreLead({ ...base, status: 'demo_requested', hasContact: true }).score).toBeGreaterThan(scoreLead({ ...base, sunbedCount: 300 }).score)
+  })
+  it('"just sunbeds" earns nothing for extra services', () => {
+    expect(scoreLead({ ...base, runs: ['none'] }).reasons.map((r) => r.label)).not.toContain('runs more than sunbeds')
   })
 })

@@ -12,7 +12,7 @@ import { parseAngle, parseClickId, parseLeadLayout, parseLeadRuns, parseVariants
 import { createLeadMockup, recordLeadEvent, requestLeadDemo, saveLeadLayout, saveLeadProjection } from '@repo/data/leads'
 import { parseProjectionInput, project } from '@/lib/projection.ts'
 import { readConsentCookie } from '@/lib/consent.ts'
-import { notifyDemoRequest } from '@/lib/notify.ts'
+import { emailProspectTheirBeach, notifyDemoRequest } from '@/lib/notify.ts'
 import { fetchBeachPlace } from '@/lib/place-details.ts'
 import { clientIp, isValidPlaceId, isValidSessionToken, localeOrDefault, parseSunbedCount } from '@/lib/places.ts'
 import { CONSENT_VERSION, looksAutomated, parseDemoRequest, type DemoRequestError } from '@/lib/demo-request.ts'
@@ -125,6 +125,9 @@ export async function requestDemo(token: string, form: FormData): Promise<Action
       lead: result.lead,
       contact: parsed.value,
     })
+    if (parsed.value.email) {
+      await emailProspectTheirBeach({ to: parsed.value.email, host: h.get('host') ?? 'try.sunbnb.app', token: token, locale: result.lead.locale, beachName: result.lead.beachName, name: parsed.value.contactName })
+    }
   }
   return { status: 'ok' }
 }

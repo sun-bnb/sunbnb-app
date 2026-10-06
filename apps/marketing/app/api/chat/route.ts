@@ -17,7 +17,7 @@ import { runTurn } from '@/lib/agent/run-turn.ts'
 import { buildSystemPrompt } from '@/lib/agent/system-prompt.ts'
 import { leadStateFromRow, parseChatRequest, turnEffects } from '@/lib/chat-request.ts'
 import { CONSENT_VERSION } from '@/lib/demo-request.ts'
-import { notifyDemoRequest } from '@/lib/notify.ts'
+import { emailProspectTheirBeach, notifyDemoRequest } from '@/lib/notify.ts'
 import { clientIp } from '@/lib/places.ts'
 
 export const dynamic = 'force-dynamic'
@@ -75,6 +75,9 @@ export async function POST(request: NextRequest) {
       lead: saved.lead,
       contact: saved.lead,
     })
+    if (saved.lead.email) {
+      await emailProspectTheirBeach({ to: saved.lead.email, host: request.headers.get('host') ?? 'try.sunbnb.app', token: req.token, locale: saved.lead.locale, beachName: saved.lead.beachName, name: saved.lead.contactName })
+    }
   }
 
   const t = await getTranslations({ locale: await getLocale(), namespace: 'Chat' })
