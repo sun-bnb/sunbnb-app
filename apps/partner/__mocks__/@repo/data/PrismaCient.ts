@@ -267,6 +267,11 @@ const prisma = {
     updateMany: vi.fn(),
     deleteMany: vi.fn(),
   },
+  // Track 027: shared rate-limit counters for the marketing site. No partner code uses them; the
+  // delegate exists only because mock-contract.test.ts requires one per model.
+  rateLimitCounter: {
+    deleteMany: vi.fn(),
+  },
   impersonationLog: {
     create: vi.fn(),
     findUnique: vi.fn(),

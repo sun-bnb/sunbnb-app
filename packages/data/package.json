@@ -19,6 +19,7 @@
     "./rental-emails": "./src/rental-emails.ts",
     "./password-reset": "./src/password-reset.ts",
     "./rate-limit": "./src/rate-limit.ts",
+    "./rate-limit-shared": "./src/rate-limit-shared.ts",
     "./reservation-status": "./src/reservation-status.ts",
     "./device-code": "./src/device-code.ts",
     "./partner-code": "./src/partner-code.ts",
@@ -119,6 +120,9 @@
       ],
       "rate-limit": [
         "./src/rate-limit.ts"
+      ],
+      "rate-limit-shared": [
+        "./src/rate-limit-shared.ts"
       ],
       "reservation-status": [
         "./src/reservation-status.ts"

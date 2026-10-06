@@ -55,6 +55,7 @@ export async function cleanDatabase() {
       -- Marketing leads (track 027) are standalone: no FK reaches them.
       "lead_event",
       "lead",
+      "rate_limit_counter",
       -- The fiscal chains have NO foreign key to anything we truncate below --
       -- they are keyed on an issuer NIF and a partner id, not on a row we own --
       -- so nothing cascades to them and their sequences leak across test files,

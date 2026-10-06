@@ -2038,3 +2038,16 @@ model PartnerPromotion {
   @@unique([partnerAccountId, code])
   @@map("partner_promotion")
 }
+
+/// Shared rate-limit counters (track 027, marketing bot protection): one row per limiter key per
+/// fixed window, so every serverless instance counts against the same number — the in-memory
+/// limiter resets on each cold start. `key` is SHA-256 of `scope:subject` plus the window start,
+/// never a raw IP or email. Rows are dead after `expiresAt`; the marketing purge cron deletes them.
+model RateLimitCounter {
+  key       String   @id
+  count     Int      @default(0)
+  expiresAt DateTime @map("expires_at")
+
+  @@index([expiresAt])
+  @@map("rate_limit_counter")
+}
