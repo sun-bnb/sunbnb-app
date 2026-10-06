@@ -7,7 +7,7 @@ export default async function CancellationPolicy() {
     <div className="max-w-3xl mx-auto px-6 py-12 text-sm text-gray-700 leading-relaxed">
 
       <h1 className="text-2xl font-bold text-gray-900 mb-1">Cancellation &amp; Refund Policy</h1>
-      <p className="text-xs text-gray-400 mb-8">Effective Date: 7 March 2026 &middot; Last Updated: 7 March 2026</p>
+      <p className="text-xs text-gray-400 mb-8">Effective Date: 7 March 2026 &middot; Last Updated: 6 October 2026</p>
 
       <section className="mb-8">
         <h2 className="text-base font-semibold text-gray-900 mb-2">1. Scope</h2>
@@ -38,12 +38,8 @@ export default async function CancellationPolicy() {
                 <td className="py-2">More than 24 hours before the booking date</td>
                 <td className="py-2">Full refund (100%)</td>
               </tr>
-              <tr className="border-b border-gray-100">
-                <td className="py-2">Between 24 hours and 2 hours before the booking date</td>
-                <td className="py-2">50% refund</td>
-              </tr>
               <tr>
-                <td className="py-2">Less than 2 hours before the booking date, or no-show</td>
+                <td className="py-2">Within 24 hours of the booking date, or no-show</td>
                 <td className="py-2">No refund</td>
               </tr>
             </tbody>
@@ -88,7 +84,7 @@ export default async function CancellationPolicy() {
       <section className="mb-8">
         <h2 className="text-base font-semibold text-gray-900 mb-2">7. EU Consumer Rights</h2>
         <p>
-          Under EU Directive 2011/83/EU, the statutory 14-day withdrawal right does <strong>not apply</strong> to leisure services where a specific date or period of performance is agreed upon (Article 16(l)). Sunbed bookings fall under this exemption. However, {co.companyName} honours the cancellation windows defined above as a voluntary customer protection measure.
+          Under EU Directive 2011/83/EU, the statutory 14-day withdrawal right does <strong>not apply</strong> to leisure services where a specific date or period of performance is agreed upon (Article 16(l)). Sunbed bookings fall under this exemption. However, {co.companyName} honours the cancellation rule defined above as a voluntary customer protection measure.
         </p>
       </section>
 
