@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { PRICING_TIERS, PRICING_TIER_ORDER } from '@repo/data/pricing-tiers'
 import {
   APIProvider,
   ControlPosition,
@@ -52,9 +53,6 @@ function round(amount: number) {
   return Math.round(amount * 100) / 100
 }
 
-const TIER_ORDER = ['STARTER', 'PRO', 'BUSINESS'] as const
-const TIER_LABELS: Record<string, string> = { STARTER: 'Starter', PRO: 'Pro', BUSINESS: 'Business' }
-const TIER_FEES: Record<string, string> = { STARTER: '5%', PRO: '2%', BUSINESS: '0%' }
 
 function computeServiceFee(serviceFee: ServiceFee | undefined, itemPrice: number) {
   if (!serviceFee) return 0
@@ -142,11 +140,11 @@ function PriceBreakdown({
         </div>
       ) : null}
       {feeAmount > 0 && !serviceFee?.accountId && !serviceFee?.siteId && (() => {
-        const tierIdx = TIER_ORDER.indexOf(tier as typeof TIER_ORDER[number])
-        const nextTier = tierIdx >= 0 && tierIdx < TIER_ORDER.length - 1 ? TIER_ORDER[tierIdx + 1] : null
+        const tierIdx = PRICING_TIER_ORDER.indexOf(tier as typeof PRICING_TIER_ORDER[number])
+        const nextTier = tierIdx >= 0 && tierIdx < PRICING_TIER_ORDER.length - 1 ? PRICING_TIER_ORDER[tierIdx + 1] : null
         return nextTier ? (
           <div className="text-[11px] text-indigo-500 mb-1">
-            {t('upgradeTier', { tier: TIER_LABELS[nextTier], fee: TIER_FEES[nextTier] })}
+            {t('upgradeTier', { tier: PRICING_TIERS[nextTier].name, fee: `${PRICING_TIERS[nextTier].commissionPercent}%` })}
           </div>
         ) : null
       })()}

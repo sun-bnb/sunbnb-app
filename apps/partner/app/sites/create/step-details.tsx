@@ -1,6 +1,8 @@
 'use client'
 
 import React from 'react'
+import { useTranslations } from 'next-intl'
+import { PRICING_TIERS, PRICING_TIER_ORDER } from '@repo/data/pricing-tiers'
 import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
@@ -37,9 +39,6 @@ function wizardFeePctPrefix(fee: WizardFeeData | null | undefined) {
   return fee && fee.chargeType !== 'fixed' ? `${(fee.percentage ?? 0).toFixed(0)}% ` : ''
 }
 
-const TIER_ORDER = ['STARTER', 'PRO', 'BUSINESS'] as const
-const TIER_LABELS: Record<string, string> = { STARTER: 'Starter', PRO: 'Pro', BUSINESS: 'Business' }
-const TIER_FEES: Record<string, string> = { STARTER: '5%', PRO: '2%', BUSINESS: '0%' }
 
 function WizardPriceBreakdown({
   price,
@@ -54,6 +53,7 @@ function WizardPriceBreakdown({
   baseServiceFee?: WizardFeeData | null
   tier: string
 }) {
+  const t = useTranslations('SiteGeneral')
   const priceNum = Number(price)
   if (!priceNum || priceNum <= 0) return null
 
@@ -70,8 +70,8 @@ function WizardPriceBreakdown({
   const partnerVat = round(partnerGross - partnerBase)
 
   // Find next tier with a better fee
-  const tierIdx = TIER_ORDER.indexOf(tier as typeof TIER_ORDER[number])
-  const nextTier = tierIdx >= 0 && tierIdx < TIER_ORDER.length - 1 ? TIER_ORDER[tierIdx + 1] : null
+  const tierIdx = PRICING_TIER_ORDER.indexOf(tier as typeof PRICING_TIER_ORDER[number])
+  const nextTier = tierIdx >= 0 && tierIdx < PRICING_TIER_ORDER.length - 1 ? PRICING_TIER_ORDER[tierIdx + 1] : null
 
   return (
     <div className="mt-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5 text-xs">
@@ -107,7 +107,10 @@ function WizardPriceBreakdown({
       ) : null}
       {feeAmount > 0 && nextTier && !serviceFee?.overridden && (
         <div className="text-[11px] text-indigo-500 mb-1">
-          Upgrade to {TIER_LABELS[nextTier]} for {TIER_FEES[nextTier]} service fee
+          {t('upgradeTier', {
+            tier: PRICING_TIERS[nextTier].name,
+            fee: `${PRICING_TIERS[nextTier].commissionPercent}%`,
+          })}
         </div>
       )}
       <div className="border-t border-gray-200 my-1.5" />
