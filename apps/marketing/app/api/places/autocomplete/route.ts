@@ -6,12 +6,11 @@
  * final details lookup bills as ONE session instead of per keystroke.
  */
 import type { NextRequest } from 'next/server'
-import { rateLimit } from '@repo/data/rate-limit'
+import { allow } from '@/lib/limits.ts'
 import { clientIp, isValidQuery, isValidSessionToken, localeOrDefault, parseNear } from '@/lib/places.ts'
 
 export async function GET(request: NextRequest) {
-  const limit = rateLimit(`places-ac:${clientIp(request.headers)}`, { maxAttempts: 120, windowMs: 60_000 })
-  if (!limit.allowed) return Response.json({ error: 'rate_limited' }, { status: 429 })
+  if (!(await allow('placesAutocomplete', clientIp(request.headers)))) return Response.json({ error: 'rate_limited' }, { status: 429 })
 
   const params = request.nextUrl.searchParams
   const input = params.get('input')

@@ -7,7 +7,7 @@
  */
 import { headers } from 'next/headers'
 import { getLocale } from 'next-intl/server'
-import { rateLimit } from '@repo/data/rate-limit'
+import { allow } from '@/lib/limits.ts'
 import { parseAngle, parseClickId, parseLeadLayout, parseLeadRuns, parseVariants, LEAD_TOKEN_RE, LEAD_VARIANTS, type LeadVariant } from '@repo/data/lead-model'
 import { createLeadMockup, recordLeadEvent, requestLeadDemo, saveLeadLayout, saveLeadProjection } from '@repo/data/leads'
 import { parseProjectionInput, project } from '@/lib/projection.ts'
@@ -30,7 +30,7 @@ export async function createMockup(
 ): Promise<{ status: 'ok'; token: string; variant: string } | { status: 'error'; errors: ('beach' | 'sunbeds' | 'rateLimited' | 'place')[] }> {
   const h = headers()
   const ip = clientIp(h)
-  if (!rateLimit(`mockup:${ip}`, { maxAttempts: 20, windowMs: 60 * 60_000 }).allowed) {
+  if (!(await allow('mockup', ip))) {
     return { status: 'error', errors: ['rateLimited'] }
   }
 
@@ -91,7 +91,7 @@ export async function createMockup(
 
 /** Persist the prospect's layout (rotation, position, shore snap) so the shared link matches. */
 export async function saveLayout(token: string, layout: unknown): Promise<ActionResult<'invalid' | 'rateLimited'>> {
-  if (!rateLimit(`layout:${clientIp(headers())}`, { maxAttempts: 120, windowMs: 60 * 60_000 }).allowed) {
+  if (!(await allow('layout', clientIp(headers())))) {
     return { status: 'error', errors: ['rateLimited'] }
   }
   const parsed = parseLeadLayout(layout)
@@ -102,7 +102,7 @@ export async function saveLayout(token: string, layout: unknown): Promise<Action
 /** "Book a demo" → contact + consent on the lead, and an email to the team on the first request. */
 export async function requestDemo(token: string, form: FormData): Promise<ActionResult<DemoRequestError | 'rateLimited' | 'notFound'>> {
   const h = headers()
-  if (!rateLimit(`demo:${clientIp(h)}`, { maxAttempts: 5, windowMs: 60 * 60_000 }).allowed) {
+  if (!(await allow('demo', clientIp(h)))) {
     return { status: 'error', errors: ['rateLimited'] }
   }
   if (!LEAD_TOKEN_RE.test(token)) return { status: 'error', errors: ['notFound'] }
@@ -125,7 +125,7 @@ export async function requestDemo(token: string, form: FormData): Promise<Action
       lead: result.lead,
       contact: parsed.value,
     })
-    if (parsed.value.email) {
+    if (parsed.value.email && (await allow('prospectEmail', parsed.value.email.toLowerCase()))) {
       await emailProspectTheirBeach({ to: parsed.value.email, host: h.get('host') ?? 'try.sunbnb.app', token: token, locale: result.lead.locale, beachName: result.lead.beachName, name: parsed.value.contactName })
     }
   }
@@ -137,7 +137,7 @@ export async function requestDemo(token: string, form: FormData): Promise<Action
  * trusting a client-computed figure), stored on the lead for the team email and the chat.
  */
 export async function saveProjection(token: string, input: unknown): Promise<ActionResult<'invalid' | 'rateLimited'>> {
-  if (!rateLimit(`projection:${clientIp(headers())}`, { maxAttempts: 60, windowMs: 60 * 60_000 }).allowed) {
+  if (!(await allow('projection', clientIp(headers())))) {
     return { status: 'error', errors: ['rateLimited'] }
   }
   const parsed = parseProjectionInput(input)

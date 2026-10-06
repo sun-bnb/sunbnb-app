@@ -6,6 +6,7 @@
  */
 import type { NextRequest } from 'next/server'
 import { purgeExpiredLeads } from '@repo/data/leads'
+import { pruneRateLimitCounters } from '@repo/data/rate-limit-shared'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +17,7 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: 'unauthorized' }, { status: 401 })
   }
   const deleted = await purgeExpiredLeads()
-  console.log('[marketing] lead retention sweep', deleted)
-  return Response.json({ deleted })
+  const rateLimitCounters = await pruneRateLimitCounters()
+  console.log('[marketing] lead retention sweep', deleted, { rateLimitCounters })
+  return Response.json({ deleted, rateLimitCounters })
 }

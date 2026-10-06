@@ -7,13 +7,13 @@
  * Always answers 204 for well-formed input so a beacon never retries or leaks validation details.
  */
 import type { NextRequest } from 'next/server'
-import { rateLimit } from '@repo/data/rate-limit'
+import { allow } from '@/lib/limits.ts'
 import { isLeadEventName, LEAD_TOKEN_RE, LEAD_VARIANTS, parseAngle, parseEventProps, type LeadVariant } from '@repo/data/lead-model'
 import { recordLeadEvent, recordMarketingConsent } from '@repo/data/leads'
 import { clientIp } from '@/lib/places.ts'
 
 export async function POST(request: NextRequest) {
-  if (!rateLimit(`events:${clientIp(request.headers)}`, { maxAttempts: 200, windowMs: 10 * 60_000 }).allowed) {
+  if (!(await allow('events', clientIp(request.headers)))) {
     return new Response(null, { status: 429 })
   }
   // sendBeacon posts text/plain; accept either content type.

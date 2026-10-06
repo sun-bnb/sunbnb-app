@@ -9,7 +9,6 @@
  */
 import type { NextRequest } from 'next/server'
 import { getLocale, getTranslations } from 'next-intl/server'
-import { rateLimit } from '@repo/data/rate-limit'
 import { getLeadChatContext, LEAD_CHAT_MAX_TURNS, recordLeadEvent, saveLeadChatTurn } from '@repo/data/leads'
 import { createClaudeModel } from '@/lib/agent/claude-model.ts'
 import type { ChatMessage } from '@/lib/agent/model.ts'
@@ -18,6 +17,7 @@ import { buildSystemPrompt } from '@/lib/agent/system-prompt.ts'
 import { leadStateFromRow, parseChatRequest, turnEffects } from '@/lib/chat-request.ts'
 import { CONSENT_VERSION } from '@/lib/demo-request.ts'
 import { emailProspectTheirBeach, notifyDemoRequest } from '@/lib/notify.ts'
+import { allow, allowAiTurn } from '@/lib/limits.ts'
 import { clientIp } from '@/lib/places.ts'
 
 export const dynamic = 'force-dynamic'
@@ -31,12 +31,13 @@ const unavailable = (status = 503) => Response.json({ status: 'unavailable' }, {
 
 export async function POST(request: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY) return unavailable()
-  if (!rateLimit(`chat:${clientIp(request.headers)}`, { maxAttempts: 30, windowMs: 10 * 60_000 }).allowed) {
-    return Response.json({ status: 'rate_limited' }, { status: 429 })
-  }
-
   const req = parseChatRequest(await request.json().catch(() => null))
   if (!req) return Response.json({ status: 'invalid' }, { status: 400 })
+
+  // After validation, so malformed requests never spend the shared AI budget.
+  const gate = await allowAiTurn('chat', clientIp(request.headers))
+  if (gate === 'rate_limited') return Response.json({ status: 'rate_limited' }, { status: 429 })
+  if (gate === 'budget') return unavailable()
 
   const ctx = await getLeadChatContext(req.token, req.sessionId)
   if (!ctx) return Response.json({ status: 'not_found' }, { status: 404 })
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest) {
       lead: saved.lead,
       contact: saved.lead,
     })
-    if (saved.lead.email) {
+    if (saved.lead.email && (await allow('prospectEmail', saved.lead.email.toLowerCase()))) {
       await emailProspectTheirBeach({ to: saved.lead.email, host: request.headers.get('host') ?? 'try.sunbnb.app', token: req.token, locale: saved.lead.locale, beachName: saved.lead.beachName, name: saved.lead.contactName })
     }
   }

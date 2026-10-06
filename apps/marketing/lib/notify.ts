@@ -85,3 +85,24 @@ export async function emailProspectTheirBeach(input: { to: string; host: string;
     console.error('[marketing] prospect email failed', err)
   }
 }
+
+/**
+ * The global daily AI budget is used up (`lib/limits.ts`): the guide and the chat answer
+ * "unavailable" until midnight UTC and the page carries on rule-based. Sent once per day. Never throws.
+ */
+export async function notifyAiBudgetReached(budget: number): Promise<void> {
+  console.error(`[marketing] daily AI budget of ${budget} turns reached; AI off until 00:00 UTC`)
+  try {
+    await sendEmail({
+      to: NOTIFY_TO,
+      subject: `try.sunbnb.app: daily AI budget reached (${budget} turns)`,
+      html:
+        `<p>The assistant has answered ${budget} turns today, the daily cap. Until 00:00 UTC it is off; ` +
+        `the page keeps working without it.</p>` +
+        `<p>If this is real traffic, raise <code>MARKETING_AI_DAILY_TURNS</code> in Vercel. If it is not, ` +
+        `this cap just did its job — check the Anthropic usage console.</p>`,
+    })
+  } catch (err) {
+    console.error('[marketing] AI budget notification failed', err)
+  }
+}

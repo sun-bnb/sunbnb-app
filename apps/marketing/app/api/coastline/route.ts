@@ -14,7 +14,7 @@
  * Overpass sees a handful of tile requests, not one per visitor.
  */
 import type { NextRequest } from 'next/server'
-import { rateLimit } from '@repo/data/rate-limit'
+import { allow } from '@/lib/limits.ts'
 import { nearestShoreFrame, trimShore, verifyShoreFrame, type GeoPoint } from '@/lib/coastline.ts'
 import { clientIp } from '@/lib/places.ts'
 import { fetchCoastTile } from '@/lib/overpass.ts'
@@ -36,8 +36,7 @@ function coord(raw: string | null, max: number): number | null {
 }
 
 export async function GET(request: NextRequest) {
-  const limit = rateLimit(`coastline:${clientIp(request.headers)}`, { maxAttempts: 30, windowMs: 60_000 })
-  if (!limit.allowed) return Response.json({ error: 'rate_limited' }, { status: 429 })
+  if (!(await allow('coastline', clientIp(request.headers)))) return Response.json({ error: 'rate_limited' }, { status: 429 })
 
   const lat = coord(request.nextUrl.searchParams.get('lat'), 90)
   const lng = coord(request.nextUrl.searchParams.get('lng'), 180)

@@ -7,12 +7,12 @@
  * session (one billable session per search), and a trimmed payload.
  */
 import type { NextRequest } from 'next/server'
-import { rateLimit } from '@repo/data/rate-limit'
+import { allow } from '@/lib/limits.ts'
 import { fetchBeachPlace } from '@/lib/place-details.ts'
 import { clientIp, isValidPlaceId, isValidSessionToken, localeOrDefault } from '@/lib/places.ts'
 
 export async function GET(request: NextRequest) {
-  if (!rateLimit(`places-details:${clientIp(request.headers)}`, { maxAttempts: 60, windowMs: 60_000 }).allowed) {
+  if (!(await allow('placesDetails', clientIp(request.headers)))) {
     return Response.json({ error: 'rate_limited' }, { status: 429 })
   }
   const params = request.nextUrl.searchParams

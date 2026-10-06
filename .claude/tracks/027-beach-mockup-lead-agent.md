@@ -346,12 +346,24 @@ pure layout generator (location TBD — see Q2)
   must name Anthropic as processor for the live chat.
 - **Q5 — Privacy residue to accept or address:** the location query still goes to Google
   Places/Maps. Acceptable (it's not the conversation), but the privacy notice must say so.
-- **Q6 — Anti-abuse.** Ad traffic attracts bots; the in-memory rate limiter resets on every
+- ~~**Q6 — Anti-abuse.**~~ **Closed 2026-10-06** (see log): shared DB counters + global daily AI budget, still third-party-free; Turnstile only if abuse shows up. Ad traffic attracts bots; the in-memory rate limiter resets on every
   cold start. Options: Vercel KV/Upstash-backed limiter, Cloudflare Turnstile, per-token
   session turn/token caps on the API path (they now also cap spend).
 
 ## Log
 
+- **2026-10-06** — **Bot protection (Q6), third-party-free per the 2026-10-04 decision.** Every
+  marketing limit moved off the in-memory limiter, which reset on each cold start, onto
+  `@repo/data/rate-limit-shared`. It is a fixed-window counter in `rate_limit_counter` (migration
+  `add_rate_limit_counter`, additive): one atomic upsert per check, keys hashed with SHA-256, and
+  an in-memory fallback if the DB is down. Policy lives in one table, `lib/limit-policy.ts`.
+  AI turns pass the route's burst limit, then 150 per IP per day, then a **global daily budget**
+  (`MARKETING_AI_DAILY_TURNS`, default 2000; 0 = off). That budget is the spend limit, since the
+  Anthropic key has none. Over budget, the guide and chat answer `unavailable` and the page
+  carries on rule-based; the team gets one email. "Your beach" emails are capped at 2 per
+  recipient address per day. The purge-leads cron prunes dead counters. Verified: 25 racing
+  requests let exactly 10 through (integration); live with a budget of 2, turns 3–4 got 503 and
+  one alert; demo flow end to end.
 - **2026-10-06** — **P6 lead handoff + narrow beaches** (`f62abd9`, `998348b`). `scoreLead` gives
   transparent points (demo 35, contact 15, guest demo 8, check-in 6, numbers 8, chat 6, extra runs
   6, size 4/10/16; capped at 100) with reasons. Admin `/leads` and `/leads/[id]` added. The team
