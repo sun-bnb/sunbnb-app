@@ -8,5 +8,7 @@ export default defineConfig({
     testTimeout: 15000,
     hookTimeout: 15000,
     fileParallelism: false,
+    // One integration run at a time across data/user/partner — they share sunbnb_test.
+    globalSetup: ['./src/test/integration-lock.ts'],
   },
 })
