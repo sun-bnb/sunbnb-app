@@ -2,7 +2,7 @@
 
 import { useLocale, useTranslations } from 'next-intl'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { haptic } from '@/lib/app-sprites.ts'
+import { haptic } from '@/lib/app-art.ts'
 import { looksLikeQuestion, parseIntent, type Intent } from '@/lib/intent.ts'
 import { track } from '@/lib/track.ts'
 

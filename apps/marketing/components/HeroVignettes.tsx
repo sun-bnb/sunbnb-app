@@ -3,7 +3,8 @@
 import { useTranslations } from 'next-intl'
 import { useEffect, useLayoutEffect, useRef, useState, type FC, type ReactNode } from 'react'
 import QRCodeLib from 'react-qr-code'
-import { STATUS_FILL } from '@/lib/app-sprites'
+import { BedArtDefs, BedGlyphSvg } from '@repo/schematic/art'
+import { BED_STATE, BED_WIDTH_RATIO } from '@/lib/app-art'
 import { DeviceModel, deviceStatus } from './DeviceShowcase'
 import type { HeroMode } from './HeroBeach'
 
@@ -227,16 +228,17 @@ export function OrderScene({ active }: { active: boolean }) {
   )
 }
 
-/** One sunbed as the guest app draws it: status box, the perforated bed over it, a towel when taken. */
+/** One sunbed as the guest app draws it — the app's own vector art: ring, blue + check, towel when booked. */
+const VIGNETTE_BED_PX = 34
 function AppBed({ status }: { status: 'free' | 'selected' | 'booked' }) {
   return (
-    <span className={`relative block h-[34px] w-4 border border-black ${status === 'selected' ? 'animate-[pop_240ms_ease-out]' : ''}`} style={{ background: STATUS_FILL[status] }}>
-      {/* eslint-disable-next-line @next/next/no-img-element -- tiny decorative sprite */}
-      <img src="/app/sunbed.webp" alt="" className="absolute inset-0 h-full w-full" />
-      {status !== 'free' && (
-        // eslint-disable-next-line @next/next/no-img-element -- tiny decorative sprite
-        <img src="/app/towel.webp" alt="" className="absolute left-0.5 top-1 h-[26px] w-3 rotate-[30deg]" />
-      )}
+    <span className={`block ${status === 'selected' ? 'animate-[pop_240ms_ease-out]' : ''}`}>
+      <BedGlyphSvg
+        state={BED_STATE[status]}
+        lengthPx={VIGNETTE_BED_PX}
+        width={VIGNETTE_BED_PX * BED_WIDTH_RATIO}
+        height={VIGNETTE_BED_PX}
+      />
     </span>
   )
 }
@@ -250,6 +252,7 @@ export function BookScene({ active }: { active: boolean }) {
   const pick = 2
   return (
     <div className="flex items-center gap-4">
+      <BedArtDefs />
       <div className="w-[150px] rounded-[26px] border-[5px] border-[#0e3a4a] bg-white p-2.5 shadow-xl">
         <div className="flex items-center justify-between text-[10px]">
           <span className="font-semibold text-gray-900">{t('bk_choose')}</span>

@@ -4,7 +4,7 @@ const withNextIntl = createNextIntlPlugin('./i18n/request.ts')
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ['@repo/data'],
+  transpilePackages: ['@repo/data', '@repo/schematic'],
   env: {
     NEXT_PUBLIC_APP_ENV: process.env.VERCEL_ENV || 'development',
   },

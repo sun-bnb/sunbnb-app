@@ -352,6 +352,14 @@ pure layout generator (location TBD — see Q2)
 
 ## Log
 
+- **2026-10-08** — D8 follow-through: the guest app's seat-map art went vector (geo map +
+  schematic: green ring free, blue + check selected, red ring + towel reserved, pills below
+  20 px), so the marketing copy of it moved too. The art is no longer duplicated:
+  `lib/app-sprites.ts` → `lib/app-art.ts`, a thin adapter over `@repo/schematic/art`
+  (`paintBed` / `paintParasol` paint the same `bed-art.ts` description the user app renders as
+  SVG), and `HeroVignettes` uses `BedGlyphSvg`. `scripts/build-sprites.mjs` + `public/app/*.webp`
+  deleted. Bed width is now the real 1 : 2.5 (was the old 1 : 2.1 tile). Browser-verified: hero
+  beach, booking vignette, map overlay (60 beds).
 - **2026-10-06** — **P15 inland water: Austria.** A region now names its Geofabrik extract
   (`INLAND_EXTRACTS` in `lib/coast-regions.ts`), and one import run does the sea (osmdata; Austria
   gets none, and its 2 079 tiles are marked "no coast" so Overpass is never asked) and the inland

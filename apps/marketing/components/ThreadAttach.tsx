@@ -3,7 +3,7 @@
 import { useLocale, useTranslations } from 'next-intl'
 import { useMemo, useRef, useState, useEffect, type FC, type ReactNode } from 'react'
 import QRCodeLib from 'react-qr-code'
-import { haptic } from '@/lib/app-sprites.ts'
+import { haptic } from '@/lib/app-art.ts'
 import type { BeachLayout } from '@/lib/beach-layout.ts'
 import type { Run } from '@/lib/intent.ts'
 import { exampleBookings, staffWindow } from '@/lib/missions.ts'

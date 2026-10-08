@@ -4,7 +4,7 @@
 import { useMap } from '@vis.gl/react-google-maps'
 import { useEffect, useRef } from 'react'
 import { DEFAULT_LAYOUT, type BeachLayout } from '@/lib/beach-layout.ts'
-import { drawAppBed, drawAppShade, loadAppSprites, type AppSprites, type BedStatus } from '@/lib/app-sprites.ts'
+import { BED_WIDTH_RATIO, drawAppBed, drawAppShade, type BedStatus } from '@/lib/app-art.ts'
 
 /** A newly added bed pops in over this long; additions are staggered so the beach fills row by row. */
 const POP_MS = 320
@@ -19,7 +19,7 @@ const easeOutBack = (t: number) => {
 
 /**
  * Draws a generated beach layout on the map with ONE canvas overlay, in the guest app's exact
- * visual language (`lib/app-sprites.ts`). One canvas, not a marker per bed: a prospect can type
+ * visual language (`lib/app-art.ts`). One canvas, not a marker per bed: a prospect can type
  * 5,000, and track 020 measured what per-item map markers cost at venue scale. Beds that appear
  * (first draw, or a higher count) pop in staggered — the "game feel" of setting the count.
  */
@@ -54,22 +54,9 @@ export default function SunbedOverlay({
   const layoutRef = useRef(layout)
   const marksRef = useRef({ selected, booked, hint, tag, ground })
   const overlayRef = useRef<google.maps.OverlayView | null>(null)
-  const spritesRef = useRef<AppSprites | null>(null)
   /** bed label → when it (re)appeared; umbrellas use their pair's first bed. */
   const bornRef = useRef(new Map<string, number>())
   const rafRef = useRef<number | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    void loadAppSprites().then((s) => {
-      if (cancelled) return
-      spritesRef.current = s
-      overlayRef.current?.draw()
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   useEffect(() => {
     if (!map) return
@@ -159,25 +146,23 @@ export default function SunbedOverlay({
           ctx.restore()
         }
 
-        if (bedL < LOD_MIN_BED_PX || !spritesRef.current) {
+        if (bedL < LOD_MIN_BED_PX) {
           drawParcelOutline(ctx, sunbeds.map((s) => toLocal(s.lat, s.lng)), angle, bedL, `${sunbeds.length - (bk?.size ?? 0)}/${sunbeds.length}`)
         } else {
-          const sprites = spritesRef.current
           const margin = bedL * 2
           for (const s of sunbeds) {
             const p = toLocal(s.lat, s.lng)
             if (!p || p.x < -margin || p.y < -margin || p.x > width + margin || p.y > height + margin) continue
             const status: BedStatus = s.label === sel ? 'selected' : bk?.has(s.label) ? 'booked' : 'free'
             const pop = popOf(s.label)
-            if (pop > 0) drawAppBed(ctx, sprites, p.x, p.y, angle, bedL, status, pop)
+            if (pop > 0) drawAppBed(ctx, p.x, p.y, angle, bedL, status, pop)
           }
-          // A sunshade over each pair, set back toward the land like the app's primary-bed umbrella.
+          // A parasol over each pair (anchored at the pair's midpoint), set toward the backrests as in the app.
           for (const u of umbrellas) {
             const p = toLocal(u.lat, u.lng)
             if (!p) continue
             const pop = popOf(`u:${u.row}:${u.pair}`)
-            const back = { x: p.x - Math.sin(angle) * bedL * 0.22, y: p.y + Math.cos(angle) * bedL * 0.22 }
-            if (pop > 0) drawAppShade(ctx, sprites, back.x, back.y, bedL, pop)
+            if (pop > 0) drawAppShade(ctx, p.x, p.y, angle, bedL, pop)
           }
           // The selected bed stays visible above its sunshade.
           const s = sel ? sunbeds.find((x) => x.label === sel) : undefined
@@ -188,7 +173,7 @@ export default function SunbedOverlay({
             ctx.rotate(angle)
             ctx.strokeStyle = '#2563eb'
             ctx.lineWidth = Math.max(2, bedL * 0.08)
-            const w = bedL / 2.1
+            const w = bedL * BED_WIDTH_RATIO
             ctx.beginPath()
             ctx.roundRect(-w / 2 - 3, -bedL / 2 - 3, w + 6, bedL + 6, 4)
             ctx.stroke()

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { drawAppBed, drawAppShade, loadAppSprites, type AppSprites, type BedStatus } from '@/lib/app-sprites.ts'
+import { BED_WIDTH_RATIO, drawAppBed, drawAppShade, type BedStatus } from '@/lib/app-art.ts'
 
 /** The app map style's own colours (cloud mapId 7a0196a7ba317ea5), so hero and mockup match. */
 const SEA = '#8fd9ee'
@@ -33,7 +33,7 @@ interface Tag {
 }
 
 /**
- * The hero's beach, drawn with the app's real sunbed / towel / sunshade sprites on the app map's
+ * The hero's beach, drawn with the app's own sunbed / towel / parasol art (`lib/app-art.ts`) on the app map's
  * colours: guests pick a bed (blue), it is booked (red + towel), a "booked · paid" tag rises. On
  * the other feature slides the sunbeds fade out and that feature's own scene (HeroVignettes)
  * scrolls in over the sand; the sea stays as the shared backdrop. Purely illustrative — no
@@ -63,7 +63,6 @@ export default function HeroBeach({
     const canvas = canvasRef.current
     if (!canvas) return
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    let sprites: AppSprites | null = null
     let beds: Bed[] = []
     let tags: Tag[] = []
     let raf = 0
@@ -89,7 +88,7 @@ export default function HeroBeach({
       const bandH = (band[1] - band[0]) * height
       const rows = Math.max(1, Math.min(3, Math.floor(bandH / (32 * 1.75))))
       bedL = Math.max(22, Math.min(46, bandH / (rows * 1.75)))
-      const bedW = bedL / 2.1
+      const bedW = bedL * BED_WIDTH_RATIO
       const pairW = bedW * 2 + bedL * 0.3
       const pitch = pairW + bedL * 0.55
       const pairs = Math.max(3, Math.floor((width - bedL) / pitch))
@@ -139,16 +138,15 @@ export default function HeroBeach({
       ctx.globalAlpha = 0.6
       ctx.fill()
       ctx.globalAlpha = 1
-      if (!sprites) return
       bedsAlpha = Math.max(0, Math.min(1, bedsAlpha + (modeRef.current === 'book' ? 0.06 : -0.06)))
       if (bedsAlpha <= 0) return
       ctx.save()
       ctx.globalAlpha = bedsAlpha
-      for (const b of beds) drawAppBed(ctx, sprites, b.x, b.y, 0, bedL, b.status)
+      for (const b of beds) drawAppBed(ctx, b.x, b.y, 0, bedL, b.status)
       for (let i = 0; i < beds.length; i += 2) {
         const a = beds[i]!
         const c = beds[i + 1]!
-        drawAppShade(ctx, sprites, (a.x + c.x) / 2, a.y + bedL * 0.22, bedL)
+        drawAppShade(ctx, (a.x + c.x) / 2, a.y, 0, bedL)
       }
       ctx.restore()
       // Rising tags: "Booked · paid by card", "Drinks · paid", …
@@ -208,16 +206,13 @@ export default function HeroBeach({
     layout()
     const ro = new ResizeObserver(layout)
     ro.observe(canvas)
-    void loadAppSprites().then((s) => {
-      sprites = s
-      if (reduced) {
-        beds.forEach((b, i) => i % 2 === 0 && i < beds.length / 1.5 && (b.status = 'booked'))
-        draw(0)
-      } else {
-        raf = requestAnimationFrame(loop)
-        timer = setTimeout(step, 700)
-      }
-    })
+    if (reduced) {
+      beds.forEach((b, i) => i % 2 === 0 && i < beds.length / 1.5 && (b.status = 'booked'))
+      draw(0)
+    } else {
+      raf = requestAnimationFrame(loop)
+      timer = setTimeout(step, 700)
+    }
     return () => {
       cancelAnimationFrame(raf)
       if (timer) clearTimeout(timer)

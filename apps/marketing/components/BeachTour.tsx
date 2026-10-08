@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl'
 import { useEffect, useRef, useState } from 'react'
-import { haptic } from '@/lib/app-sprites.ts'
+import { haptic } from '@/lib/app-art.ts'
 import { track } from '@/lib/track.ts'
 import HeroBeach, { type HeroMode } from './HeroBeach'
 import { CheckinScene, FitScale, InvoiceScene, OrderScene, RentScene } from './HeroVignettes'
