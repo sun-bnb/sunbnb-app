@@ -42,6 +42,16 @@ RESEND_API_KEY=
 BLOB_READ_WRITE_TOKEN=
 RECONCILIATION_SECRET=
 
+# Stripe Connect (track 028): Connect platform key (direct-charge status/refunds) + signing secret for /api/webhooks/stripe-connect
+STRIPE_CONNECT_SECRET_KEY=
+STRIPE_CONNECT_WEBHOOK_SECRET=
+# Viva Smart Checkout (online, track 028). VIVA_MODE=stub|http is shared with the Cloud Terminal rail.
+VIVA_MODE=
+VIVA_CHECKOUT_SOURCE_CODE=
+VIVA_CHECKOUT_COLOR=
+# Returned by GET /api/webhooks/viva for Viva's URL-verification handshake
+VIVA_WEBHOOK_VERIFICATION_KEY=
+
 [apps/partner/.env.local]
 GOOGLE_MAPS_API_KEY=
 GOOGLE_OAUTH_ID=
@@ -56,6 +66,14 @@ GOOGLE_API_SECRET=
 BLOB_READ_WRITE_TOKEN=
 STRIPE_SECRET_KEY=
 STRIPE_SUBSCRIPTION_WEBHOOK_SECRET=
+# Stripe Connect (track 028): secret/restricted key of the Connect platform account (separate from STRIPE_SECRET_KEY; falls back to it if unset)
+STRIPE_CONNECT_SECRET_KEY=
+# Stripe Connect (track 028): signing secret for the Connect-account webhook (account.updated / capability.updated)
+STRIPE_CONNECT_ACCOUNT_WEBHOOK_SECRET=
+# Stripe publishable key for embedded Connect components / Stripe.js in the browser
+NEXT_PUBLIC_STRIPE_PUBLIC_KEY=
+# Publishable key of the Stripe CONNECT platform account (embedded components); falls back to the key above
+NEXT_PUBLIC_STRIPE_CONNECT_PUBLIC_KEY=
 MOLLIE_CLIENT_ID=
 MOLLIE_CLIENT_SECRET=
 MOLLIE_ORG_TOKEN=
