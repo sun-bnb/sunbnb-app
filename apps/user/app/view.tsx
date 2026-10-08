@@ -7,7 +7,7 @@
  * `BeachScene`), pinned while the page scrolls through ~5.5 screens. The copy
  * is a handful of panels fading in and out over it at scroll positions that
  * match what the camera is doing: the map at rest, the club standing up into
- * 3D, noon by the pole and its code plaque, golden hour with drinks on the
+ * 3D, noon by the pole and its status device, golden hour with drinks on the
  * table, dusk with the lights coming on for the closing call to action. The
  * verifiable facts and the footer follow on a dusk-dark section so the day
  * ends rather than snapping back to cream.
@@ -51,7 +51,7 @@ const BEATS = {
   hero: [-0.02, 0, 0.07, 0.13], // fully in at p = 0 (a window starting AT 0 is invisible at rest)
   hint: [-0.02, 0, 0.01, 0.05],
   stage1: [0.13, 0.18, 0.31, 0.36], // the flyover and the travel to the seat
-  stage2: [0.38, 0.43, 0.6, 0.65], // arriving: the plaque is in view, and stays while we turn around it
+  stage2: [0.38, 0.43, 0.6, 0.65], // arriving: the status device is in view, and stays while we turn around it
   stage3: [0.68, 0.73, 0.84, 0.88], // the turn around the drinks
   close: [0.94, 0.985, 1.5, 1.6], // stays once it is in
 } as const

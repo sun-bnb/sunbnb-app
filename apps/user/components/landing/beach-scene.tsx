@@ -12,7 +12,7 @@
  *   p = 0     straight down — this IS the map the product uses — morning light
  *   p ≈ 0.1   the map stands up into a wide tilted view
  *   p ≈ 0.2   gliding over the rows toward the seat; a free unit is claimed ("Yours")
- *   p ≈ 0.36  arrive at the parasol; slow turn around the QR plaque — noon
+ *   p ≈ 0.36  arrive at the parasol; slow turn around its status device — noon
  *   p ≈ 0.7   slow turn around the drinks table on the far side — golden hour
  *   p ≈ 0.92  back to the middle of the boardwalk, then out low and straight
  *   p = 1     dusk: parasols fold, string lights come on along the boardwalk
@@ -21,6 +21,12 @@
  * keyframes for the camera, linear for colours), smoothed a little each frame
  * so scrolling feels filmed rather than scrubbed. Hovering/tapping a free unit
  * moves the "Yours" tag; that is the only interaction.
+ *
+ * Each pole carries the seat-side status device (the box from the marketing
+ * page, `apps/marketing/components/DeviceShowcase.tsx`): a colour wheel behind a
+ * fan-shaped window — green free, red reserved, blue occupied — over the seat's
+ * QR code. The claimed unit's wheel follows the story: free, reserved once it is
+ * claimed, occupied when the drinks arrive, free again at dusk.
  *
  * Geometry note: the pole stands BETWEEN the two beds (`POLE_Z`), not at the
  * sea end — a canopy 2 m up at the head end projected onto the water from any
@@ -36,6 +42,7 @@ import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'rea
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 const CANOPY = '#fbf8f0'
@@ -48,6 +55,8 @@ const WOOD = '#dcbd84'
 const FOAM = '#ffffff'
 const GLOW = '#00cef1'
 const BULB = '#ffd27a'
+const DEVICE_WHITE = '#f4f2ec'
+const STATUS_COLOR = { reserved: '#e5372e', occupied: '#2f7de1', free: '#76c92f' } as const
 
 // ── Layout ───────────────────────────────────────────────────────────────────
 const COLS = 4
@@ -178,12 +187,12 @@ const SEA_SHALLOW: Key[] = [
 // over the key index; `tOfP` maps scroll → index, piecewise-linear.
 //
 //   0.00 the map · 0.09 wide · 0.17–0.26 gliding over the rows toward the seat
-//   0.36 arrive at the parasol from the walkway side, plaque in view
-//   0.36–0.62 slow turn around the plaque, staying on its front (the back is blank)
+//   0.36 arrive at the parasol from the walkway side, the status device in view
+//   0.36–0.62 slow turn around the device, staying on its front (the back is blank)
 //   0.68–0.86 slow turn around the drinks table on the far side
 //   0.86–0.95 spiral in to the middle of the boardwalk, still turning, to face the sea
 //   1.00 backed out low and straight along the boardwalk
-const PLAQUE = new THREE.Vector3(CLAIMED.x, 1.3, CLAIMED.z + POLE_Z + 0.05)
+const DEVICE_AT = new THREE.Vector3(CLAIMED.x, 1.3, CLAIMED.z + POLE_Z + 0.08)
 /** The side table, beside the right-hand lounger at the head end (see Drinks). */
 const TABLE = new THREE.Vector3(CLAIMED.x + 1.08, 0.45, CLAIMED.z + 0.55)
 /** A point on a circle around `c`: φ 0 = land side (+z), 90° = +x, 180° = sea. */
@@ -208,10 +217,10 @@ const KEYS: { p: number; pos: THREE.Vector3; look: THREE.Vector3 }[] = [
   { p: 0.09, pos: new THREE.Vector3(2.0, 12, 27), look: new THREE.Vector3(0.6, 0.2, -5) },
   { p: 0.17, pos: new THREE.Vector3(7.5, 4.6, 9.5), look: new THREE.Vector3(CLAIMED.x + 3.2, 0.9, CLAIMED.z - 1) },
   { p: 0.26, pos: new THREE.Vector3(CLAIMED.x - 4.5, 3.2, CLAIMED.z + 6.5), look: new THREE.Vector3(CLAIMED.x, 1.0, CLAIMED.z) },
-  // the plaque faces ~326° (toward the walkway); the turn stays on that side
-  { p: 0.36, pos: around(UNIT_C, 282, 2.6, 1.8), look: PLAQUE.clone() },
-  { p: 0.5, pos: around(UNIT_C, 326, 2.1, 1.55), look: PLAQUE.clone() },
-  { p: 0.62, pos: around(UNIT_C, 14, 2.2, 1.5), look: PLAQUE.clone() },
+  // the device faces ~326° (toward the walkway); the turn stays on that side
+  { p: 0.36, pos: around(UNIT_C, 282, 2.6, 1.8), look: DEVICE_AT.clone() },
+  { p: 0.5, pos: around(UNIT_C, 326, 2.1, 1.55), look: DEVICE_AT.clone() },
+  { p: 0.62, pos: around(UNIT_C, 14, 2.2, 1.5), look: DEVICE_AT.clone() },
   // quick hop to the far side, then a slow turn around the table
   { p: 0.68, pos: around(TABLE_C, 10, 1.45, 1.1), look: tableLook.clone() },
   { p: 0.78, pos: around(TABLE_C, 90, 1.35, 1.05), look: tableLook.clone() },
@@ -247,8 +256,7 @@ function useParts() {
       towel: new THREE.BoxGeometry(0.5, 0.03, 1.05),
       ring: new THREE.RingGeometry(1.3, 1.5, 48),
       hit: new THREE.BoxGeometry(2.4, 2.4, 2.3),
-      plaque: new THREE.BoxGeometry(0.34, 0.34, 0.03),
-      plaqueFace: new THREE.PlaneGeometry(0.28, 0.28),
+      ...deviceGeometry(),
       table: new THREE.BoxGeometry(0.44, 0.42, 0.44),
     }
     const mat = {
@@ -259,8 +267,10 @@ function useParts() {
       cushion: new THREE.MeshStandardMaterial({ color: CUSHION, roughness: 0.95 }),
       towel: new THREE.MeshStandardMaterial({ color: TOWEL, roughness: 1 }),
       hit: new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
-      plaque: new THREE.MeshStandardMaterial({ color: '#fbfaf5', roughness: 0.6 }),
-      plaqueFace: new THREE.MeshBasicMaterial({ map: makeQrTexture(), toneMapped: false }),
+      device: new THREE.MeshStandardMaterial({ color: DEVICE_WHITE, roughness: 0.7 }),
+      solar: new THREE.MeshStandardMaterial({ color: '#141b27', roughness: 0.22, metalness: 0.35 }),
+      wheel: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55 }),
+      print: new THREE.MeshStandardMaterial({ map: makePrintTexture(), transparent: true, roughness: 0.7 }),
       wood: new THREE.MeshStandardMaterial({ color: WOOD, roughness: 0.85 }),
     }
     return { geo, mat }
@@ -268,40 +278,198 @@ function useParts() {
 }
 type Parts = ReturnType<typeof useParts>
 
-/** A QR-looking plaque face: finder squares plus a seeded module field. Not scannable, by design. */
-function makeQrTexture() {
-  const size = 128
-  const c = document.createElement('canvas')
-  c.width = c.height = size
-  const ctx = c.getContext('2d')!
-  ctx.fillStyle = '#ffffff'
-  ctx.fillRect(0, 0, size, size)
+// ── The status device ───────────────────────────────────────────────────────
+// Proportioned from photos of the prototype, in the marketing model's units
+// (260 × 236 × 110, window and print positions from DeviceShowcase.tsx) and
+// scaled up a little past life size so it reads from the camera's orbit.
+const DS = 0.34 / 260
+const DEV_W = 260 * DS
+const DEV_H = 236 * DS
+const DEV_D = 110 * DS
+const DEV_PLATE = 5 * DS
+const DEV_LIP = 3 * DS
+/** Window hub, 4 units higher than the marketing model so the whole wheel fits inside the plate. */
+const DEV_HUB_Y = DEV_H / 2 - 137 * DS
+const DEV_R_OUT = 97 * DS
+const DEV_R_IN = 38 * DS
+const DEV_HALF = (32 * Math.PI) / 180
+/** The pole's radius plus half the box: the back plate sits against the pole. */
+const DEV_OFFSET = 0.035 + DEV_D / 2
+
+type DeviceStatus = keyof typeof STATUS_COLOR
+/** Wheel order, clockwise from the window: each status is a third further on. */
+const WHEEL_ORDER: DeviceStatus[] = ['reserved', 'occupied', 'free']
+
+/** What a unit's device shows at scroll `p`. The claimed one lives the story's day. */
+function deviceStatus(spec: UnitSpec, p: number): DeviceStatus {
+  if (spec.id === CLAIMED_ID) return p < 0.2 ? 'free' : p < 0.56 ? 'reserved' : p < 0.95 ? 'occupied' : 'free'
+  if (!spec.taken) return 'free'
+  return spec.id % 3 === 0 ? 'reserved' : 'occupied'
+}
+
+function roundedRect(w: number, h: number, r: number) {
+  const s = new THREE.Shape()
+  s.moveTo(-w / 2 + r, -h / 2)
+  s.lineTo(w / 2 - r, -h / 2)
+  s.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r)
+  s.lineTo(w / 2, h / 2 - r)
+  s.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2)
+  s.lineTo(-w / 2 + r, h / 2)
+  s.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r)
+  s.lineTo(-w / 2, -h / 2 + r)
+  s.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2)
+  return s
+}
+
+/**
+ * The device as three merged geometries — white body (core + both plates, the
+ * front one with the window cut), dark solar panels (top + both sides), and the
+ * wheel (three coloured thirds, vertex-coloured) — so each pole costs four draw
+ * calls with the print. Front is +z, origin at the box's centre.
+ */
+function deviceGeometry() {
+  const plate = (window: boolean) => {
+    const shape = roundedRect(DEV_W, DEV_H, 12 * DS)
+    if (window) {
+      const hole = new THREE.Path()
+      const up = Math.PI / 2
+      hole.absarc(0, DEV_HUB_Y, DEV_R_OUT, up + DEV_HALF, up - DEV_HALF, true)
+      hole.absarc(0, DEV_HUB_Y, DEV_R_IN, up - DEV_HALF, up + DEV_HALF, false)
+      hole.closePath()
+      shape.holes.push(hole)
+    }
+    return new THREE.ExtrudeGeometry(shape, { depth: DEV_PLATE, bevelEnabled: false, curveSegments: 10 })
+  }
+  const front = plate(true).translate(0, 0, DEV_D / 2 - DEV_PLATE)
+  const back = plate(false).translate(0, 0, -DEV_D / 2)
+  const coreW = DEV_W - 2 * DEV_LIP
+  const coreH = DEV_H - 2 * DEV_LIP
+  const coreD = DEV_D - 2 * DEV_PLATE
+  const core = new THREE.BoxGeometry(coreW, coreH, coreD).toNonIndexed()
+  const deviceBody = mergeGeometries([core, front, back])!
+
+  const top = new THREE.BoxGeometry(DEV_W * 0.72, 0.004, coreD - 4 * DS).translate(0, coreH / 2 + 0.002, 0)
+  const sideH = coreH * 0.74
+  const sideY = -coreH / 2 + coreH * 0.05 + sideH / 2
+  const side = (sign: number) => new THREE.BoxGeometry(0.004, sideH, coreD * 0.84).translate(sign * (coreW / 2 + 0.002), sideY, 0)
+  const deviceSolar = mergeGeometries([top, side(1), side(-1)])!
+
+  // Red centred on the window (straight up), then blue and green clockwise; turning the wheel
+  // +120° (counter-clockwise, seen from the front) brings the next status up.
+  const r = DEV_R_OUT + 1.5 * DS
+  const thirds = WHEEL_ORDER.map((status, i) => {
+    const g = new THREE.CircleGeometry(r, 24, Math.PI / 2 - Math.PI / 3 - (i * 2 * Math.PI) / 3, (2 * Math.PI) / 3).toNonIndexed()
+    const c = new THREE.Color(STATUS_COLOR[status])
+    const n = g.getAttribute('position').count
+    g.setAttribute('color', new THREE.Float32BufferAttribute(Array.from({ length: n }, () => [c.r, c.g, c.b]).flat(), 3))
+    return g
+  })
+  // Inside the front plate's thickness: only the window shows it.
+  const deviceWheel = mergeGeometries(thirds)!
+  const devicePrint = new THREE.PlaneGeometry(100 * DS, 100 * DS)
+  return { deviceBody, deviceSolar, deviceWheel, devicePrint }
+}
+
+/** A QR-looking field: finder squares plus seeded modules. Not scannable, by design. */
+function drawQr(ctx: CanvasRenderingContext2D, x0: number, y0: number, size: number) {
   const n = 21
   const cell = size / (n + 2)
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(x0, y0, size, size)
   let seed = 7
   const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280)
+  const at = (gx: number, gy: number, w: number, color: string) => {
+    ctx.fillStyle = color
+    ctx.fillRect(x0 + (gx + 1) * cell, y0 + (gy + 1) * cell, w * cell, w * cell)
+  }
   const finder = (gx: number, gy: number) => {
-    ctx.fillStyle = '#17323a'
-    ctx.fillRect((gx + 1) * cell, (gy + 1) * cell, 7 * cell, 7 * cell)
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect((gx + 2) * cell, (gy + 2) * cell, 5 * cell, 5 * cell)
-    ctx.fillStyle = '#17323a'
-    ctx.fillRect((gx + 3) * cell, (gy + 3) * cell, 3 * cell, 3 * cell)
+    at(gx, gy, 7, '#17323a')
+    at(gx + 1, gy + 1, 5, '#ffffff')
+    at(gx + 2, gy + 2, 3, '#17323a')
   }
   finder(0, 0)
   finder(n - 7, 0)
   finder(0, n - 7)
-  ctx.fillStyle = '#17323a'
   for (let y = 0; y < n; y++) {
     for (let x = 0; x < n; x++) {
       const inFinder = (x < 8 && y < 8) || (x >= n - 8 && y < 8) || (x < 8 && y >= n - 8)
-      if (!inFinder && rnd() < 0.42) ctx.fillRect((x + 1) * cell, (y + 1) * cell, cell, cell)
+      if (!inFinder && rnd() < 0.42) at(x, y, 1, '#17323a')
     }
   }
+}
+
+/** The Sunbnb mark (public/sunbnb-logo.svg, viewBox 303.75 × 277). */
+const LOGO_PATHS = [
+  'M230.82,91.37c1.94-10.69.1-21.9-2.88-32.26-2.91-10.46-8.12-20.21-16.13-27.59-21.04-19.52-52.56-28.09-80.62-22.8-21.16,3.94-39.99,17.29-51.74,35.19-23.89,35.28-15.27,91.34,26.87,108.13,23.52,10.28,51.35,10.49,75.76,19.52,13.02,4.78,25.53,12.03,34.51,22.95,0,0,.98,1.17.98,1.17,0,0,.49.58.49.58,3.54,3.97-.76,10.75-6.28,8.23-2.22-1.19-4.76-2.59-7.08-3.61-28.87-13.1-60.88-9.33-91.91-8.31-22.59.77-46.79-.03-67.95-9.66C23.72,173.41,5.58,155.21,0,132.33c0,0,3.65-1.04,3.65-1.04,4.45,13.87,13.69,25.76,25.29,34.38,54.49,40.4,127.63-3.84,186.54,29.48,0,0,.65.35.65.35,0,0,.16.09.16.09-.08-.04.41.22-.14-.07-2.69-1.45-6.37.47-6.73,3.47-.13.8-.03,1.73.3,2.51.5,1.03.78,1.24.56,1l-.1-.12s-.41-.49-.41-.49c-7.84-10-19.18-16.67-31.08-21.06-17.45-6.43-36.01-8.2-54.14-12.65-23.42-5.58-45.45-16.69-57.19-38.84-25.5-47.84-.21-108.43,51.09-125.1,18.58-5.94,38.94-5.47,57.46.3,18.38,5.72,36.07,15.96,47.34,31.94,8.52,12.76,12.22,28.9,12.47,44.09-.01,3.86-.29,7.76-1.19,11.61l-3.7-.83h0Z',
+  'M73.3,186.68c-2.73,15.8,2.88,38.47,12.16,51.46,19.1,25.1,57.31,36.29,87.66,30.21,35.33-6.59,63.29-39.4,64.61-75.24.96-20.81-5.88-43.08-21.82-57.06-10.69-9.39-24.33-14.45-38.18-17.7-30.29-6.8-64.82-7.98-88.08-31.6-1.07-1.06-2.04-2.25-3.06-3.35,0,0-.5-.56-.5-.56l-.13-.14c.06.09-.5-.62-.65-.96-.49-.9-.72-2-.65-3.02.24-4.08,4.89-6.51,8.31-4.41,3.45,1.79,7.2,3.51,10.87,4.81,35.26,12.57,73.09,3.21,109.6,4.53,15.34.53,31.01,2.91,45.19,9.22,15.03,6.74,28.59,17.47,37.22,31.62,3.57,5.72,6.16,12.13,7.9,18.63,0,0-3.85,1.13-3.85,1.13-2.33-6.87-5.82-13.26-10.18-18.95-13.2-17.16-33.62-27.61-54.84-30.78-28.67-4.57-59.73,1.46-88.75,1.18-19.76-.1-40.18-3.18-57.84-12.67,2.98,1.59,7.85-1.53,5.73-5.97-.09-.24-.59-.85-.45-.68.31.34,1.08,1.2,1.4,1.56,21.46,23.75,55.8,23.97,85.01,31.11,17.92,4.23,36.19,12.01,48.39,26.49,13.59,15.84,19.25,37.6,18.01,58.03-1.25,23.61-12.7,46.04-30.32,61.58-30.11,27.07-74.23,27.8-108.74,8.77-20.52-11.45-32.27-26.21-37.04-49.34-1.9-9.45-2.9-19.17-.9-28.73,0,0,3.92.84,3.92.84h0Z',
+]
+
+/**
+ * The front plate's print below the window, on a transparent texture the
+ * plate's light falls on: the seat's QR, and the Sunbnb mark + wordmark at the
+ * bottom. Covers model y 118–218 of 236 (x centred), so the QR's top lands at 124.
+ */
+function makePrintTexture() {
+  const size = 256
+  const k = size / 100 // texture px per model unit
+  const c = document.createElement('canvas')
+  c.width = c.height = size
+  const ctx = c.getContext('2d')!
+  // QR: 58 units square, its top 6 units into the print (model y 124 of 236)
+  drawQr(ctx, (size - 58 * k) / 2, 6 * k, 58 * k)
+  // mark + wordmark on one line near the bottom (model y ≈ 207)
+  const markH = 15 * k
+  const markW = (markH * 303.75) / 277
+  ctx.font = `600 ${14 * k}px system-ui, -apple-system, sans-serif`
+  const word = 'sunbnb'
+  const gap = 5 * k
+  const total = markW + gap + ctx.measureText(word).width
+  const x = (size - total) / 2
+  const y = 88 * k
+  ctx.save()
+  ctx.translate(x, y - markH / 2)
+  ctx.scale(markH / 277, markH / 277)
+  ctx.fillStyle = '#1f2933'
+  LOGO_PATHS.forEach((d) => ctx.fill(new Path2D(d)))
+  ctx.restore()
+  ctx.fillStyle = '#1f2933'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(word, x + markW + gap, y)
   const tex = new THREE.CanvasTexture(c)
   tex.colorSpace = THREE.SRGBColorSpace
   tex.anisotropy = 4
   return tex
+}
+
+/** One pole's device; turns its wheel when the status changes (the shorter way round). */
+function Device({ spec, parts, progress, reduced }: { spec: UnitSpec; parts: Parts; progress: MutableRefObject<number>; reduced: boolean }) {
+  const wheel = useRef<THREE.Mesh>(null)
+  const state = useRef({ status: deviceStatus(spec, progress.current), target: 0, angle: 0, primed: false })
+  useFrame((_, dt) => {
+    const st = state.current
+    const status = deviceStatus(spec, progress.current)
+    if (!st.primed) {
+      st.target = st.angle = (WHEEL_ORDER.indexOf(status) * 2 * Math.PI) / 3
+      st.status = status
+      st.primed = true
+    } else if (status !== st.status) {
+      // a third forward, or a third back when scrolling up — never the long way round
+      const d = (WHEEL_ORDER.indexOf(status) - WHEEL_ORDER.indexOf(st.status) + 3) % 3
+      st.target += ((d === 1 ? 1 : -1) * 2 * Math.PI) / 3
+      st.status = status
+    }
+    st.angle = reduced ? st.target : THREE.MathUtils.damp(st.angle, st.target, 5, dt)
+    if (wheel.current) wheel.current.rotation.z = st.angle
+  })
+  const { geo, mat } = parts
+  return (
+    <group position={[0, 0, DEV_OFFSET]}>
+      <mesh geometry={geo.deviceBody} material={mat.device} castShadow receiveShadow />
+      <mesh geometry={geo.deviceSolar} material={mat.solar} />
+      <mesh ref={wheel} geometry={geo.deviceWheel} material={mat.wheel} position={[0, DEV_HUB_Y, DEV_D / 2 - DEV_PLATE / 2]} />
+      <mesh geometry={geo.devicePrint} material={mat.print} position={[0, DEV_H / 2 - 168 * DS, DEV_D / 2 + 0.0006]} />
+    </group>
+  )
 }
 
 // ── One parasol with its pair of loungers ───────────────────────────────────
@@ -311,6 +479,7 @@ function Unit({
   progress,
   lit,
   claimStart,
+  reduced,
   onHover,
 }: {
   spec: UnitSpec
@@ -318,6 +487,7 @@ function Unit({
   progress: MutableRefObject<number>
   lit: boolean
   claimStart: number | null
+  reduced: boolean
   onHover: (id: number | null) => void
 }) {
   const ring = useRef<THREE.Mesh>(null)
@@ -382,11 +552,10 @@ function Unit({
         </group>
       ))}
 
-      {/* pole between the beds at the head end; the plaque faces the walkway, where a guest walks in; its sea side is blank */}
+      {/* pole between the beds at the head end; the status device faces the walkway, where a guest walks in; its sea side is blank */}
       <mesh geometry={geo.pole} material={mat.pole} position={[0, 1.15, POLE_Z]} castShadow />
-      <group position={[0, 1.32, POLE_Z + 0.05]} rotation={[0, spec.x < 0 ? 0.6 : -0.6, 0]}>
-        <mesh geometry={geo.plaque} material={mat.plaque} castShadow />
-        <mesh geometry={geo.plaqueFace} material={mat.plaqueFace} position={[0, 0, 0.016]} />
+      <group position={[0, 1.32, POLE_Z]} rotation={[0, spec.x < 0 ? 0.6 : -0.6, 0]}>
+        <Device spec={spec} parts={parts} progress={progress} reduced={reduced} />
       </group>
       <group ref={canopy} position={[0, 2.3, POLE_Z]}>
         <mesh geometry={geo.canopy} material={mat.canopy} castShadow />
@@ -897,6 +1066,7 @@ function Club({
           progress={progress}
           lit={litId === u.id}
           claimStart={u.id === CLAIMED_ID ? claimStart : null}
+          reduced={reduced}
           onHover={setHovered}
         />
       ))}
