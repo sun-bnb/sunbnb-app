@@ -7,6 +7,8 @@ import { describe, it, expect } from 'vitest'
 import {
   resolveSelectionSet,
   pickFirstAvailablePair,
+  pickRandomAvailablePair,
+  selectionCenter,
   inventoryAnchor,
 } from '@/app/sites/[id]/sunbed-preselection'
 import type { InventoryItem } from '@/app/sites/types'
@@ -214,5 +216,68 @@ describe('inventoryAnchor', () => {
 
   it('returns null for an empty inventory so the caller can fall back to the site pin', () => {
     expect(inventoryAnchor([])).toBeNull()
+  })
+})
+
+// ────────────────────────────────────────────────────────────────────────────
+// pickRandomAvailablePair — the on-open preselection
+// ────────────────────────────────────────────────────────────────────────────
+describe('pickRandomAvailablePair', () => {
+  const avail = (ids: string[], booked: string[] = []) =>
+    ids.map((itemId) => ({ itemId, available: !booked.includes(itemId) }))
+  const [a1, a2] = makeUnit('a1', 'a2')
+  const [b1, b2] = makeUnit('b1', 'b2')
+  const [c1, c2] = makeUnit('c1', 'c2')
+  const inventory = [a1, a2, b1, b2, c1, c2]
+  const ids = inventory.map((i) => i.id)
+
+  it('selects a whole free pair — both beds of one unit', () => {
+    const pick = pickRandomAvailablePair(avail(ids), inventory, () => 0.5)
+    expect(pick).toHaveLength(2)
+    expect(new Set(pick.map((i) => i.sunbedGroupId)).size).toBe(1)
+  })
+
+  it('spreads picks across units instead of always offering the first one', () => {
+    const picked = new Set(
+      [0, 0.4, 0.8].map((r) => pickRandomAvailablePair(avail(ids), inventory, () => r)[0]!.sunbedGroupId),
+    )
+    expect(picked.size).toBe(3)
+  })
+
+  it('prefers a fully free pair over a half-booked unit', () => {
+    // a and b are half booked; c is the only whole pair — every roll must land on it
+    for (const r of [0, 0.5, 0.99]) {
+      const pick = pickRandomAvailablePair(avail(ids, ['a2', 'b1']), inventory, () => r)
+      expect(pick.map((i) => i.id).sort()).toEqual(['c1', 'c2'])
+    }
+  })
+
+  it('falls back to the free bed of a half-booked unit — never a bed someone holds', () => {
+    const pick = pickRandomAvailablePair(avail(['a1', 'a2'], ['a2']), [a1, a2], () => 0)
+    expect(pick.map((i) => i.id)).toEqual(['a1'])
+  })
+
+  it('returns nothing when the beach is full', () => {
+    expect(pickRandomAvailablePair(avail(ids, ids), inventory, () => 0)).toEqual([])
+  })
+
+  it('stays in range for a random source that returns its upper bound', () => {
+    expect(pickRandomAvailablePair(avail(ids), inventory, () => 1)).toHaveLength(2)
+  })
+})
+
+describe('selectionCenter', () => {
+  it('is the midpoint of the selected beds, ignoring unplaced ones', () => {
+    expect(
+      selectionCenter([
+        { locationLat: '36.0', locationLng: '-4.0' },
+        { locationLat: '36.2', locationLng: '-4.2' },
+        {},
+      ]),
+    ).toEqual({ lat: 36.1, lng: -4.1 })
+  })
+
+  it('is null when nothing is placed', () => {
+    expect(selectionCenter([{}])).toBeNull()
   })
 })

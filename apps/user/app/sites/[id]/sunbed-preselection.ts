@@ -65,6 +65,65 @@ export function pickFirstAvailablePair(
 }
 
 /**
+ * Pick a RANDOM available unit for the on-open preselection, so guests opening
+ * the site page are spread across the beach instead of all being offered the
+ * same first bed (and the map can open on it).
+ *
+ * Preference, best first — a random pick within the best non-empty tier:
+ *   1. a whole PAIR (a unit of 2+ beds) that is fully available;
+ *   2. any unit with at least one available bed, trimmed to its available beds
+ *      (a partly booked unit — same rule as `pickFirstAvailablePair`);
+ * Returns [] when nothing is available.
+ *
+ * @param random - injectable [0, 1) source, so tests are deterministic
+ */
+export function pickRandomAvailablePair(
+  availabilityList: { itemId: string; available: boolean }[],
+  inventoryItems: InventoryItem[],
+  random: () => number = Math.random,
+): InventoryItem[] {
+  const byId = new Map(inventoryItems.map((i) => [i.id, i]))
+  const availableIds = new Set(
+    availabilityList.filter((a) => a.available).map((a) => a.itemId),
+  )
+
+  const fullPairs: InventoryItem[][] = []
+  const partial: InventoryItem[][] = []
+  const seen = new Set<string>()
+  for (const entry of availabilityList) {
+    if (!entry.available) continue
+    const item = byId.get(entry.itemId)
+    if (!item) continue
+    const unitKey = item.sunbedGroupId ?? item.id
+    if (seen.has(unitKey)) continue
+    seen.add(unitKey)
+    const unit = resolveSelectionSet(item, inventoryItems)
+    const free = unit.filter((i) => availableIds.has(i.id))
+    if (unit.length >= 2 && free.length === unit.length) fullPairs.push(free)
+    else partial.push(free)
+  }
+
+  const tier = fullPairs.length ? fullPairs : partial
+  if (!tier.length) return []
+  const index = Math.min(tier.length - 1, Math.floor(random() * tier.length))
+  return tier[index]!
+}
+
+/** Centre of a selection's beds, for opening the map on it; null when nothing is placed. */
+export function selectionCenter(
+  items: { locationLat?: string; locationLng?: string }[],
+): { lat: number; lng: number } | null {
+  const placed = items
+    .map((i) => ({ lat: Number(i.locationLat), lng: Number(i.locationLng) }))
+    .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+  if (!placed.length) return null
+  return {
+    lat: placed.reduce((a, p) => a + p.lat, 0) / placed.length,
+    lng: placed.reduce((a, p) => a + p.lng, 0) / placed.length,
+  }
+}
+
+/**
  * Where the map should OPEN: a real seat near the middle of the inventory.
  *
  * The naive answer — the bounding-box centre of all seats — is only on the sand

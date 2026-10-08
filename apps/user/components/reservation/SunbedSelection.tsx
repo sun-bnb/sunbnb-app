@@ -8,7 +8,7 @@ import { setValue } from '@/store/features/sites/sitesSlice'
 import { RootState } from '@/store/store'
 import { useGetAvailabilityBySiteAndTimeRangeQuery } from '@/store/features/api/apiSlice'
 import dayjs, { Dayjs } from 'dayjs'
-import { APIProvider, AdvancedMarker, Map } from '@vis.gl/react-google-maps'
+import { APIProvider, AdvancedMarker, Map, useMap } from '@vis.gl/react-google-maps'
 import { Polygon } from './polygon'
 import { getPaddedConvexHull } from '@/utils/geometry'
 import React from 'react'
@@ -28,7 +28,7 @@ import {
   type BedGlyphState,
   type ViewportBounds,
 } from '@repo/schematic'
-import { inventoryAnchor, pickFirstAvailablePair } from '@/app/sites/[id]/sunbed-preselection'
+import { inventoryAnchor, pickRandomAvailablePair, selectionCenter } from '@/app/sites/[id]/sunbed-preselection'
 import { toggleSeatSelection } from '@/app/sites/[id]/seat-selection'
 export { resolveSelectionSet, pickFirstAvailablePair } from '@/app/sites/[id]/sunbed-preselection'
 
@@ -135,6 +135,21 @@ const ParasolMarker: React.FC<{ spot: ParasolSpot; lengthPx: number }> = ({ spot
   )
 }
 
+interface MapFocus {
+  lat: number
+  lng: number
+}
+
+/** Pans the map (once per focus) to the preselected pair. Must render inside <Map>. */
+function PanToFocus({ focus }: { focus: MapFocus | null }) {
+  const map = useMap()
+  useEffect(() => {
+    if (!map || !focus) return
+    map.panTo({ lat: focus.lat, lng: focus.lng })
+  }, [map, focus]) // a new object per preselection — never re-pans on pan/zoom/selection
+  return null
+}
+
 interface ParcelShape {
   number: number;
   shape: { lat: number, lng: number }[];
@@ -162,6 +177,8 @@ function SunbedSelectionGeo({
   const [viewBounds, setViewBounds] = useState<ViewportBounds | null>(null)
   const [sunbedParcels, setSunbedParcels] = useState<{ [key: number]: InventoryItem[] }>({})
   const [parcelShapes, setParcelShapes] = useState<ParcelShape[]>([])
+  // Where the map should move to after a preselection (see PanToFocus).
+  const [focus, setFocus] = useState<MapFocus | null>(null)
 
   // Calculate reservation day, timeRange, dateRange from state or defaults
   const reservationDay = sitesState.reservationDay || dayjs().toDate()
@@ -255,14 +272,18 @@ function SunbedSelectionGeo({
       // Keep valid selections; drop items that are no longer available.
       dispatch(setValue({ selectedItems: filteredSelection }))
     } else {
-      // Nothing selected (or current selection is entirely unavailable).
-      // Preselect the first available pair so "Reserve" is live on open.
+      // Nothing selected (or current selection is entirely unavailable) — the
+      // page just opened, or the date changed under a now-booked pick.
+      // Preselect a RANDOM free pair so "Reserve" is live on open and guests
+      // are spread over the beach, then bring the map to it.
       // Zero availability → empty array, leave selectedItems: [].
-      const preselected = pickFirstAvailablePair(
+      const preselected = pickRandomAvailablePair(
         availabilityResponse.availability,
         inventoryItems || [],
       )
       dispatch(setValue({ selectedItems: preselected }))
+      const centre = selectionCenter(preselected)
+      if (centre) setFocus({ ...centre })
     }
 
     if (!sitesState.dateRange) {
@@ -467,6 +488,7 @@ function SunbedSelectionGeo({
           onClick={(e: any) => {
           }}
         >
+          <PanToFocus focus={focus} />
           {
             lodTier(zoom) === 'seats' ? [...sunbedMarkers, ...parasolMarkers] :
               (parcelShapes || []).map((parcelShape, idx) => {
