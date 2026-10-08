@@ -9,11 +9,12 @@ sources:
   - packages/schematic-editor/src/index.ts
   - apps/partner/app/sites/[id]/inventory/chair-util.ts#generateChairs
   - apps/partner/app/sites/[id]/inventory/InventoryMap.tsx#getScaledSize
+  - packages/schematic/src/bed-glyph.ts
   - apps/partner/app/sites/[id]/inventory/actions.ts#moveParcel
   - packages/table-reservations-ui
 related:
   - subsystem:table-reservations
-last_verified: 2026-05-22
+last_verified: 2026-10-08
 ---
 
 # Subsystem: Schematic Editor
@@ -61,6 +62,14 @@ consumer must respect this sign flip** or rotations mirror.
 and are re-exported through `chair-util.ts`. The map editor converts meters → pixels per
 zoom via `getScaledSize(zoom)` in `InventoryMap.tsx` (`2.1 / metersPerPixel`, floored at a
 minimum px). Restaurant tables size from `TABLE_SHAPE_DEFAULTS` / explicit `tableWidth`/`tableHeight`.
+
+The consumer seat maps (user app geo map + `SchematicSelection`) use `bedLengthPxAtZoom(zoom)` from
+`packages/schematic/src/bed-glyph.ts` — the same formula, asserted equal in `bed-glyph.test.ts`. Neither
+copy applies the cos(latitude) factor, so beds draw ~20% under true size at Mediterranean latitudes;
+correct both together or not at all. The vector bed/parasol art (`BedGlyph.tsx`) is opt-in on
+`SchematicRenderer` via `ItemVisual.bedGlyph` — the partner editor does not set it and renders as before. The art itself is DATA (`bed-art.ts`) with two
+painters — SVG (`BedGlyph.tsx`) and canvas (`bed-art-canvas.ts`, used by `apps/marketing`); `@repo/schematic/art`
+exports just this slice.
 
 ## Parcels / groups
 

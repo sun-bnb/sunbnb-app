@@ -32,6 +32,23 @@ Consumer-facing + **mobile-first**, so it diverges from partner:
 - **Signature surface — the mobile reservation drawer:** fixed bottom panel with peek/expanded
   states whose peek height adapts per tab (`viewMode` in Redux); the booking flow is RTK-state-driven.
   Keep it cohesive — it's the user app's defining UI.
+- **Seat map art (geo map + schematic):** sunbeds and parasols are vector, drawn by
+  `@repo/schematic` `BedGlyphSvg` / `ParasolGlyph`; the rules (size per zoom, level of detail, state
+  encoding, parasol offset) are the pure `packages/schematic/src/bed-glyph.ts`. The art is authored in
+  decimetres on the real 0.84 × 2.1 m footprint, so it fills its box exactly and stays centred at every
+  zoom — never size bed art with `next/image`, tile margins or per-zoom ratios again. State lives on the
+  bed: green ring = free, blue lounger + check = selected, red ring + red towel on a dimmed bed =
+  reserved (the towel means reserved only). Below `BED_MICRO_MAX_PX` (20 px of bed length, ≈ zoom 20.5)
+  a bed is a pill (hollow green / solid blue / solid red) and the parasol fades to a faint canopy + hub;
+  a selected pill also gets a continuous blue whirlpool — two dashed stadium rings whose dashes stream
+  around it in opposite directions over a breathing glow (`animation: 'whirl' | 'whirlReverse' | 'glow'`,
+  keyframes in `<BedArtDefs/>`; dashes stand still under reduced motion; the static canvas painter skips it).
+  Geo markers keep the partner footprint (`bedMarkerBox`, width = length / 2.5) and the default
+  bottom-centre anchor, so beds land where the operator placed them; parasols are their own
+  click-through markers at the midpoint of a SunbedGroup's beds. Mount `<BedArtDefs/>` once per page
+  (shared gradients). The per-seat QR page (`pos/[itemId]`) still uses the PNGs. The marketing site
+  paints the same art on canvas (`paintBed`/`paintParasol`, `@repo/schematic/art`) — change the look in
+  `bed-art.ts` and both surfaces follow.
 - **MUI + Tailwind coexist** (per the stack); migrate off MUI opportunistically, same stance as partner.
 - Shared building blocks usable here: `Toggle` (`@repo/table-reservations-ui`), `SaveStatusBanner`
   (`@repo/schematic-editor`); consumer table-booking components live in

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { BedGlyphSvg } from './BedGlyph'
 
 import type {
   ElementPaletteConfig,
@@ -877,6 +878,9 @@ export function SchematicRenderer(props: SchematicRendererProps) {
             : pending?.y ?? item.y
         const transform = item.rotation ? `rotate(${item.rotation} ${cx} ${cy})` : undefined
         const hasImage = !!v.sunbedImageUrl
+        const glyphState = v.bedGlyph
+        // Vector art and the PNG both bring their own visuals; skip the partner decorations.
+        const hasArt = hasImage || !!glyphState
         const parcelColor = v.parcelColor
         const strokeColor = hasImage
           ? v.stroke ?? '#1f2937'
@@ -938,7 +942,7 @@ export function SchematicRenderer(props: SchematicRendererProps) {
           cursor: hitCursor,
           pointerEvents: placementActive ? 'none' : undefined,
         }
-        const itemFill = hasImage ? v.fill : nonImageFill
+        const itemFill = glyphState ? 'transparent' : hasImage ? v.fill : nonImageFill
         // Decorative chair glyphs around restaurant tables. Sunbeds (no
         // explicit shape/dimensions) skip this — they have their own visuals.
         const chairs =
@@ -978,7 +982,7 @@ export function SchematicRenderer(props: SchematicRendererProps) {
                 rx={fillW / 2}
                 ry={fillH / 2}
                 fill={itemFill}
-                stroke={strokeColor}
+                stroke={glyphState ? 'none' : strokeColor}
                 strokeWidth={sx}
                 onPointerDown={placementActive ? undefined : startItemDrag(item)}
                 onDoubleClick={placementActive ? undefined : (e) => {
@@ -996,7 +1000,7 @@ export function SchematicRenderer(props: SchematicRendererProps) {
                 rx={isBar ? cornerRadius * 1.5 : cornerRadius}
                 ry={isBar ? cornerRadius * 1.5 : cornerRadius}
                 fill={itemFill}
-                stroke={strokeColor}
+                stroke={glyphState ? 'none' : strokeColor}
                 strokeWidth={sx}
                 shapeRendering={hasImage ? undefined : 'crispEdges'}
                 onPointerDown={placementActive ? undefined : startItemDrag(item)}
@@ -1009,7 +1013,7 @@ export function SchematicRenderer(props: SchematicRendererProps) {
             )}
             {/* Booth accent: thick bar along the long side that has the wall.
                 Aspect-aware so the chair glyphs always land on the open side. */}
-            {!hasImage && isBooth && (longHorizontal ? (
+            {!hasArt && isBooth && (longHorizontal ? (
               <rect
                 x={cx - w / 2 + sx / 2}
                 y={cy + h / 2 - Math.max(0.06, sx * 4) - sx / 2}
@@ -1030,7 +1034,7 @@ export function SchematicRenderer(props: SchematicRendererProps) {
                 pointerEvents="none"
               />
             ))}
-            {!hasImage && !renderAsEllipse && parcelColor && !isHighlighted && (
+            {!hasArt && !renderAsEllipse && parcelColor && !isHighlighted && (
               <rect
                 x={cx - w / 2 + sx / 2}
                 y={cy + h / 2 - sx / 2 - accentBarH}
@@ -1041,7 +1045,7 @@ export function SchematicRenderer(props: SchematicRendererProps) {
                 pointerEvents="none"
               />
             )}
-            {!hasImage && item.status === 'disabled' && (
+            {!hasArt && item.status === 'disabled' && (
               <line
                 x1={cx - w / 2 + sx + 0.02}
                 y1={cy - h / 2 + sx + 0.02}
@@ -1052,6 +1056,18 @@ export function SchematicRenderer(props: SchematicRendererProps) {
                 strokeLinecap="round"
                 pointerEvents="none"
               />
+            )}
+            {glyphState && (
+              <g pointerEvents="none">
+                <BedGlyphSvg
+                  state={glyphState}
+                  lengthPx={h / worldPerPx}
+                  x={cx - w / 2}
+                  y={cy - h / 2}
+                  width={w}
+                  height={h}
+                />
+              </g>
             )}
             {/* Sunbed PNG: natural aspect, centered horizontally, top-aligned in fill */}
             {v.sunbedImageUrl && (
@@ -1078,7 +1094,7 @@ export function SchematicRenderer(props: SchematicRendererProps) {
                 pointerEvents="none"
               />
             )}
-            {!hasImage && isSunbed && (
+            {!hasArt && isSunbed && (
               <line
                 x1={cx - w / 2 + sx + 0.05}
                 y1={cy - h / 2 + h * 0.2}

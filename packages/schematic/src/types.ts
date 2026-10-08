@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react'
+import type { BedGlyphState } from './bed-glyph'
 
 export interface WorldDims {
   width: number
@@ -87,4 +88,10 @@ export interface ItemVisual {
   sunbedImageUrl?: string
   towelImageUrl?: string
   parcelColor?: string
+  /**
+   * Draw the item as the vector sunbed art (`BedGlyph`) in this seat state,
+   * instead of a fill rect / PNG. Opt-in: the consumer schematic sets it, the
+   * partner editor does not. The page must mount `<BedArtDefs/>` once.
+   */
+  bedGlyph?: BedGlyphState
 }

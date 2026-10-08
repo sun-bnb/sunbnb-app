@@ -1,6 +1,5 @@
 'use client'
 
-import Image from 'next/image'
 import Chip from '@mui/material/Chip'
 import { useEffect, useMemo, useState } from 'react'
 import { InventoryItem, SiteProps, WorkingHours } from '@/app/sites/types'
@@ -12,13 +11,23 @@ import dayjs, { Dayjs } from 'dayjs'
 import { APIProvider, AdvancedMarker, Map } from '@vis.gl/react-google-maps'
 import { Polygon } from './polygon'
 import { getPaddedConvexHull } from '@/utils/geometry'
-import sunbedIcon from './sunbed-perforated-transparent.png'
-import sunshadeIcon from './sunshade-transparent.png'
-import beachTowelIcon from './beach-towel-transparent.png'
 import React from 'react'
 import { useSession } from 'next-auth/react'
 import SchematicSelection from './SchematicSelection'
-import { cullToBounds, expandBounds, lodTier, type ViewportBounds } from '@repo/schematic'
+import {
+  BED_ART_LENGTH,
+  BedArtDefs,
+  BedGlyphSvg,
+  ParasolGlyph,
+  bedLengthPxAtZoom,
+  bedMarkerBox,
+  cullToBounds,
+  expandBounds,
+  lodTier,
+  parasolOffset,
+  type BedGlyphState,
+  type ViewportBounds,
+} from '@repo/schematic'
 import { inventoryAnchor, pickFirstAvailablePair } from '@/app/sites/[id]/sunbed-preselection'
 import { toggleSeatSelection } from '@/app/sites/[id]/seat-selection'
 export { resolveSelectionSet, pickFirstAvailablePair } from '@/app/sites/[id]/sunbed-preselection'
@@ -40,154 +49,91 @@ function isSiteOpen(
   return !notWorkingHours
 }
 
-/** Scaling function: Adjust the marker size based on the physical length of the sunbed.
- *  We assume a physical sunbed length of 2 meters.
- *  The Google Maps resolution (meters per pixel) at a given zoom level is approximated by:
- *      resolution = 156543.03392 / (2^zoom)
- *  Thus, the marker size (in pixels) is:
- *      size = physicalLength / resolution
+/** Reusable marker component for rendering a sunbed on the map.
+ *  The art is vector (`@repo/schematic` BedGlyphSvg) drawn into a box of the
+ *  bed's real on-screen size; the box keeps the partner marker's footprint and
+ *  the default bottom-centre anchor, so beds land where the operator placed them.
  */
-function getScaledSize(zoom: number): number {
-  const physicalLength = 2.1; // in meters; adjust if needed for your actual sunbed size
-  const metersPerPixel = 156543.03392 / Math.pow(2, zoom);
-  return physicalLength / metersPerPixel;
-}
-
-/** Reusable marker component for rendering a sunbed on the map */
 interface SiteSunbedMarkerProps {
   item: InventoryItem
-  dynamicSize: number
-  zoom: number
-  isSelected: boolean
-  available: boolean
-  /** For a grouped bed, true on the single designated "primary" that renders the shared umbrella. */
-  isGroupPrimary: boolean
+  lengthPx: number
+  state: BedGlyphState
   onClick: () => void
 }
 
-
-const SiteSunbedMarker: React.FC<SiteSunbedMarkerProps> = ({
-  item,
-  dynamicSize,
-  zoom,
-  isSelected,
-  available,
-  isGroupPrimary,
-  onClick,
-}) => {
+const SiteSunbedMarker: React.FC<SiteSunbedMarkerProps> = ({ item, lengthPx, state, onClick }) => {
   const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
-
-  const beachTowelImage = <Image
-    src={beachTowelIcon} alt="Towel" height={dynamicSize / 2}
-    style={{
-      marginTop: `-${dynamicSize / 2.8}px`,
-      transform: `rotate(30deg)`, transformOrigin: 'center'
-    }} />
-
-  // Existing border style logic.
-  const borderThickness = available && isSelected ? 4 : 1;
-  const backgroundColor = available ? (isSelected ? 'blue' : 'green') : 'red';
-  const beachTowel = available ? (
-    isSelected ?
-      beachTowelImage :
-      null
-    ) : beachTowelImage;
-
-  const size = dynamicSize; // use dynamicSize as the base container size
-
-  // Shade diameter: 60% of dynamicSize (same as before).
-  const shadeDiameter = dynamicSize * 0.6;
-  // A grouped bed renders the shared umbrella only on its designated primary
-  // (chosen by the parent so the original left-offset lands between the pair and
-  // rotates with the bed); other group members render none. Singles always do.
-  const isInGroup = Boolean(item.sunbedGroupId);
-  const showUmbrella = !isInGroup || isGroupPrimary;
-
-  const dynamicHeight = dynamicSize * (zoom > 20 ? 1 : 1.1)
-  const dynamicWidth = dynamicSize / (zoom > 20 ? 2.1 : 1.9)
-
-  // Shade style for single beds (unchanged from before).
-  const shadeStyle: React.CSSProperties = {
-    position: 'absolute',
-    left: `-${dynamicWidth}px`,
-    top: '0px'
-  };
-
-  const markerContent = zoom > 19 ? (
-
-    <div className="relative block"
-        style={{
-          maxWidth: 'none',
-          height: `${dynamicHeight}px`,
-          width: `${dynamicWidth}px`,
-          border: `1px solid black`,
-          ...(item.rotation
-            ? { transform: `rotate(${item.rotation}deg)`, transformOrigin: 'center' }
-            : {})
-      }}>
-        <div
-          className="absolute"
-          style={{
-            height: '100%',
-            width: '100%',
-            backgroundColor: backgroundColor,
-            zIndex: 1
-          }}
-        >
-          <Image src={sunbedIcon} alt="Sunbed" height={dynamicSize} />
-          { beachTowel }
-        </div>
-
-        {showUmbrella && (
-          <div className="absolute"
-            style={{
-              ...shadeStyle,
-              width: `${shadeDiameter}px`,
-              height: `${shadeDiameter}px`,
-              borderRadius: '50%',
-              backgroundColor: 'rgba(0, 0, 0, 0.3)',
-              zIndex: 10
-            }}
-          >
-            <Image
-              src={sunshadeIcon}
-              alt="Sunshade"
-              height={dynamicSize}
-              style={{
-                marginTop: `-${(dynamicHeight - shadeDiameter) / 2}px`,
-                marginLeft: `-${(0)}px`
-              }} />
-          </div>
-        )}
-      </div>
-
-  ) : (
-
-    <div className="relative block"
-        style={{
-          maxWidth: 'none',
-          height: `${dynamicSize}px`,
-          width: `${dynamicSize / 2.1}px`,
-          border: `1px solid black`,
-          backgroundColor: backgroundColor,
-          ...(item.rotation
-            ? { transform: `rotate(${item.rotation}deg)`, transformOrigin: 'center' }
-            : {})
-      }}></div>
-
-  )
-
+  const box = bedMarkerBox(lengthPx)
   return (
     <SafeAdvancedMarker
       key={item.id}
       position={{ lat: Number(item.locationLat), lng: Number(item.locationLng) }}
       onClick={onClick}
-      zIndex={isGroupPrimary ? 10 : 1}
+      zIndex={1}
     >
-      {markerContent}
+      <BedGlyphSvg
+        state={state}
+        lengthPx={lengthPx}
+        width={box.width}
+        height={box.height}
+        rotation={item.rotation ?? 0}
+        label={`Sunbed ${item.number}, ${state}`}
+      />
     </SafeAdvancedMarker>
-  );
-};
+  )
+}
+
+/** One parasol: shared by a pair (anchored at the midpoint of the two beds) or
+ *  beside a single bed. Its own marker, drawn above the beds and click-through.
+ *  The <svg> is a square one bed-length wide whose centre sits where a bed's
+ *  centre would (half a bed above the bottom-centre anchor), so it lines up
+ *  with the bed markers at every zoom.
+ */
+interface ParasolSpot {
+  key: string
+  lat: number
+  lng: number
+  rotation: number
+  kind: 'pair' | 'single'
+  /** Bed ids under this parasol — it renders when any of them is visible. */
+  bedIds: string[]
+}
+
+// The canopy sits above the beds but must never eat their taps. Maps keeps
+// rewriting the marker element's inline style, and vis.gl forces
+// `pointer-events: all` on content whenever `clickable` is defined (even
+// false), so a scoped !important rule keyed on the parasol <svg> is the only
+// thing that sticks. Mounted once by the map.
+const PARASOL_CLICK_THROUGH_CSS =
+  'gmp-advanced-marker:has([data-sbn-parasol]),gmp-advanced-marker:has([data-sbn-parasol]) *{pointer-events:none!important}'
+
+const ParasolMarker: React.FC<{ spot: ParasolSpot; lengthPx: number }> = ({ spot, lengthPx }) => {
+  const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
+  const half = BED_ART_LENGTH / 2
+  const off = parasolOffset(spot.kind)
+  return (
+    <SafeAdvancedMarker
+      position={{ lat: spot.lat, lng: spot.lng }}
+      zIndex={10}
+    >
+      <svg
+        width={lengthPx}
+        height={lengthPx}
+        viewBox={`${-half} ${-half} ${BED_ART_LENGTH} ${BED_ART_LENGTH}`}
+        overflow="visible"
+        aria-hidden="true"
+        data-sbn-parasol=""
+        style={{ overflow: 'visible', display: 'block', pointerEvents: 'none' }}
+      >
+        <g transform={spot.rotation ? `rotate(${spot.rotation})` : undefined}>
+          <g transform={`translate(${off.x} ${off.y})`}>
+            <ParasolGlyph bedLengthPx={lengthPx} />
+          </g>
+        </g>
+      </svg>
+    </SafeAdvancedMarker>
+  )
+}
 
 interface ParcelShape {
   number: number;
@@ -368,7 +314,7 @@ function SunbedSelectionGeo({
     )
   }
 
-  const dynamicSize = getScaledSize(zoom)
+  const bedLengthPx = bedLengthPxAtZoom(zoom)
 
   // Toggle selection. Whole-unit by default; per-seat once a unit is in play
   // when the site allows partial group booking — see `seat-selection.ts`.
@@ -383,38 +329,42 @@ function SunbedSelectionGeo({
     dispatch(setValue({ selectedItems: updatedItems }))
   }
 
-  // Pick one "primary" bed per SunbedGroup to host the single shared umbrella.
-  // It renders inside that bed's rotated container with the same left-offset as a
-  // single bed, so it rotates consistently with the parcel (the old primary-seat
-  // look) — but the primary is derived from group GEOMETRY, not pairId: it's the
-  // member whose partner lies to its LOCAL-left, so the offset lands the umbrella
-  // between the beds rather than outside the pair.
-  // Memoized (track 020 P3): geometry only depends on the inventory, but this
-  // rebuilt the whole group map on every render (pan/zoom/selection).
-  const groupPrimaryIds = useMemo(() => {
+  // One parasol per SunbedGroup, anchored at the midpoint of its first two
+  // beds (a pair shares it); a one-bed group or an ungrouped bed gets its own
+  // beside it. Positions come from the beds' geometry, so the canopy lands
+  // between the pair at any rotation without a "primary" bed hosting it.
+  // Memoized (track 020 P3): geometry only depends on the inventory.
+  const parasolSpots = useMemo(() => {
     const groups: Record<string, InventoryItem[]> = {}
+    const spots: ParasolSpot[] = []
     for (const it of inventoryItems || []) {
       const gid = it.sunbedGroupId
-      if (!gid) continue
+      if (!gid) {
+        spots.push({
+          key: it.id, lat: Number(it.locationLat), lng: Number(it.locationLng),
+          rotation: it.rotation || 0, kind: 'single', bedIds: [it.id],
+        })
+        continue
+      }
       if (!groups[gid]) groups[gid] = []
       groups[gid]!.push(it)
     }
-    const ids = new Set<string>()
-    for (const members of Object.values(groups)) {
-      if (members.length === 1) { ids.add(members[0]!.id); continue }
-      if (members.length < 2) continue
-      const a = members[0]!, b = members[1]!
-      // Bed's local-left direction in screen space for its CSS rotation.
-      const theta = ((a.rotation || 0) * Math.PI) / 180
-      const leftX = -Math.cos(theta)
-      const leftY = -Math.sin(theta)
-      // Vector a->b in screen coords (east = +x, north = -y).
-      const vx = Number(b.locationLng) - Number(a.locationLng)
-      const vy = -(Number(b.locationLat) - Number(a.locationLat))
-      // If b is to a's local-left, a is primary; otherwise b.
-      ids.add(leftX * vx + leftY * vy > 0 ? a.id : b.id)
+    for (const [gid, members] of Object.entries(groups)) {
+      const a = members[0]!
+      const b = members[1]
+      spots.push(b
+        ? {
+            key: gid,
+            lat: (Number(a.locationLat) + Number(b.locationLat)) / 2,
+            lng: (Number(a.locationLng) + Number(b.locationLng)) / 2,
+            rotation: a.rotation || 0, kind: 'pair', bedIds: members.map((m) => m.id),
+          }
+        : {
+            key: gid, lat: Number(a.locationLat), lng: Number(a.locationLng),
+            rotation: a.rotation || 0, kind: 'single', bedIds: [a.id],
+          })
     }
-    return ids
+    return spots
   }, [inventoryItems])
 
   // Track 020 P6 (user slice): the map opens at seat zoom, and this used to
@@ -439,21 +389,24 @@ function SunbedSelectionGeo({
   }, [inventoryItems, viewBounds, zoom, selectedIdSet])
 
   const sunbedMarkers = visibleSeats.map(item => {
-    const available = isAvailable(item)
-    const isSelected = selectedIdSet.has(item.id)
+    const state: BedGlyphState = !isAvailable(item)
+      ? 'reserved'
+      : selectedIdSet.has(item.id) ? 'selected' : 'free'
     return (
       <SiteSunbedMarker
         key={item.id}
         item={item}
-        dynamicSize={dynamicSize}
-        zoom={zoom}
-        isSelected={isSelected}
-        available={available}
-        isGroupPrimary={groupPrimaryIds.has(item.id)}
+        lengthPx={bedLengthPx}
+        state={state}
         onClick={() => toggleSelection(item)}
       />
     )
   })
+
+  const visibleSeatIds = useMemo(() => new Set(visibleSeats.map((i) => i.id)), [visibleSeats])
+  const parasolMarkers = parasolSpots
+    .filter((spot) => spot.bedIds.some((id) => visibleSeatIds.has(id)))
+    .map((spot) => <ParasolMarker key={`parasol-${spot.key}`} spot={spot} lengthPx={bedLengthPx} />)
 
   // Helper: Compute the centroid of an array of lat/lng points.
   function getCentroid(points: google.maps.LatLngLiteral[]): google.maps.LatLngLiteral {
@@ -488,6 +441,8 @@ function SunbedSelectionGeo({
 
   return (
     <>
+      <BedArtDefs />
+      <style>{PARASOL_CLICK_THROUGH_CSS}</style>
       <SafeAPIProvider apiKey={apiKey}>
         <SafeMap
           mapId={'7a0196a7ba317ea5'}
@@ -513,7 +468,7 @@ function SunbedSelectionGeo({
           }}
         >
           {
-            lodTier(zoom) === 'seats' ? sunbedMarkers :
+            lodTier(zoom) === 'seats' ? [...sunbedMarkers, ...parasolMarkers] :
               (parcelShapes || []).map((parcelShape, idx) => {
                 // Compute the parcel centroid.
                 const centroid = getCentroid(parcelShape.shape);

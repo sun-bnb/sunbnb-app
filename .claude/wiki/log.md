@@ -181,3 +181,9 @@ Operations:
 - deliberately NOT done: no new page for the selection model (first occurrence — lives as a section of the payments page under the two-strikes rule); `flow:order-payment` / `flow:rental-booking` not revised — they share the same branch but were not re-verified this pass, so their `last_verified` is not bumped.
 - by: claude
 
+## [2026-10-08] ingest | Vector sunbed art on the consumer seat maps
+- mode: patch (subsystems/schematic-editor.md § Sizing, sources, last_verified)
+- changed: one paragraph naming `bedLengthPxAtZoom` (`bed-glyph.ts`) as the consumer-side twin of partner `getScaledSize`, the shared missing-cos(lat) caveat, and `ItemVisual.bedGlyph` as the opt-in switch for the vector art in `SchematicRenderer`.
+- reason: gate criterion 3 (contract changed: new `@repo/schematic` exports + an opt-in `ItemVisual` field a partner-side agent could otherwise misread as affecting the editor). Art conventions themselves live in `apps/user/UI.md` (surface-local), not the wiki.
+- by: claude
+

@@ -6,14 +6,16 @@
     ".": "./src/index.ts",
     "./grid": "./src/grid.ts",
     "./types": "./src/types.ts",
-    "./renderer": "./src/SchematicRenderer.tsx"
+    "./renderer": "./src/SchematicRenderer.tsx",
+    "./art": "./src/art.ts"
   },
   "typesVersions": {
     "*": {
       ".": ["./src/index.ts"],
       "grid": ["./src/grid.ts"],
       "types": ["./src/types.ts"],
-      "renderer": ["./src/SchematicRenderer.tsx"]
+      "renderer": ["./src/SchematicRenderer.tsx"],
+      "art": ["./src/art.ts"]
     }
   },
   "scripts": {

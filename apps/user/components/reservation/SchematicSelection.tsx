@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import dayjs from 'dayjs'
-import { SchematicRenderer } from '@repo/schematic'
+import { BedArtDefs, SchematicRenderer, type BedGlyphState } from '@repo/schematic'
 import type { LayoutElementDTO, SchematicItem } from '@repo/schematic/types'
 import { InventoryItem, SiteProps } from '@/app/sites/types'
 import { setValue } from '@/store/features/sites/sitesSlice'
@@ -11,14 +11,6 @@ import { toggleSeatSelection } from '@/app/sites/[id]/seat-selection'
 import { RootState } from '@/store/store'
 import { useGetAvailabilityBySiteAndTimeRangeQuery } from '@/store/features/api/apiSlice'
 import { beachPalette } from './schematicPalette'
-import sunbedImg from './sunbed-perforated-transparent.png'
-import towelImg from './beach-towel-transparent.png'
-
-const STATUS_FILL = {
-  available: 'green',
-  selected: 'blue',
-  unavailable: 'red',
-}
 
 export default function SchematicSelection({ site }: { site: SiteProps }) {
   const dispatch = useDispatch()
@@ -137,30 +129,29 @@ export default function SchematicSelection({ site }: { site: SiteProps }) {
   )
 
   return (
-    <SchematicRenderer
-      world={{ width: site.layoutWidth ?? 50, height: site.layoutHeight ?? 35 }}
-      paletteConfig={beachPalette}
-      elements={elements}
-      items={items}
-      itemVisual={(it) => {
-        const inv = itemById.get(it.id)
-        const available = inv ? isAvailable(inv) : false
-        const isSelected = selectedIds.has(it.id)
-        return {
-          fill: !available
-            ? STATUS_FILL.unavailable
-            : isSelected
-              ? STATUS_FILL.selected
-              : STATUS_FILL.available,
-          stroke: 'black',
-          label: it.label ?? undefined,
-          sunbedImageUrl: sunbedImg.src,
-          towelImageUrl: (isSelected || !available) ? towelImg.src : undefined,
-        }
-      }}
-      mode="view"
-      selection={{ itemIds: Array.from(selectedIds) }}
-      onItemClick={(id) => toggleSelection(id)}
-    />
+    <>
+      <BedArtDefs />
+      <SchematicRenderer
+        world={{ width: site.layoutWidth ?? 50, height: site.layoutHeight ?? 35 }}
+        paletteConfig={beachPalette}
+        elements={elements}
+        items={items}
+        itemVisual={(it) => {
+          const inv = itemById.get(it.id)
+          const available = inv ? isAvailable(inv) : false
+          const state: BedGlyphState = !available
+            ? 'reserved'
+            : selectedIds.has(it.id) ? 'selected' : 'free'
+          return {
+            fill: 'transparent',
+            label: it.label ?? undefined,
+            bedGlyph: state,
+          }
+        }}
+        mode="view"
+        selection={{ itemIds: Array.from(selectedIds) }}
+        onItemClick={(id) => toggleSelection(id)}
+      />
+    </>
   )
 }

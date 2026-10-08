@@ -209,6 +209,28 @@ ref), not just the map. A dead 3001 listener (`lsof` shows the PID but `curl` ge
 Impersonation tokens are consumed even by a run that later fails — mint a fresh one per
 attempt.
 
+## User app — seat map — `/sites/[id]` (:3002)
+
+**Public.** Geo sites render `SunbedSelection` (Google map); `layout_mode='schematic'` sites render
+`SchematicSelection`. Alonso Beach (`cmn3e6jrf000004l2snbmcajz`, 195 paired + rotated seats) is a good
+local geo fixture. Verified 2026-10-08 (vector bed art).
+
+- **Reserved state without DB writes:** `page.route('**/availability**', …)` → `route.fetch()`, flip
+  `available` on some entries of `json.availability`, `route.fulfill({ response, json })`, then
+  `page.reload()`. Nothing to clean up.
+- **Geo beds** are `svg[aria-label="Sunbed <number>, <free|selected|reserved>"]`; read on-screen bed
+  length from its `height` attribute. Parasols are `svg[data-sbn-parasol]`. Zoom with
+  `mouse.wheel(0, -500)` over the map centre (one level per notch; max ≈ 22); markers re-mount ~2s later.
+- **Click by coordinates** (`mouse.click` at the bed centre) and assert the `", selected"` count grows —
+  unit selection takes the whole pair. If it doesn't, probe `document.elementFromPoint`: an overlying
+  marker eating taps is the classic cause (see the click-through CSS in `SunbedSelection.tsx`).
+- **Schematic glyphs** are nested `svg[viewBox="0 0 8.4 21"]` with no label; Playwright calls them not
+  visible, so wait with `state: 'attached'` and click the centre of one whose `getBoundingClientRect()`
+  is non-zero (the page mounts a hidden second copy). State = ring stroke colour (`#16a34a` / `#2563eb`
+  / `#dc2626`). No local site is schematic by default — flip one temporarily (`layout_mode`,
+  `layout_width/height`, item `schematic_x/y`) and restore the recorded originals.
+- The cookie banner is a `div.fixed` — remove it in `page.evaluate` before screenshots.
+
 ## User app — other surfaces (:3002)
 
 _Not yet filled in._ Use `openApp('user', '<path>')` for the handle; add the booking/POS driving
