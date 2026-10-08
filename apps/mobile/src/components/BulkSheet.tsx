@@ -16,9 +16,10 @@ import { RESERVATION_PAID_IN_CASH } from '@repo/data/reservation-status'
 import { getActiveReservation } from '@repo/floor-core/bed-state'
 import { classifySelection, getSelectionGroups } from '@repo/floor-core/bulk'
 import type { InventoryItem } from '@repo/floor-core/types'
-import CollectPaymentModal, { type CollectActions } from '@/components/CollectPaymentModal'
+import CollectPaymentModal from '@/components/CollectPaymentModal'
 import { BanknoteIcon, BlockIcon, CalendarIcon, CloseIcon, MoveIcon, QrIcon, StarIcon } from '@/components/icons'
-import { rpc, type ActionResult, type CollectChoice, type VivaTerminal } from '@/lib/api'
+import { reservationCollectActions, rpc, type ActionResult, type CardPresent, type VivaTerminal } from '@/lib/api'
+import { useTapToPay } from '@/lib/tap-to-pay'
 import { colors } from '@/theme'
 
 const DAY_MS = 86_400_000
@@ -28,7 +29,7 @@ type ConfirmKind = 'no-show' | 'depart' | 'unreserve' | 'cancel'
 
 export default function BulkSheet({
   siteId, accessKey, items, selectedIds, workerId, siteIsPaid,
-  onClearSelection, onChanged, onStartMove, terminals = [], selectedTerminalId = null,
+  onClearSelection, onChanged, onStartMove, terminals = [], selectedTerminalId = null, cardPresent = 'none',
 }: {
   siteId: string
   accessKey: string
@@ -42,8 +43,13 @@ export default function BulkSheet({
   onStartMove: (reservationIds: string[]) => void
   terminals?: VivaTerminal[]
   selectedTerminalId?: string | null
+  /** The venue's card-present rail (site context) — gates Tap card / Tap to Pay in the collect modal. */
+  cardPresent?: CardPresent
 }) {
-  const cardLabel = terminals.length > 0 ? 'Card' : 'Card (QR)'
+  const tapToPay = useTapToPay()
+  const hasCardPresent =
+    (cardPresent === 'terminal-app' && terminals.length > 0) || (cardPresent === 'tap-to-pay' && tapToPay.available)
+  const cardLabel = hasCardPresent ? 'Card' : 'Card (QR)'
   const [guestName, setGuestName] = useState('')
   const [until, setUntil] = useState('')
   const [busy, setBusy] = useState(false)
@@ -415,9 +421,10 @@ export default function BulkSheet({
 
       {collectTarget && (
         <CollectPaymentModal
-          actions={collectActionsFor(siteId, collectTarget, accessKey)}
+          actions={reservationCollectActions(siteId, collectTarget, accessKey)}
           terminals={terminals}
           selectedTerminalId={selectedTerminalId}
+          cardPresent={cardPresent}
           onSettled={onChanged}
           onClose={() => {
             setCollectTarget(null)
@@ -427,22 +434,6 @@ export default function BulkSheet({
       )}
     </View>
   )
-}
-
-function collectActionsFor(siteId: string, reservationId: string, accessKey: string): CollectActions {
-  return {
-    create: (choice: CollectChoice) =>
-      rpc('collectReservationPayment', [
-        siteId, reservationId, accessKey,
-        ...(choice.method === 'card' ? [{ method: 'card', terminalId: choice.terminalId }] : []),
-      ]),
-    poll: () => rpc('getCollectStatus', [siteId, reservationId, accessKey]),
-    cancel: opts =>
-      rpc('cancelCollection', [
-        siteId, reservationId, accessKey,
-        ...(opts?.terminalId ? [{ terminalId: opts.terminalId }] : []),
-      ]),
-  }
 }
 
 function WideBtn({

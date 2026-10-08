@@ -7,6 +7,7 @@
     "@react-native-async-storage/async-storage": "2.2.0",
     "@repo/data": "*",
     "@repo/floor-core": "*",
+    "@stripe/stripe-terminal-react-native": "^0.0.1-beta.33",
     "expo": "~57.0.18",
     "expo-constants": "~57.0.16",
     "expo-device": "~57.0.1",

@@ -15,6 +15,7 @@ import { rpc } from '@/lib/api'
 import { buildParcelLayout, parcelNumbers, type HitRect } from '@/lib/grid-layout'
 import { refreshGrid, useGridStore } from '@/lib/grid-store'
 import { consumeLocate } from '@/lib/locate'
+import { floorCardPresent, useSitePayments } from '@/lib/site-context'
 import { useTerminals } from '@/lib/terminal'
 import { loadWorkerId, saveWorkerId, workerInitials } from '@/lib/worker'
 import { colors, statusTints } from '@/theme'
@@ -49,7 +50,12 @@ export default function Beds() {
   }, [pairing, grid])
 
   const currentWorker = employees.find(e => e.id === workerId) ?? null
-  const { terminals, selected: selectedTerminal, select: selectTerminal } = useTerminals(pairing, grid)
+  const cardPresent = floorCardPresent(useSitePayments(pairing))
+  // Viva terminals only matter on a 'terminal-app' venue — a null pairing keeps the hook idle.
+  const { terminals, selected: selectedTerminal, select: selectTerminal } = useTerminals(
+    cardPresent === 'terminal-app' ? pairing : null,
+    grid,
+  )
 
   // Guests-tab locate: switch to the seat's parcel and open its sheet.
   useFocusEffect(
@@ -302,6 +308,7 @@ export default function Beds() {
           siteIsPaid={grid?.site.type === 'paid'}
           terminals={terminals}
           selectedTerminalId={selectedTerminal?.terminalId ?? null}
+          cardPresent={cardPresent}
           onClearSelection={() => setSelectedIds([])}
           onChanged={() => void refreshGrid()}
           onStartMove={startMove}
@@ -351,6 +358,7 @@ export default function Beds() {
           currentWorkerId={workerId ?? undefined}
           terminals={terminals}
           selectedTerminalId={selectedTerminal?.terminalId ?? null}
+          cardPresent={cardPresent}
           onClose={() => setSelected(null)}
           onChanged={() => void refreshGrid()}
           onMove={resId => startMove([resId])}

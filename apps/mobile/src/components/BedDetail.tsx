@@ -11,6 +11,7 @@ import {
 import {
   RESERVATION_COMPLETE, RESERVATION_HELD, RESERVATION_PAID_IN_CASH,
 } from '@repo/data/reservation-status'
+import { isRefundableOnlineRef } from '@repo/data/payment-refs'
 import { formatSeatId } from '@repo/data/seat-label'
 import {
   getActiveReservation, getBedState, isFailedReservationStatus,
@@ -18,9 +19,10 @@ import {
 } from '@repo/floor-core/bed-state'
 import { groupExtraSeatLabel } from '@repo/floor-core/grid-helpers'
 import type { InventoryItem, Reservation } from '@repo/floor-core/types'
-import CollectPaymentModal, { type CollectActions } from '@/components/CollectPaymentModal'
+import CollectPaymentModal from '@/components/CollectPaymentModal'
 import { BanknoteIcon, BlockIcon, CalendarIcon, CloseIcon, MoveIcon, QrIcon, StarIcon } from '@/components/icons'
-import { rpc, type ActionResult, type CollectChoice, type VivaTerminal } from '@/lib/api'
+import { reservationCollectActions, rpc, type ActionResult, type CardPresent, type VivaTerminal } from '@/lib/api'
+import { useTapToPay } from '@/lib/tap-to-pay'
 import { poolSeq } from '@/lib/grid-layout'
 import { colors } from '@/theme'
 
@@ -55,7 +57,7 @@ function daysPastToday(to: unknown): number {
 
 export default function BedDetailSheet({
   siteId, accessKey, item, groupItems, reservationItemIds, isPool, isGroupExtra,
-  siteIsPaid, currentWorkerId, onClose, onChanged, onMove, terminals = [], selectedTerminalId = null,
+  siteIsPaid, currentWorkerId, onClose, onChanged, onMove, terminals = [], selectedTerminalId = null, cardPresent = 'none',
 }: {
   siteId: string
   accessKey: string
@@ -73,8 +75,13 @@ export default function BedDetailSheet({
   /** Site Viva terminals — non-empty enables Tap card in the collect modal ([[track:024]] W8). */
   terminals?: VivaTerminal[]
   selectedTerminalId?: string | null
+  /** The venue's card-present rail (site context) — gates Tap card / Tap to Pay in the collect modal. */
+  cardPresent?: CardPresent
 }) {
-  const cardLabel = terminals.length > 0 ? 'Card' : 'Card (QR)'
+  const tapToPay = useTapToPay()
+  const hasCardPresent =
+    (cardPresent === 'terminal-app' && terminals.length > 0) || (cardPresent === 'tap-to-pay' && tapToPay.available)
+  const cardLabel = hasCardPresent ? 'Card' : 'Card (QR)'
   const state = getBedState(item)
   const reservation = getActiveReservation(item)
   const collected = !!reservation && reservation.status === RESERVATION_COMPLETE
@@ -87,7 +94,7 @@ export default function BedDetailSheet({
   const pairNumber =
     isPool || isGroupExtra || !inSync ? undefined : pairItem ? formatSeatId(pairItem, { parcel: true }) : undefined
   const groupedReservation = reservationItemIds.length > 1
-  const isMolliePaid = !!reservation?.paymentRef?.startsWith('tr_')
+  const isOnlinePaid = isRefundableOnlineRef(reservation?.paymentRef)
 
   const [applyToPair, setApplyToPair] = useState(inSync)
   const [applyToGroup, setApplyToGroup] = useState(true)
@@ -288,7 +295,7 @@ export default function BedDetailSheet({
                 <View style={styles.confirmCard}>
                   <Text style={styles.confirmText}>{confirmCopy}</Text>
                 </View>
-                {pendingConfirm === 'cancel' && isMolliePaid && (
+                {pendingConfirm === 'cancel' && isOnlinePaid && (
                   <View style={styles.refundRow}>
                     {refunded ? (
                       <Text style={styles.refundedText}>✓ Refunded</Text>
@@ -568,9 +575,10 @@ export default function BedDetailSheet({
       {collectTarget && (
         <CollectPaymentModal
           subtitle={header}
-          actions={collectActionsFor(siteId, collectTarget, accessKey)}
+          actions={reservationCollectActions(siteId, collectTarget, accessKey)}
           terminals={terminals}
           selectedTerminalId={selectedTerminalId}
+          cardPresent={cardPresent}
           onSettled={onChanged}
           onClose={() => {
             setCollectTarget(null)
@@ -580,22 +588,6 @@ export default function BedDetailSheet({
       )}
     </Modal>
   )
-}
-
-function collectActionsFor(siteId: string, reservationId: string, accessKey: string): CollectActions {
-  return {
-    create: (choice: CollectChoice) =>
-      rpc('collectReservationPayment', [
-        siteId, reservationId, accessKey,
-        ...(choice.method === 'card' ? [{ method: 'card', terminalId: choice.terminalId }] : []),
-      ]),
-    poll: () => rpc('getCollectStatus', [siteId, reservationId, accessKey]),
-    cancel: opts =>
-      rpc('cancelCollection', [
-        siteId, reservationId, accessKey,
-        ...(opts?.terminalId ? [{ terminalId: opts.terminalId }] : []),
-      ]),
-  }
 }
 
 /* ── The expected-state sub-branches (COMPLETE / PAID_IN_CASH / HELD / in-flight) ── */

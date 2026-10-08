@@ -8,10 +8,17 @@ export interface ActionResult {
   [k: string]: unknown
 }
 
+export type PaymentProvider = 'mollie' | 'viva' | 'stripe'
+/** How the venue's staff take a card in person (Viva Terminal app vs Stripe Tap to Pay). */
+export type CardPresent = 'none' | 'terminal-app' | 'tap-to-pay'
+
 export interface ManageContext {
   status: 'ok'
   site: { id: string; name: string }
   isAdmin: boolean
+  /** Effective provider (legacy null → mollie). Optional: older servers omit it. */
+  paymentProvider?: PaymentProvider
+  cardPresent?: CardPresent
 }
 
 /**
@@ -82,8 +89,47 @@ export interface VivaTerminal {
   lastSeenAt: string | null
 }
 
-/** How a collect is taken: the guest's own phone (QR) or a tap on a Viva terminal. */
-export type CollectChoice = { method: 'qr' } | { method: 'card'; terminalId: string }
+/** How a collect is taken: the guest's own phone (QR), a tap on a Viva terminal, or Stripe Tap to Pay on this phone. */
+export type CollectChoice = { method: 'qr' } | { method: 'card'; terminalId: string } | { method: 'tap-to-pay' }
+
+/** What the Stripe Terminal SDK needs to take the tap — no secret keys. */
+export interface TapToPayIntent {
+  paymentIntentId: string
+  clientSecret: string
+  stripeAccount: string
+  locationId: string
+  currency: string
+}
+
+/** collectReservationPayment's ok payload across all rails. */
+export type CollectStartResult = ActionResult & {
+  amount?: number
+  demo?: boolean
+  checkoutUrl?: string
+  card?: boolean
+  tapToPay?: TapToPayIntent
+}
+
+/** The reservation collect triple (beds: single-bed sheet + bulk sheet). Rentals stay QR-only. */
+export function reservationCollectActions(siteId: string, reservationId: string, accessKey: string) {
+  return {
+    create: (choice: CollectChoice) =>
+      rpc<CollectStartResult>('collectReservationPayment', [
+        siteId, reservationId, accessKey,
+        ...(choice.method === 'card'
+          ? [{ method: 'card', terminalId: choice.terminalId }]
+          : choice.method === 'tap-to-pay'
+            ? [{ method: 'tap-to-pay' }]
+            : []),
+      ]),
+    poll: () => rpc<ActionResult & { paymentStatus?: string }>('getCollectStatus', [siteId, reservationId, accessKey]),
+    cancel: (opts?: { terminalId?: string }) =>
+      rpc<ActionResult & { paymentStatus?: string }>('cancelCollection', [
+        siteId, reservationId, accessKey,
+        ...(opts?.terminalId ? [{ terminalId: opts.terminalId }] : []),
+      ]),
+  }
+}
 
 export function listVivaTerminals(siteId: string, accessKey: string) {
   return rpc<ActionResult & { terminals?: VivaTerminal[] }>('listVivaTerminals', [siteId, accessKey])

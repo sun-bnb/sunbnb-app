@@ -6,25 +6,27 @@
  * Two rails: QR (the guest pays on their own phone; also demo mode) and
  * "Tap card" — the server pushes the sale to a Viva terminal (the staff
  * phone's viva.com Terminal app) and we poll exactly like QR ([[track:024]]
- * W8). The method chooser appears only when the caller passes a non-empty
- * `terminals` list; without terminals the QR flow starts immediately, as
- * before. Cancel semantics mirror the machine: abandoning a collect reverts to
- * unsettled cash — the bed is never freed — except when the terminal already
+ * W8). A third rail, Stripe "Tap to Pay", turns this phone into the reader
+ * ([[track:028]] P5c): the server creates the PaymentIntent, the SDK takes the
+ * tap (`tapping`), and the same server poll settles it — the phone is never
+ * authoritative. The chooser appears only when a card rail is usable
+ * (`cardPresent` 'terminal-app' + terminals, or 'tap-to-pay' + the native SDK);
+ * otherwise the QR flow starts immediately, as before. Cancel semantics
+ * mirror the machine: abandoning a collect reverts to unsettled cash — the bed is never freed — except when the terminal already
  * read the card (`processing`), in which case we keep polling.
  */
 import { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
 import QRCode from 'react-native-qrcode-svg'
 import { CheckIcon, CloseIcon, ContactlessIcon, QrIcon } from '@/components/icons'
-import type { ActionResult, CollectChoice, VivaTerminal } from '@/lib/api'
+import type { ActionResult, CardPresent, CollectChoice, CollectStartResult, VivaTerminal } from '@/lib/api'
+import { useTapToPay } from '@/lib/tap-to-pay'
 import { colors } from '@/theme'
 
 const POLL_MS = 2500
 
 export interface CollectActions {
-  create: (
-    choice: CollectChoice,
-  ) => Promise<ActionResult & { amount?: number; demo?: boolean; checkoutUrl?: string; card?: boolean }>
+  create: (choice: CollectChoice) => Promise<CollectStartResult>
   poll: () => Promise<ActionResult & { paymentStatus?: string }>
   cancel: (choice?: { terminalId?: string }) => Promise<ActionResult & { paymentStatus?: string }>
 }
@@ -33,6 +35,7 @@ type Phase =
   | 'choose'
   | 'pick-terminal'
   | 'creating'
+  | 'tapping'
   | 'awaiting'
   | 'canceling'
   | 'complete'
@@ -46,6 +49,7 @@ export default function CollectPaymentModal({
   subtitle,
   terminals = [],
   selectedTerminalId = null,
+  cardPresent = 'none',
 }: {
   actions: CollectActions
   onSettled: () => void
@@ -55,16 +59,27 @@ export default function CollectPaymentModal({
   terminals?: VivaTerminal[]
   /** The phone's persisted terminal choice (see lib/terminal.ts). */
   selectedTerminalId?: string | null
+  /** The venue's card-present rail from the site context. Rentals omit it (QR-only). */
+  cardPresent?: CardPresent
 }) {
-  const hasTerminals = terminals.length > 0
-  const [phase, setPhase] = useState<Phase>(hasTerminals ? 'choose' : 'creating')
+  const tapToPay = useTapToPay()
+  const canTerminal = cardPresent === 'terminal-app' && terminals.length > 0
+  const canTapToPay = cardPresent === 'tap-to-pay' && tapToPay.available
+  const hasChoice = canTerminal || canTapToPay
+  const [phase, setPhase] = useState<Phase>(hasChoice ? 'choose' : 'creating')
   const [terminal, setTerminal] = useState<VivaTerminal | null>(null)
+  /** Stripe Tap to Pay on this phone — the card is read by the SDK here. */
+  const [onPhone, setOnPhone] = useState(false)
   const [cardRead, setCardRead] = useState(false)
   const [amount, setAmount] = useState<number | null>(null)
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null)
   const [isDemo, setIsDemo] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const startedRef = useRef(false)
+  /** Set when the operator closed mid-create — a late tap-to-pay create must not wake the reader. */
+  const abandonedRef = useRef(false)
+  /** The operator pressed Cancel during `tapping` — close instead of showing "Declined". */
+  const operatorCanceledRef = useRef(false)
 
   function start(choice: CollectChoice) {
     if (startedRef.current) return
@@ -81,12 +96,73 @@ export default function CollectPaymentModal({
         if (typeof res.amount === 'number') setAmount(res.amount)
         if (res.demo) setIsDemo(true)
         else if (res.checkoutUrl) setCheckoutUrl(res.checkoutUrl)
+        if (choice.method === 'tap-to-pay' && res.tapToPay && !res.demo) {
+          if (abandonedRef.current) return
+          tap(res.tapToPay.clientSecret, res.tapToPay.locationId)
+          return
+        }
         setPhase('awaiting')
       })
       .catch(() => {
         setErrorMsg('Could not reach the server.')
         setPhase('error')
       })
+  }
+
+  /**
+   * Run the SDK tap. Only a confirmed tap moves on to the server poll; a
+   * decline / cancel abandons the collect (the reservation reverts to
+   * unsettled cash on the server) and a reader-setup failure surfaces its error.
+   */
+  function tap(clientSecret: string, locationId: string) {
+    setPhase('tapping')
+    tapToPay
+      .collect({ clientSecret, locationId })
+      .then(outcome => {
+        if (outcome === 'succeeded') {
+          setPhase('awaiting')
+          return
+        }
+        // A decline, or a cancel from the SDK's own sheet, reads as "Declined — still cash";
+        // only the operator's Cancel button closes the modal.
+        abandonTap(outcome === 'canceled' && operatorCanceledRef.current ? null : 'failed')
+      })
+      .catch((e: unknown) => {
+        setErrorMsg(e instanceof Error && e.message ? e.message : 'Tap to Pay could not start.')
+        abandonTap('error')
+      })
+  }
+
+  /** Cancel the server-side collect after the phone gave up; `then` = the phase to show (null → close). */
+  function abandonTap(then: 'failed' | 'error' | null) {
+    setPhase('canceling')
+    actions
+      .cancel()
+      .then(res => {
+        // The server may already have seen the PaymentIntent succeed — trust it over the phone.
+        if (res.status === 'ok' && res.paymentStatus === 'complete') {
+          setPhase('complete')
+          onSettled()
+          return
+        }
+        if (res.status === 'ok' && res.paymentStatus === 'processing') {
+          setPhase('awaiting')
+          return
+        }
+        onSettled()
+        if (then) setPhase(then)
+        else onClose()
+      })
+      .catch(() => {
+        onSettled()
+        if (then) setPhase(then)
+        else onClose()
+      })
+  }
+
+  function startTapToPay() {
+    setOnPhone(true)
+    start({ method: 'tap-to-pay' })
   }
 
   function startCard(t: VivaTerminal) {
@@ -101,10 +177,10 @@ export default function CollectPaymentModal({
     setPhase('pick-terminal')
   }
 
-  // No terminals → QR immediately (unchanged behaviour). Mount-once: start()
-  // guards on startedRef, so re-runs are no-ops.
+  // No usable card rail → QR immediately (unchanged behaviour). Mount-once:
+  // start() guards on startedRef, so re-runs are no-ops.
   useEffect(() => {
-    if (!hasTerminals) start({ method: 'qr' })
+    if (!hasChoice) start({ method: 'qr' })
   })
 
   useEffect(() => {
@@ -129,7 +205,15 @@ export default function CollectPaymentModal({
 
   function close() {
     if (phase === 'canceling') return
+    if (phase === 'tapping') {
+      // The SDK's collect resolves 'canceled' → tap() abandons the server collect.
+      operatorCanceledRef.current = true
+      setPhase('canceling')
+      void tapToPay.cancel()
+      return
+    }
     if (phase === 'awaiting' || phase === 'creating') {
+      abandonedRef.current = true
       setPhase('canceling')
       actions
         .cancel(terminal ? { terminalId: terminal.terminalId } : undefined)
@@ -191,11 +275,20 @@ export default function CollectPaymentModal({
                   <Text style={styles.methodText}>QR</Text>
                   <Text style={styles.methodSub}>Guest's phone</Text>
                 </Pressable>
-                <Pressable style={[styles.methodBtn, { backgroundColor: colors.accent }]} onPress={chooseCard}>
-                  <ContactlessIcon size={26} />
-                  <Text style={styles.methodText}>Tap card</Text>
-                  <Text style={styles.methodSub}>On this terminal</Text>
-                </Pressable>
+                {canTerminal && (
+                  <Pressable style={[styles.methodBtn, { backgroundColor: colors.accent }]} onPress={chooseCard}>
+                    <ContactlessIcon size={26} />
+                    <Text style={styles.methodText}>Tap card</Text>
+                    <Text style={styles.methodSub}>On this terminal</Text>
+                  </Pressable>
+                )}
+                {canTapToPay && (
+                  <Pressable style={[styles.methodBtn, { backgroundColor: colors.accent }]} onPress={startTapToPay}>
+                    <ContactlessIcon size={26} />
+                    <Text style={styles.methodText}>Tap to Pay</Text>
+                    <Text style={styles.methodSub}>On this phone</Text>
+                  </Pressable>
+                )}
               </View>
             </View>
           )}
@@ -220,9 +313,27 @@ export default function CollectPaymentModal({
             <Text style={styles.mutedCenter}>{terminal ? 'Sending to the terminal…' : 'Preparing payment…'}</Text>
           )}
 
+          {phase === 'tapping' && (
+            <View style={styles.awaiting}>
+              <View style={styles.tapCard}>
+                <ContactlessIcon size={44} color={colors.heading} />
+                <Text style={styles.scanTitle}>Hold the card near the top of this phone</Text>
+              </View>
+              <View style={styles.waitRow}>
+                <ActivityIndicator color={colors.info} />
+                <Text style={styles.waitText}>Waiting for the card…</Text>
+              </View>
+            </View>
+          )}
+
           {phase === 'awaiting' && (
             <View style={styles.awaiting}>
-              {terminal ? (
+              {onPhone && !isDemo ? (
+                <View style={styles.tapCard}>
+                  <ContactlessIcon size={44} color={colors.heading} />
+                  <Text style={styles.scanTitle}>Card read — confirming the payment…</Text>
+                </View>
+              ) : terminal ? (
                 <View style={styles.tapCard}>
                   <ContactlessIcon size={44} color={colors.heading} />
                   <Text style={styles.scanTitle}>Tap the card on {terminal.label}</Text>
@@ -267,9 +378,9 @@ export default function CollectPaymentModal({
 
           {phase === 'failed' && (
             <View style={styles.resultCardRed}>
-              <Text style={styles.resultTitleRed}>{terminal ? 'Declined' : 'Payment failed'}</Text>
+              <Text style={styles.resultTitleRed}>{terminal || onPhone ? 'Declined' : 'Payment failed'}</Text>
               <Text style={styles.resultSubRed}>
-                {terminal ? 'Declined — still cash' : 'Still cash — you can try again.'}
+                {terminal || onPhone ? 'Declined — still cash' : 'Still cash — you can try again.'}
               </Text>
             </View>
           )}
@@ -294,7 +405,7 @@ export default function CollectPaymentModal({
                 ? 'Done'
                 : busy
                   ? 'Canceling…'
-                  : phase === 'awaiting' && terminal
+                  : phase === 'tapping' || (phase === 'awaiting' && (terminal || onPhone))
                     ? 'Cancel'
                     : 'Close'}
             </Text>
