@@ -257,6 +257,17 @@ model PartnerAccount {
   /// the venue has its own rather than inheriting the ISV Partner default.
   vivaSourceCode         String?             @map("viva_source_code")
   vivaConnectedAt        DateTime?           @map("viva_connected_at")
+  /// SELECTED consumer payment provider ('mollie'|'viva'|'stripe'; null = legacy → mollie). Site.paymentProvider is the EFFECTIVE one (track 028).
+  paymentProvider              String?   @map("payment_provider")
+  stripeConnectAccountId       String?   @unique @map("stripe_connect_account_id")
+  stripeConnectChargesEnabled  Boolean   @default(false) @map("stripe_connect_charges_enabled")
+  stripeConnectPayoutsEnabled  Boolean   @default(false) @map("stripe_connect_payouts_enabled")
+  stripeConnectDetailsSubmitted Boolean  @default(false) @map("stripe_connect_details_submitted")
+  /// not_started | in_progress | pending_verification | complete | restricted
+  stripeConnectOnboardingStatus String?  @map("stripe_connect_onboarding_status")
+  stripeConnectRequirementsDue String[]  @default([]) @map("stripe_connect_requirements_due")
+  stripeConnectTosAcceptedAt   DateTime? @map("stripe_connect_tos_accepted_at")
+  stripeConnectConnectedAt     DateTime? @map("stripe_connect_connected_at")
   invoices               Invoice[]
   settlements            Settlement[]
   subscription           Subscription?
@@ -318,7 +329,9 @@ model Site {
   bgImageWidth               Int?                     @map("bg_image_width")
   bgImageHeight              Int?                     @map("bg_image_height")
   slug                       String?
+  /// EFFECTIVE provider, kept in sync by `payment-providers/selection.ts syncEffectiveProvider`
   paymentProvider            String                   @default("mollie") @map("payment_provider")
+  stripeTerminalLocationId   String?                  @map("stripe_terminal_location_id")
   noShowDeadlineMinutes      Int?                     @map("no_show_deadline_minutes")
   features                   String[]                 @default(["sunbeds"])
   /// Sunbed reservations are unit-granular by default: a guest books a whole
