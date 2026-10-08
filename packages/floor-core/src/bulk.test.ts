@@ -103,6 +103,19 @@ describe('classifySelection', () => {
     expect(v.cancelBlockedByPaid).toBe(true)
   })
 
+  it.each([
+    ['stripe_cs_x', true],
+    ['stripe_pi_x', true],
+    ['vso_x', true],
+    ['viva_x', true],
+    ['pi_demo_x', false],
+  ])('paymentRef %s blocks bulk cancel = %s', (ref, blocked) => {
+    const a = reserved(), b = reserved(ref)
+    const v = classifySelection([a, b], ids(a, b))
+    expect(v.cancelBlockedByPaid).toBe(blocked)
+    expect(v.canCancel).toBe(!blocked)
+  })
+
   it('reserved + checked-in is one occupied/booked mix — no cancel lane', () => {
     const a = reserved(), b = checkedIn()
     const v = classifySelection([a, b], ids(a, b))

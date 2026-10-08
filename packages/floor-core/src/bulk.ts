@@ -21,6 +21,7 @@ import {
   isFailedReservationStatus,
   selectionRefundTotal,
 } from './bed-state'
+import { isRefundableOnlineRef } from '@repo/data/payment-refs'
 import type { InventoryItem } from './types'
 
 export type SeatKind =
@@ -109,7 +110,7 @@ export function classifySelection(
   const canCancelStates = can(['reserved', 'checked-in']) && sameStatus
   const hasMolliePaid = selItems.some(i => {
     const r = getActiveReservation(i)
-    return !!r?.paymentRef && r.paymentRef.startsWith('tr_')
+    return !!r?.paymentRef && isRefundableOnlineRef(r.paymentRef)
   })
   const canCancel = canCancelStates && !hasMolliePaid
   const cancelBlockedByPaid = canCancelStates && hasMolliePaid
