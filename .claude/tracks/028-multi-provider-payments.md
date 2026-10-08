@@ -33,15 +33,15 @@ Native — **Spain availability unverified**.
 
 ## Resume here
 
-- **State (2026-10-08):** **P1–P5 shipped and verified, P6 docs done — everything is UNCOMMITTED**
-  on `main` (≈107 modified + ≈35 new files across data, floor-core, user, partner, admin, mobile,
-  plus `turbo.json`, `dev-env.example`, `package-lock.json`, and the docs). The one unverified leg is
+- **State (2026-10-08):** **P1–P6 shipped — committed and pushed to `main` 2026-10-08** (`41c09f7..116f696`, 9 commits;
+  migration `20261007162101_add_payment_provider_selection` applied to local, `sunbnb_test` and the
+  Neon TEST DB; NOT production — `./deploy-to-production.sh` migrates it). The one unverified leg is
   **the physical tap of Stripe Tap to Pay**: dev build, pairing, chooser, server leg (token, ES
   Location, card_present PI) and simulated reader connect were verified in the iOS Simulator
   2026-10-08, but the iOS SDK cancels `collectPaymentMethod` there (log entry below) — needs a real
   iPhone (Apple entitlement) or an NFC Android phone.
 - **Next action, in order:** (1) founder decides the commission rounding fix (per-item vs total —
-  log 2026-10-07); (2) commit
+  log 2026-10-07); (2) ~~commit~~ done 2026-10-08
   (one logical change per commit — split by phase/surface); (3) **`npm run migrate:test` before any
   `main` push** — migration `20261007162101_add_payment_provider_selection` (additive) is on local +
   `sunbnb_test` only, NOT the Neon test DB; the pre-push hook blocks otherwise.
