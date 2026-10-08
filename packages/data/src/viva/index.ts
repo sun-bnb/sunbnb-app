@@ -25,6 +25,9 @@
 import { createStubVivaClient } from './stub-client'
 import { createVivaHttpClient } from './http-client'
 import { createStubVivaAccountsClient, createVivaAccountsHttpClient } from './accounts'
+import { createVivaCheckoutHttpClient } from './checkout-http'
+import { createStubVivaCheckoutClient } from './checkout-stub'
+import type { VivaCheckoutClient } from './checkout-types'
 import type { VivaClient, VivaEnv, VivaIsvConfig } from './types'
 import type { VivaAccountsClient } from './accounts'
 
@@ -33,6 +36,9 @@ export * from './refs'
 export { createVivaHttpClient, VivaApiError, toCents, resetVivaTokenCacheForTests } from './http-client'
 export { createStubVivaClient, stubState, DEFAULT_RESOLVE_AFTER_MS } from './stub-client'
 export * from './accounts'
+export * from './checkout-types'
+export { vivaOnlineHttp, createVivaCheckoutHttpClient } from './checkout-http'
+export { createStubVivaCheckoutClient, checkoutStubState } from './checkout-stub'
 
 type VivaMode = 'stub' | 'http'
 
@@ -84,4 +90,21 @@ export function getVivaAccountsClient(): VivaAccountsClient {
     return createStubVivaAccountsClient()
   }
   return createVivaAccountsHttpClient(configFromEnv())
+}
+
+/**
+ * Get a `VivaCheckoutClient` (Smart Checkout, ONLINE — track 028 P4a) on the SAME single
+ * mode switch as the other Viva clients. Source code: `VIVA_CHECKOUT_SOURCE_CODE`, falling
+ * back to `VIVA_ISV_SOURCE_CODE`; brand colour from `VIVA_CHECKOUT_COLOR`.
+ */
+export function getVivaCheckoutClient(): VivaCheckoutClient {
+  if (resolveMode() === 'stub') {
+    const resolveAfterMs = process.env.VIVA_STUB_RESOLVE_AFTER_MS
+      ? Number(process.env.VIVA_STUB_RESOLVE_AFTER_MS)
+      : undefined
+    return createStubVivaCheckoutClient(resolveAfterMs !== undefined ? { resolveAfterMs } : undefined)
+  }
+  const config = configFromEnv()
+  const sourceCode = process.env.VIVA_CHECKOUT_SOURCE_CODE ?? config.sourceCode
+  return createVivaCheckoutHttpClient({ ...config, sourceCode }, { color: process.env.VIVA_CHECKOUT_COLOR })
 }

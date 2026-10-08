@@ -132,6 +132,30 @@ export function isKnownEsRegion(region: string | null | undefined): boolean {
   return ES_PROVINCE_CODES.has((region ?? '').trim().toUpperCase())
 }
 
+/**
+ * Spanish postal codes start with the province's INE number (01–52), in the old
+ * alphabetical order of province names. Indexed by that number; values are the
+ * `ES_PROVINCES` codes above.
+ */
+const ES_PROVINCE_BY_INE: readonly string[] = [
+  '', 'VI', 'AB', 'A', 'AL', 'AV', 'BA', 'PM', 'B', 'BU', 'CC', 'CA', 'CS', 'CR', 'CO', 'C', 'CU',
+  'GI', 'GR', 'GU', 'SS', 'H', 'HU', 'J', 'LE', 'L', 'LO', 'LU', 'M', 'MA', 'MU', 'NA', 'OR', 'O',
+  'P', 'GC', 'PO', 'SA', 'TF', 'S', 'SG', 'SE', 'SO', 'T', 'TE', 'TO', 'V', 'VA', 'BI', 'ZA', 'Z',
+  'CE', 'ML',
+]
+
+/**
+ * The province of a Spanish postal code (`29640` → `MA`), or null when it isn't a
+ * five-digit code with a known province prefix. Used where a province is required
+ * but the account only has an address — e.g. Stripe Terminal Locations in Spain
+ * require `address.state` (track 028 P5, found against the live API).
+ */
+export function esProvinceFromPostalCode(postalCode: string | null | undefined): string | null {
+  const m = (postalCode ?? '').trim().match(/^(\d{2})\d{3}$/)
+  if (!m) return null
+  return ES_PROVINCE_BY_INE[Number(m[1])] || null
+}
+
 /** What regime a province implies, for an operator UI to show the consequence. */
 export function regimeForEsRegion(region: string | null | undefined): TaxRegime {
   return resolveTaxRegime({ country: 'ES', taxRegion: region })

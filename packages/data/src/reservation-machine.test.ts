@@ -141,6 +141,20 @@ describe('resolveTransition — allowed cells', () => {
     expect(qrAbandon?.effects).not.toContain('vivaAbort')
   })
 
+  it('collect rail: tapToPay selects only the Stripe Terminal rows; cardPresent and QR rows unaffected (bug-revealing)', () => {
+    const unsettled = S('walkin', 'unsettled', 'present')
+    const tapStart = resolveTransition(unsettled, 'collect.start', ['tapToPay'])
+    expect(tapStart?.effects).toEqual(['amountFromDb', 'stripeTerminalIntent', 'setPaymentRef'])
+    expect(resolveTransition(unsettled, 'collect.start', ['cardPresent'])?.effects).toContain('vivaSale')
+    expect(resolveTransition(unsettled, 'collect.start')?.effects).toContain('mollieCreate')
+
+    const collecting = S('walkin', 'collecting', 'present')
+    const tapAbandon = resolveTransition(collecting, 'collect.abandon', ['tapToPay'])
+    expect(tapAbandon?.effects).toEqual(['reverifyOnce', 'stripeTerminalCancel', 'clearPaymentRef'])
+    expect(resolveTransition(collecting, 'collect.abandon', ['cardPresent'])?.effects).toContain('vivaAbort')
+    expect(resolveTransition(collecting, 'collect.abandon')?.effects).toContain('mollieCancel')
+  })
+
   it('depart branches on hasFutureDays vs lastDay', () => {
     const s = S('walkin', 'settled', 'present')
     expect(resolveTransition(s, 'staff.depart', ['hasFutureDays'])?.post.occ).toBe('expected')
@@ -203,7 +217,7 @@ describe('resolveTransition — MUST-REJECT cells (the D-list, model level)', ()
 
   it('D5: collect.abandon never deletes — every row (QR + card-present) reverts to unsettled', () => {
     const rows = TRANSITIONS.filter((t) => t.event === 'collect.abandon')
-    expect(rows).toHaveLength(2)
+    expect(rows).toHaveLength(3)
     for (const row of rows) expect(row.post).toEqual({ pay: 'unsettled' })
   })
 

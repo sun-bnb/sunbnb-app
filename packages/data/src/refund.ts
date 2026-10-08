@@ -17,21 +17,17 @@
 
 import { getValidMollieToken } from './mollie-tokens'
 import { isTestMode } from './env'
+import { providerFromRef, type PaymentProviderId } from './payment-refs'
+import { refundReservationVivaPayment } from './reservation-payment'
+import { stripeAdapter } from './payment-providers/stripe-adapter'
+import { vivaAdapter } from './payment-providers/viva-adapter'
+import { stripeAccountForPartner } from './payment-providers/stripe-account'
 
 const MOLLIE_API_BASE = 'https://api.mollie.com/v2'
 
-/** Demo payment refs (`pi_demo_…`) have no real provider — refunding is a no-op. */
-function isDemoPaymentRef(ref: string): boolean {
-  return ref.startsWith('pi_demo_')
-}
-
-/** Mollie payment IDs start with `tr_`. */
-function isMolliePaymentRef(ref: string): boolean {
-  return ref.startsWith('tr_')
-}
 
 export type RefundOutcome =
-  | { status: 'ok'; provider: 'mollie' | 'demo' }
+  | { status: 'ok'; provider: PaymentProviderId }
   // `reason: 'permission'` marks a 403 (the partner's grant lacks refunds.write) —
   // the caller surfaces a re-consent ("Enable refunds") action rather than a retry.
   | { status: 'error'; error: string; reason?: 'permission' }
@@ -41,6 +37,8 @@ export type RefundOutcome =
  *
  * @param paymentRef      The reservation's stored payment reference.
  * @param partnerAccountId PartnerAccount.userId whose Mollie account holds the payment.
+ * @param ctx             `reservationId` is required only for a Viva card-present ref
+ *                        (the Viva refund path loads the reservation itself).
  *
  * Returns `{ status: 'ok' }` on success (or for demo refs, where it is a no-op),
  * `{ status: 'error', error }` on any failure — never throws for an expected
@@ -49,12 +47,66 @@ export type RefundOutcome =
 export async function issueReservationRefund(
   paymentRef: string | null | undefined,
   partnerAccountId: string | null | undefined,
+  ctx?: { reservationId?: string },
 ): Promise<RefundOutcome> {
   if (!paymentRef) return { status: 'error', error: 'No payment to refund' }
-  if (isDemoPaymentRef(paymentRef)) return { status: 'ok', provider: 'demo' }
-  if (!isMolliePaymentRef(paymentRef)) {
-    return { status: 'error', error: `Unknown payment provider for ref: ${paymentRef}` }
+  const provider = providerFromRef(paymentRef)
+  switch (provider) {
+    case 'demo':
+      return { status: 'ok', provider: 'demo' }
+    case 'mollie':
+      return refundMolliePayment(paymentRef, partnerAccountId)
+    case 'viva-terminal': {
+      if (!ctx?.reservationId) {
+        return { status: 'error', error: 'reservationId required for a Viva refund' }
+      }
+      const res = await refundReservationVivaPayment(ctx.reservationId)
+      return res.status === 'ok'
+        ? { status: 'ok', provider: 'viva-terminal' }
+        : { status: 'error', error: res.error }
+    }
+    case 'stripe':
+    case 'stripe-terminal':
+      return refundStripePayment(paymentRef, partnerAccountId)
+    case 'viva':
+      return refundVivaCheckoutPayment(paymentRef, partnerAccountId)
+    default:
+      return { status: 'error', error: `Unknown payment provider for ref: ${paymentRef}` }
   }
+}
+
+/** Direct-charge refund on the venue's connected account; the application fee is refunded too. */
+async function refundStripePayment(
+  paymentRef: string,
+  partnerAccountId: string | null | undefined,
+): Promise<RefundOutcome> {
+  if (!partnerAccountId) {
+    return { status: 'error', error: 'Cannot find partner account for payment' }
+  }
+  const provider = providerFromRef(paymentRef) as PaymentProviderId
+  try {
+    const account = await stripeAccountForPartner(partnerAccountId)
+    if (!account) return { status: 'error', error: 'Partner has not connected Stripe' }
+    await stripeAdapter.refund(paymentRef, { partnerAccountId, stripeConnectAccountId: account })
+    return { status: 'ok', provider }
+  } catch (err) {
+    console.error('[refund] Stripe refund failed', err)
+    const e = err as { statusCode?: number; message?: string }
+    if (e?.statusCode === 403) {
+      return {
+        status: 'error',
+        error: 'Stripe refused the refund (permission) — check the venue\'s Stripe connection.',
+        reason: 'permission',
+      }
+    }
+    return { status: 'error', error: e?.message ? `Stripe refund failed: ${e.message}` : 'Stripe refund failed' }
+  }
+}
+
+async function refundMolliePayment(
+  paymentRef: string,
+  partnerAccountId: string | null | undefined,
+): Promise<RefundOutcome> {
   if (!partnerAccountId) {
     return { status: 'error', error: 'Cannot find partner account for payment' }
   }
@@ -110,4 +162,18 @@ export async function issueReservationRefund(
   }
 
   return { status: 'ok', provider: 'mollie' }
+}
+
+/** Viva Smart Checkout full refund: the client reads the paid amount from the transaction (Viva reverses the ISV fee itself). */
+async function refundVivaCheckoutPayment(
+  paymentRef: string,
+  partnerAccountId: string | null | undefined,
+): Promise<RefundOutcome> {
+  try {
+    await vivaAdapter.refund(paymentRef, { partnerAccountId: partnerAccountId ?? '' })
+    return { status: 'ok', provider: 'viva' }
+  } catch (err) {
+    console.error('[refund] Viva refund failed', err)
+    return { status: 'error', error: err instanceof Error ? `Viva refund failed: ${err.message}` : 'Viva refund failed' }
+  }
 }

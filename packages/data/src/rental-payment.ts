@@ -27,12 +27,15 @@ import prisma from '../index'
 import {
   loadFeeContext,
   chargeableServiceFee, resolveServiceFee,
-  calculateServiceFeeAmount,
+  serviceFeeForUnits,
   round,
   processConfirmedRentalBooking,
 } from './payment'
 import { getValidMollieToken } from './mollie-tokens'
 import { isTestMode } from './env'
+import { providerFromRef } from './payment-refs'
+import { getStripeRefStatus } from './payment-providers/stripe-account'
+import { getVivaCheckoutRefStatus } from './payment-providers/viva-adapter'
 import {
   RENTAL_PROCESSING,
   RENTAL_PAYMENT_FAILED,
@@ -41,13 +44,6 @@ import {
 const MOLLIE_API_BASE = 'https://api.mollie.com/v2'
 const SERVICE_CODE = 'equipment-rental'
 
-/** Mollie payment IDs start with `tr_`; demo refs with `pi_demo_`. */
-function isMolliePaymentRef(ref: string): boolean {
-  return ref.startsWith('tr_')
-}
-function isDemoPaymentRef(ref: string): boolean {
-  return ref.startsWith('pi_demo_')
-}
 
 export interface CreatePaymentOptions {
   /** Where Mollie returns the payer after checkout (origin-validated by the caller). */
@@ -175,7 +171,8 @@ export async function createRentalBookingMolliePayment(
     partnerAccount,
     bookings[0]!.createdAt
   )
-  const applicationFeeAmount = round(calculateServiceFeeAmount(matchedFee, paymentAmount))
+  // Commission rule: serviceFeeForUnits (fixed per booking line, percentage once on the total) — same {total, units} as the PLATFORM invoice.
+  const applicationFeeAmount = serviceFeeForUnits(matchedFee, { total: paymentAmount, units: bookings.length })
 
   const testmode = isTestMode()
 
@@ -273,6 +270,28 @@ export async function createRentalBookingMolliePayment(
   return { status: 'ok', checkoutUrl, paymentId: payment.id }
 }
 
+/**
+ * Record a provider checkout on a rental group (track 028 adapters). Mirrors the
+ * success write in `createRentalBookingMolliePayment`: the SAME ref on every booking.
+ */
+export async function markRentalCheckoutStarted(
+  bookingIds: string[],
+  paymentRef: string,
+): Promise<void> {
+  await prisma.rentalBooking.updateMany({
+    where: { id: { in: bookingIds } },
+    data: { paymentRef, status: RENTAL_PROCESSING },
+  })
+}
+
+/** Mirrors the provider-error write in `createRentalBookingMolliePayment`. */
+export async function markRentalCheckoutFailed(bookingIds: string[]): Promise<void> {
+  await prisma.rentalBooking.updateMany({
+    where: { id: { in: bookingIds } },
+    data: { status: RENTAL_PAYMENT_FAILED },
+  })
+}
+
 export type PaymentStatusResult =
   | { status: 'ok'; providerStatus: string; succeeded: boolean; failed: boolean }
   | { status: 'error'; error: string }
@@ -295,11 +314,20 @@ export async function getRentalBookingPaymentStatus(
   }
   const ref = booking.paymentRef
 
-  if (isDemoPaymentRef(ref)) {
-    return { status: 'ok', providerStatus: 'paid', succeeded: true, failed: false }
-  }
-  if (!isMolliePaymentRef(ref)) {
-    return { status: 'error', error: `Unknown payment provider for ref: ${ref}` }
+  switch (providerFromRef(ref)) {
+    case 'demo':
+      return { status: 'ok', providerStatus: 'paid', succeeded: true, failed: false }
+    case 'mollie':
+      break
+    case 'stripe':
+    case 'stripe-terminal':
+      return getStripeRefStatus(ref, booking.site.userId)
+    case 'viva':
+      return getVivaCheckoutRefStatus(ref)
+    case 'viva-terminal':
+      return { status: 'error', error: 'provider not wired yet (track 028)' }
+    default:
+      return { status: 'error', error: `Unknown payment provider for ref: ${ref}` }
   }
 
   let token: string

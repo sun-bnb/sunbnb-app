@@ -10,6 +10,26 @@ export function round(amount: number): number {
 }
 
 /**
+ * Convert a EUR float amount to integer cents for the Viva API boundary.
+ *
+ * Rounds through `round()` FIRST (2-decimal financial rounding, the same
+ * function every other money computation in `@repo/data` goes through — see
+ * `.claude/rules/payments.md`) and only then multiplies by 100 and rounds
+ * again. In practice `Math.round(x * 100)` alone lands on the same cent value
+ * for realistic amounts (double-rounding to the same precision rarely crosses
+ * a boundary twice) — this is not a float-precision fix. The reason to route
+ * through `round()` regardless: it is the ONE authoritative rounding decision
+ * for money everywhere else in this codebase, and an unrounded value (e.g. a
+ * raw division result with 10+ trailing digits from an upstream computation
+ * that skipped `round()`) must land on the exact same cents a caller would get
+ * from `round()`-ing it and reading the result — `toCents` must never become a
+ * second, independent place a money value gets its final digit decided.
+ */
+export function toCents(eurAmount: number): number {
+  return Math.round(round(eurAmount) * 100)
+}
+
+/**
  * Extract base amount and VAT from a VAT-inclusive price.
  * Example: vatInclusiveAmount=12.55, vatRate=25.5 → base=10.00, vat=2.55
  */

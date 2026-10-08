@@ -8,8 +8,25 @@ vi.mock('./env', () => ({
   isTestMode: vi.fn().mockReturnValue(false),
 }))
 
+vi.mock('./reservation-payment', () => ({
+  refundReservationVivaPayment: vi.fn(),
+}))
+vi.mock('./payment-providers/stripe-adapter', () => ({
+  stripeAdapter: { refund: vi.fn() },
+}))
+vi.mock('./payment-providers/viva-adapter', () => ({
+  vivaAdapter: { refund: vi.fn() },
+}))
+vi.mock('./payment-providers/stripe-account', () => ({
+  stripeAccountForPartner: vi.fn(),
+}))
+
 import { issueReservationRefund } from './refund'
 import { getValidMollieToken } from './mollie-tokens'
+import { refundReservationVivaPayment } from './reservation-payment'
+import { stripeAdapter } from './payment-providers/stripe-adapter'
+import { vivaAdapter } from './payment-providers/viva-adapter'
+import { stripeAccountForPartner } from './payment-providers/stripe-account'
 
 const PA = 'partner-account-1'
 
@@ -127,5 +144,95 @@ describe('issueReservationRefund — Mollie path', () => {
     expect((res as any).error).toMatch(/reconnect mollie/i)
     expect((res as any).error).not.toMatch(/403/)
     expect((res as any).reason).toBe('permission')
+  })
+})
+
+describe('issueReservationRefund — provider dispatch (track 028)', () => {
+  it('dispatches a viva_ ref to refundReservationVivaPayment with the reservationId', async () => {
+    const fetchSpy = mockFetchSequence()
+    vi.mocked(refundReservationVivaPayment).mockResolvedValueOnce({ status: 'ok' })
+    const res = await issueReservationRefund('viva_sess1', PA, { reservationId: 'res-1' })
+    expect(refundReservationVivaPayment).toHaveBeenCalledWith('res-1')
+    expect(res).toEqual({ status: 'ok', provider: 'viva-terminal' })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('maps a Viva refund error to a RefundOutcome error', async () => {
+    vi.mocked(refundReservationVivaPayment).mockResolvedValueOnce({ status: 'error', error: 'Venue has not connected Viva' })
+    const res = await issueReservationRefund('viva_sess1', PA, { reservationId: 'res-1' })
+    expect(res).toEqual({ status: 'error', error: 'Venue has not connected Viva' })
+  })
+
+  it('requires ctx.reservationId for a Viva refund (and does not call Viva)', async () => {
+    const res = await issueReservationRefund('viva_sess1', PA)
+    expect(res).toEqual({ status: 'error', error: 'reservationId required for a Viva refund' })
+    expect(refundReservationVivaPayment).not.toHaveBeenCalled()
+  })
+
+  it('vso_ ref refunds through the Viva checkout adapter (full refund), never Mollie', async () => {
+    vi.mocked(vivaAdapter.refund).mockResolvedValueOnce(undefined)
+    const fetchSpy = mockFetchSequence()
+    const res = await issueReservationRefund('vso_123', PA)
+    expect(res).toEqual({ status: 'ok', provider: 'viva' })
+    expect(vivaAdapter.refund).toHaveBeenCalledWith('vso_123', { partnerAccountId: PA })
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(getValidMollieToken).not.toHaveBeenCalled()
+  })
+
+  it('vso_ refund failure maps to an error outcome', async () => {
+    vi.mocked(vivaAdapter.refund).mockRejectedValueOnce(new Error('no transaction'))
+    const res = await issueReservationRefund('vso_123', PA)
+    expect(res).toEqual({ status: 'error', error: 'Viva refund failed: no transaction' })
+  })
+
+  describe('stripe', () => {
+    it.each([
+      ['stripe_cs_abc', 'stripe'],
+      ['stripe_pi_abc', 'stripe-terminal'],
+    ])('%s refunds on the connected account via the adapter', async (ref, provider) => {
+      vi.mocked(stripeAccountForPartner).mockResolvedValue('acct_1')
+      vi.mocked(stripeAdapter.refund).mockResolvedValue(undefined)
+      const fetchSpy = mockFetchSequence()
+      const res = await issueReservationRefund(ref, PA)
+      expect(res).toEqual({ status: 'ok', provider })
+      expect(stripeAccountForPartner).toHaveBeenCalledWith(PA)
+      expect(stripeAdapter.refund).toHaveBeenCalledWith(ref, { partnerAccountId: PA, stripeConnectAccountId: 'acct_1' })
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    it('errors when the partner has no Stripe account (adapter not called)', async () => {
+      vi.mocked(stripeAccountForPartner).mockResolvedValue(null)
+      const res = await issueReservationRefund('stripe_cs_abc', PA)
+      expect(res.status).toBe('error')
+      expect(stripeAdapter.refund).not.toHaveBeenCalled()
+    })
+
+    it('errors without a partnerAccountId', async () => {
+      expect((await issueReservationRefund('stripe_cs_abc', null)).status).toBe('error')
+      expect(stripeAdapter.refund).not.toHaveBeenCalled()
+    })
+
+    it('a 403 from Stripe maps to reason permission', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      vi.mocked(stripeAccountForPartner).mockResolvedValue('acct_1')
+      vi.mocked(stripeAdapter.refund).mockRejectedValue(Object.assign(new Error('forbidden'), { statusCode: 403 }))
+      expect(await issueReservationRefund('stripe_cs_abc', PA)).toMatchObject({ status: 'error', reason: 'permission' })
+    })
+
+    it('any other Stripe error is a plain error', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      vi.mocked(stripeAccountForPartner).mockResolvedValue('acct_1')
+      vi.mocked(stripeAdapter.refund).mockRejectedValue(new Error('charge_already_refunded'))
+      const res = await issueReservationRefund('stripe_cs_abc', PA)
+      expect(res.status).toBe('error')
+      expect((res as any).reason).toBeUndefined()
+      expect((res as any).error).toMatch(/charge_already_refunded/)
+    })
+  })
+
+  it('keeps the unknown-ref error for unrecognised refs', async () => {
+    const res = await issueReservationRefund('pi_3Abc', PA)
+    expect(res.status).toBe('error')
+    expect((res as any).error).toMatch(/Unknown payment provider/)
   })
 })

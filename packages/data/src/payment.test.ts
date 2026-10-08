@@ -4,6 +4,7 @@ import {
   computeVatAndBaseAmounts,
   resolveServiceFee,
   calculateServiceFeeAmount,
+  platformPassThroughFor,
 } from './payment'
 
 // ─── round() ────────────────────────────────────────────────────────────────
@@ -257,5 +258,14 @@ describe('calculateServiceFeeAmount', () => {
   it('handles null percentage for percentage fee', () => {
     const fee = makeFee({ chargeType: 'percentage', percentage: null })
     expect(calculateServiceFeeAmount(fee, 100)).toBe(0)
+  })
+})
+
+describe('platformPassThroughFor', () => {
+  it.each(['stripe_cs_abc', 'stripe_pi_abc'])('Stripe ref %s passes the processing estimate through', (ref) => {
+    expect(platformPassThroughFor(ref, 40)).toBe(0.85)
+  })
+  it.each(['tr_abc123', 'pi_demo_1', 'viva_1', 'vso_1', null, undefined, ''])('%s passes nothing through', (ref) => {
+    expect(platformPassThroughFor(ref, 40)).toBe(0)
   })
 })

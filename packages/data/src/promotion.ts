@@ -12,7 +12,7 @@
  *  2. Before the clock starts, every booking is waived: only the first live paid booking can
  *     start it, so anything earlier is by definition inside the offer.
  */
-import { isVivaPaymentRef } from './viva/refs'
+import { isLiveProviderRef } from './payment-refs'
 
 export const LAUNCH_PROMOTION = {
   code: 'launch-30d',
@@ -56,7 +56,7 @@ export function promotionEndsAt(startedAt: Date): Date {
  */
 export function startsPromotionClock(paymentRef: string | null | undefined, liveEnvironment: boolean): boolean {
   if (!liveEnvironment || typeof paymentRef !== 'string') return false
-  return /^tr_[A-Za-z0-9]+$/.test(paymentRef) || isVivaPaymentRef(paymentRef)
+  return isLiveProviderRef(paymentRef)
 }
 
 /**

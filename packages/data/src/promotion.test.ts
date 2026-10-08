@@ -57,7 +57,12 @@ describe('startsPromotionClock — only a LIVE paid booking', () => {
     ['tr_WDqYK6vllg', true, true],
     ['viva_6f1c2a8e-1b2c-4d5e-8f90-123456789abc', true, true],
     ['tr_WDqYK6vllg', false, false], // test mode: Mollie refs look the same — never starts it
+    ['vso_8765432', true, true],
+    ['stripe_cs_test_a1B2', true, true],
+    ['stripe_pi_3Abc', true, true],
+    ['vso_8765432', false, false],
     ['pi_demo_1730000000', true, false],
+    ['pi_bare123', true, false],
     ['offplatform_ord123', true, false],
     [null, true, false], // cash / walk-in
   ] as const)('%s (live=%s) → %s', (ref, live, starts) => {

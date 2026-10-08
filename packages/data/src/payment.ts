@@ -72,6 +72,8 @@ import {
 // so existing `@repo/data/payment` imports keep working.
 
 import { round, computeVatAndBaseAmounts } from './payment-math'
+import { isStripeRef } from './payment-refs'
+import { stripePassThrough } from './payment-providers/fee-policy'
 export { round, computeVatAndBaseAmounts }
 
 // ─── Service Fee Resolution ─────────────────────────────────────────────────
@@ -123,6 +125,24 @@ export function calculateServiceFeeAmount(
     fee.chargeType === 'fixed'
       ? (fee.feeAmount ?? 0)
       : ((fee.percentage ?? 0) / 100) * referenceAmount
+  )
+}
+
+/**
+ * THE commission rule — used by every charge-time fee (Mollie applicationFee, Stripe
+ * application_fee_amount, Viva isvAmount) AND every PLATFORM invoice, so collected === invoiced.
+ * Fixed fee: per unit (bed / rental booking line). Percentage: once on the total paid.
+ * Founder decision 2026-10-08 (track 028).
+ */
+export function serviceFeeForUnits(
+  fee: ServiceFee | undefined,
+  opts: { total: number; units: number }
+): number {
+  if (!fee) return 0
+  return round(
+    fee.chargeType === 'fixed'
+      ? (fee.feeAmount ?? 0) * Math.max(1, opts.units)
+      : ((fee.percentage ?? 0) / 100) * opts.total
   )
 }
 
@@ -200,6 +220,32 @@ export function apportionCreditByVatRate(
 }
 
 // ─── Commission (PLATFORM) invoice helpers ──────────────────────────────────
+
+/**
+ * Stripe bills the PLATFORM for card processing (Connect `fees.payer = 'application'`);
+ * `STRIPE_APPLICATION_FEE_POLICY` recovers an estimate through the application fee, and the
+ * PLATFORM invoice bills it to the partner as a VAT-exempt `processingFee`. Non-Stripe refs
+ * (Mollie bills the partner directly, demo, cash) pass nothing through.
+ */
+export function platformPassThroughFor(
+  paymentRef: string | null | undefined,
+  grossAmount: number,
+): number {
+  return isStripeRef(paymentRef) ? stripePassThrough(grossAmount) : 0
+}
+
+/** The VAT-exempt processing line on a PLATFORM invoice (PSP fees are never run through reverse-VAT). */
+function platformProcessingLine(invoiceId: string, passThrough: number) {
+  return {
+    charge: passThrough,
+    tax: 0,
+    amount: passThrough,
+    vatRate: 0,
+    invoiceId,
+    productCode: 'payment-processing',
+    description: 'Card payment processing (Stripe)',
+  }
+}
 
 /**
  * Bill-to fields for the B2B commission invoice — the partner is the recipient.
@@ -657,14 +703,13 @@ export async function processConfirmedReservation(
   const totalPayment = round(reservation.paymentAmount ?? 0)
   const siteVatRate = site.vat ?? 0
 
-  // Calculate total service fee across all items (needed for PLATFORM invoice;
-  // computed regardless of skipCommission — harmless and keeps the path uniform).
-  let totalServiceFee = 0
-  for (const item of reservation.items) {
-    const itemPrice = round(item.price ?? site.price ?? 0)
-    totalServiceFee += calculateServiceFeeAmount(matchedFee, itemPrice)
-  }
-  totalServiceFee = round(totalServiceFee)
+  // Commission via serviceFeeForUnits (fixed per bed, percentage once on the total) with the
+  // same { total, units } the charge side uses (createReservationMolliePayment: paymentAmount,
+  // items.length), so collected === invoiced. Computed regardless of skipCommission.
+  const totalServiceFee = serviceFeeForUnits(matchedFee, {
+    total: totalPayment,
+    units: reservation.items.length,
+  })
 
   // Agent model: the partner sells the full listed price to the consumer, so
   // the PARTNER (revenue) invoice is booked GROSS. The commission is billed
@@ -792,17 +837,20 @@ export async function processConfirmedReservation(
 
     // ── 2. PLATFORM Invoice (service fee) — skipped for cash/walk-in receipts ──
 
-    if (!skipCommission && totalServiceFee > 0 && businessEntity && platformIssuable) {
+    const passThrough = platformPassThroughFor(reservation.paymentRef, totalPayment)
+    if (!skipCommission && (totalServiceFee > 0 || passThrough > 0) && businessEntity && platformIssuable) {
       const commission = computeCommissionVat(
         totalServiceFee, platformVatRate,
         partnerAccount?.country, partnerAccount?.businessId, feeCountry
       )
 
+      const platformTotal = passThrough > 0 ? round(totalServiceFee + passThrough) : totalServiceFee
+
       const platformIdentity = await allocateInvoiceIdentity(tx, {
         seriesKey: PLATFORM_SERIES_KEY,
         seriesCode: SERIES_FACTURA,
         invoicedAt,
-        totalAmount: totalServiceFee,
+        totalAmount: platformTotal,
         issuerVatNumber: businessEntity.vatId || null,
         prefix: PLATFORM_SERIES_PREFIX,
       })
@@ -811,9 +859,10 @@ export async function processConfirmedReservation(
         data: {
           accountId: partnerAccount?.userId ?? '',
           reservationId,
-          totalCharge: commission.base,
+          totalCharge: passThrough > 0 ? round(commission.base + passThrough) : commission.base,
           totalTax: commission.vat,
-          totalAmount: totalServiceFee,
+          totalAmount: platformTotal,
+          ...(passThrough > 0 ? { processingFee: passThrough } : {}),
           invoicedAt,
           issuerType: 'PLATFORM',
           issuerVatNumber: businessEntity.vatId || null,
@@ -826,17 +875,22 @@ export async function processConfirmedReservation(
       })
 
 
-      await tx.invoiceLine.create({
-        data: {
-          charge: commission.base,
-          tax: commission.vat,
-          amount: totalServiceFee,
-          vatRate: commission.vatRate,
-          invoiceId: platformInvoice.id,
-          productCode: 'sunbnb-service-fee',
-          description: `Reservation service fee${feeCountry ? ` (${feeCountry})` : ''}`,
-        },
-      })
+      if (totalServiceFee > 0) {
+        await tx.invoiceLine.create({
+          data: {
+            charge: commission.base,
+            tax: commission.vat,
+            amount: totalServiceFee,
+            vatRate: commission.vatRate,
+            invoiceId: platformInvoice.id,
+            productCode: 'sunbnb-service-fee',
+            description: `Reservation service fee${feeCountry ? ` (${feeCountry})` : ''}`,
+          },
+        })
+      }
+      if (passThrough > 0) {
+        await tx.invoiceLine.create({ data: platformProcessingLine(platformInvoice.id, passThrough) })
+      }
 
       // File it with AEAT, in THIS transaction — an in-scope invoice and its record
       // must not be able to exist separately. This sits AFTER the lines on purpose:
@@ -1099,13 +1153,12 @@ export async function processConfirmedRentalBooking(
   )
   const siteVatRate = site.rentalVat ?? site.vat ?? 0
 
-  // Calculate total service fee across all bookings
-  let totalServiceFee = 0
-  for (const booking of bookings) {
-    const bookingPrice = round(booking.paymentAmount ?? booking.totalPrice ?? 0)
-    totalServiceFee += calculateServiceFeeAmount(matchedFee, bookingPrice)
-  }
-  totalServiceFee = round(totalServiceFee)
+  // Commission via serviceFeeForUnits (fixed per booking line, percentage once on the total) —
+  // same { total, units } as the charge side (createRentalBookingMolliePayment), so collected === invoiced.
+  const totalServiceFee = serviceFeeForUnits(matchedFee, {
+    total: totalPayment,
+    units: bookings.length,
+  })
 
   // Agent model: PARTNER invoice booked GROSS; commission billed separately.
   const partnerAmount = totalPayment
@@ -1219,17 +1272,20 @@ export async function processConfirmedRentalBooking(
 
     // ── 2. PLATFORM Invoice (service fee) ──
 
-    if (totalServiceFee > 0 && platformIssuable) {
+    const passThrough = platformPassThroughFor(paymentRef, totalPayment)
+    if ((totalServiceFee > 0 || passThrough > 0) && platformIssuable) {
       const commission = computeCommissionVat(
         totalServiceFee, platformVatRate,
         partnerAccount?.country, partnerAccount?.businessId, feeCountry
       )
 
+      const platformTotal = passThrough > 0 ? round(totalServiceFee + passThrough) : totalServiceFee
+
       const platformIdentity = await allocateInvoiceIdentity(tx, {
         seriesKey: PLATFORM_SERIES_KEY,
         seriesCode: SERIES_FACTURA,
         invoicedAt,
-        totalAmount: totalServiceFee,
+        totalAmount: platformTotal,
         issuerVatNumber: businessEntity.vatId || null,
         prefix: PLATFORM_SERIES_PREFIX,
       })
@@ -1238,9 +1294,10 @@ export async function processConfirmedRentalBooking(
         data: {
           accountId: partnerAccount?.userId ?? '',
           paymentRef,
-          totalCharge: commission.base,
+          totalCharge: passThrough > 0 ? round(commission.base + passThrough) : commission.base,
           totalTax: commission.vat,
-          totalAmount: totalServiceFee,
+          totalAmount: platformTotal,
+          ...(passThrough > 0 ? { processingFee: passThrough } : {}),
           invoicedAt,
           issuerType: 'PLATFORM',
           issuerVatNumber: businessEntity.vatId || null,
@@ -1253,17 +1310,22 @@ export async function processConfirmedRentalBooking(
       })
 
 
-      await tx.invoiceLine.create({
-        data: {
-          charge: commission.base,
-          tax: commission.vat,
-          amount: totalServiceFee,
-          vatRate: commission.vatRate,
-          invoiceId: platformInvoice.id,
-          productCode: 'sunbnb-service-fee',
-          description: `Equipment rental service fee${feeCountry ? ` (${feeCountry})` : ''}`,
-        },
-      })
+      if (totalServiceFee > 0) {
+        await tx.invoiceLine.create({
+          data: {
+            charge: commission.base,
+            tax: commission.vat,
+            amount: totalServiceFee,
+            vatRate: commission.vatRate,
+            invoiceId: platformInvoice.id,
+            productCode: 'sunbnb-service-fee',
+            description: `Equipment rental service fee${feeCountry ? ` (${feeCountry})` : ''}`,
+          },
+        })
+      }
+      if (passThrough > 0) {
+        await tx.invoiceLine.create({ data: platformProcessingLine(platformInvoice.id, passThrough) })
+      }
 
       // File it with AEAT, in THIS transaction — an in-scope invoice and its record
       // must not be able to exist separately. This sits AFTER the lines on purpose:
@@ -1670,17 +1732,20 @@ export async function processConfirmedOrder(
 
     // ── 2. PLATFORM Invoice (service fee) — skipped for cash/walk-in receipts ──
 
-    if (!skipCommission && serviceFeeAmount > 0 && businessEntity && platformIssuable) {
+    const passThrough = platformPassThroughFor(order.paymentRef, totalPartnerAmount)
+    if (!skipCommission && (serviceFeeAmount > 0 || passThrough > 0) && businessEntity && platformIssuable) {
       const commission = computeCommissionVat(
         serviceFeeAmount, platformVatRate,
         partnerAccount?.country, partnerAccount?.businessId, feeCountry
       )
 
+      const platformTotal = passThrough > 0 ? round(serviceFeeAmount + passThrough) : serviceFeeAmount
+
       const platformIdentity = await allocateInvoiceIdentity(tx, {
         seriesKey: PLATFORM_SERIES_KEY,
         seriesCode: SERIES_FACTURA,
         invoicedAt,
-        totalAmount: serviceFeeAmount,
+        totalAmount: platformTotal,
         issuerVatNumber: businessEntity.vatId || null,
         prefix: PLATFORM_SERIES_PREFIX,
       })
@@ -1689,9 +1754,10 @@ export async function processConfirmedOrder(
         data: {
           accountId: partnerAccount?.userId ?? '',
           orderId,
-          totalCharge: commission.base,
+          totalCharge: passThrough > 0 ? round(commission.base + passThrough) : commission.base,
           totalTax: commission.vat,
-          totalAmount: serviceFeeAmount,
+          totalAmount: platformTotal,
+          ...(passThrough > 0 ? { processingFee: passThrough } : {}),
           invoicedAt,
           issuerType: 'PLATFORM',
           issuerVatNumber: businessEntity.vatId || null,
@@ -1704,17 +1770,22 @@ export async function processConfirmedOrder(
       })
 
 
-      await tx.invoiceLine.create({
-        data: {
-          charge: commission.base,
-          tax: commission.vat,
-          amount: serviceFeeAmount,
-          vatRate: commission.vatRate,
-          invoiceId: platformInvoice.id,
-          productCode: 'sunbnb-service-fee',
-          description: `Order service fee${feeCountry ? ` (${feeCountry})` : ''}`,
-        },
-      })
+      if (serviceFeeAmount > 0) {
+        await tx.invoiceLine.create({
+          data: {
+            charge: commission.base,
+            tax: commission.vat,
+            amount: serviceFeeAmount,
+            vatRate: commission.vatRate,
+            invoiceId: platformInvoice.id,
+            productCode: 'sunbnb-service-fee',
+            description: `Order service fee${feeCountry ? ` (${feeCountry})` : ''}`,
+          },
+        })
+      }
+      if (passThrough > 0) {
+        await tx.invoiceLine.create({ data: platformProcessingLine(platformInvoice.id, passThrough) })
+      }
 
       // File it with AEAT, in THIS transaction — an in-scope invoice and its record
       // must not be able to exist separately. This sits AFTER the lines on purpose:
@@ -1926,17 +1997,20 @@ export async function processChargedTableDeposit(
 
     // ── 2. PLATFORM Invoice (service fee) ──
 
-    if (totalServiceFee > 0 && platformIssuable) {
+    const passThrough = platformPassThroughFor(tableReservation.paymentRef, totalDeposit)
+    if ((totalServiceFee > 0 || passThrough > 0) && platformIssuable) {
       const commission = computeCommissionVat(
         totalServiceFee, platformVatRate,
         partnerAccount?.country, partnerAccount?.businessId, feeCountry
       )
 
+      const platformTotal = passThrough > 0 ? round(totalServiceFee + passThrough) : totalServiceFee
+
       const platformIdentity = await allocateInvoiceIdentity(tx, {
         seriesKey: PLATFORM_SERIES_KEY,
         seriesCode: SERIES_FACTURA,
         invoicedAt,
-        totalAmount: totalServiceFee,
+        totalAmount: platformTotal,
         issuerVatNumber: businessEntity.vatId || null,
         prefix: PLATFORM_SERIES_PREFIX,
       })
@@ -1945,9 +2019,10 @@ export async function processChargedTableDeposit(
         data: {
           accountId: partnerAccount?.userId ?? '',
           tableReservationId,
-          totalCharge: commission.base,
+          totalCharge: passThrough > 0 ? round(commission.base + passThrough) : commission.base,
           totalTax: commission.vat,
-          totalAmount: totalServiceFee,
+          totalAmount: platformTotal,
+          ...(passThrough > 0 ? { processingFee: passThrough } : {}),
           invoicedAt,
           issuerType: 'PLATFORM',
           issuerVatNumber: businessEntity.vatId || null,
@@ -1961,17 +2036,22 @@ export async function processChargedTableDeposit(
       })
 
 
-      await tx.invoiceLine.create({
-        data: {
-          charge: commission.base,
-          tax: commission.vat,
-          amount: totalServiceFee,
-          vatRate: commission.vatRate,
-          invoiceId: platformInvoice.id,
-          productCode: 'sunbnb-service-fee',
-          description: `No-show deposit service fee${feeCountry ? ` (${feeCountry})` : ''}`,
-        },
-      })
+      if (totalServiceFee > 0) {
+        await tx.invoiceLine.create({
+          data: {
+            charge: commission.base,
+            tax: commission.vat,
+            amount: totalServiceFee,
+            vatRate: commission.vatRate,
+            invoiceId: platformInvoice.id,
+            productCode: 'sunbnb-service-fee',
+            description: `No-show deposit service fee${feeCountry ? ` (${feeCountry})` : ''}`,
+          },
+        })
+      }
+      if (passThrough > 0) {
+        await tx.invoiceLine.create({ data: platformProcessingLine(platformInvoice.id, passThrough) })
+      }
 
       // File it with AEAT, in THIS transaction — an in-scope invoice and its record
       // must not be able to exist separately. This sits AFTER the lines on purpose:
@@ -2348,17 +2428,20 @@ export async function processConfirmedTabPayment(
 
     // ── 2. PLATFORM Invoice (service fee) — skipped for cash settlements ──
 
-    if (!skipCommission && serviceFeeAmount > 0 && businessEntity && platformIssuable) {
+    const passThrough = platformPassThroughFor(paymentRef, totalPartnerAmount)
+    if (!skipCommission && (serviceFeeAmount > 0 || passThrough > 0) && businessEntity && platformIssuable) {
       const commission = computeCommissionVat(
         serviceFeeAmount, platformVatRate,
         partnerAccount?.country, partnerAccount?.businessId, feeCountry
       )
 
+      const platformTotal = passThrough > 0 ? round(serviceFeeAmount + passThrough) : serviceFeeAmount
+
       const platformIdentity = await allocateInvoiceIdentity(tx, {
         seriesKey: PLATFORM_SERIES_KEY,
         seriesCode: SERIES_FACTURA,
         invoicedAt,
-        totalAmount: serviceFeeAmount,
+        totalAmount: platformTotal,
         issuerVatNumber: businessEntity.vatId || null,
         prefix: PLATFORM_SERIES_PREFIX,
       })
@@ -2368,9 +2451,10 @@ export async function processConfirmedTabPayment(
           accountId: partnerAccount?.userId ?? '',
           tableTabId: tabId,
           paymentRef: paymentRef ?? undefined,
-          totalCharge: commission.base,
+          totalCharge: passThrough > 0 ? round(commission.base + passThrough) : commission.base,
           totalTax: commission.vat,
-          totalAmount: serviceFeeAmount,
+          totalAmount: platformTotal,
+          ...(passThrough > 0 ? { processingFee: passThrough } : {}),
           invoicedAt,
           issuerType: 'PLATFORM',
           issuerVatNumber: businessEntity.vatId || null,
@@ -2384,17 +2468,22 @@ export async function processConfirmedTabPayment(
       })
 
 
-      await tx.invoiceLine.create({
-        data: {
-          charge: commission.base,
-          tax: commission.vat,
-          amount: serviceFeeAmount,
-          vatRate: commission.vatRate,
-          invoiceId: platformInvoice.id,
-          productCode: 'sunbnb-service-fee',
-          description: `Dine-in tab service fee${feeCountry ? ` (${feeCountry})` : ''}`,
-        },
-      })
+      if (serviceFeeAmount > 0) {
+        await tx.invoiceLine.create({
+          data: {
+            charge: commission.base,
+            tax: commission.vat,
+            amount: serviceFeeAmount,
+            vatRate: commission.vatRate,
+            invoiceId: platformInvoice.id,
+            productCode: 'sunbnb-service-fee',
+            description: `Dine-in tab service fee${feeCountry ? ` (${feeCountry})` : ''}`,
+          },
+        })
+      }
+      if (passThrough > 0) {
+        await tx.invoiceLine.create({ data: platformProcessingLine(platformInvoice.id, passThrough) })
+      }
 
       // File it with AEAT, in THIS transaction — an in-scope invoice and its record
       // must not be able to exist separately. This sits AFTER the lines on purpose:

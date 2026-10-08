@@ -45,9 +45,10 @@ import {
 } from './reservation-machine'
 import { randomUUID } from 'node:crypto'
 import { recordSettlement } from './till'
+import { isDemoPayment, isStripeTerminalRef, stripeTerminalRef, stripeIdFromRef } from './payment-refs'
 import {
   processConfirmedReservation, issueCashCreditNote,
-  loadFeeContext, chargeableServiceFee, resolveServiceFee, calculateServiceFeeAmount, round,
+  loadFeeContext, chargeableServiceFee, resolveServiceFee, serviceFeeForUnits,
 } from './payment'
 import {
   createReservationMolliePayment,
@@ -62,6 +63,9 @@ import {
   getVivaClient, isVivaPaymentRef, sessionFromVivaRef, vivaRefFromSession, toCents,
   VivaFeeGuardError, type VivaSession,
 } from './viva'
+import { ensureTerminalLocation, createTerminalPaymentIntent, cancelTerminalPaymentIntent, fetchPaymentIntentState } from './stripe'
+import { stripeApplicationFee } from './payment-providers/fee-policy'
+import { stripeAccountForSite } from './payment-providers/stripe-account'
 
 /** sunbed-rental service code, shared with the QR/Mollie card-collect cascade lookup. */
 const VIVA_SERVICE_CODE = 'sunbed-rental'
@@ -100,7 +104,7 @@ export interface ApplyOpts {
     webhookUrl?: string
     /** 'card' routes collect.start/abandon through the Viva rows (cardPresent
      * condition) instead of QR/Mollie. Defaults to 'qr'. */
-    method?: 'qr' | 'card'
+    method?: 'qr' | 'card' | 'tap-to-pay'
     /** Required for a 'card' collect.start — the paired Viva Cloud Terminal
      * device (`VivaTerminal.terminalId`). Also accepted on collect.abandon so
      * the executor can resolve the terminal's `cashRegisterId` for abort;
@@ -139,7 +143,7 @@ const IMPLEMENTED: ReadonlySet<EffectKey> = new Set<EffectKey>([
   // composite executors (mollieCreate/demo write the ref; invoiceOnline emails).
   'amountFromDb', 'mintAnonId', 'mollieCreate', 'setPaymentRef',
   'reverifyOnce', 'mollieCancel', 'invoiceOnline', 'email', 'providerRefund',
-  'vivaSale', 'vivaAbort',
+  'vivaSale', 'vivaAbort', 'stripeTerminalIntent', 'stripeTerminalCancel',
 ])
 
 // ─── Loading ─────────────────────────────────────────────────────────────────
@@ -221,6 +225,10 @@ function computeConditions(r: Loaded, opts: ApplyOpts, now: Date): Condition[] {
   // not repeat `method` on abandon — the ref itself already says which rail).
   if (opts.collect?.method === 'card' || isVivaPaymentRef(r.paymentRef)) {
     conds.push('cardPresent')
+  }
+  // tapToPay (Stripe Terminal) — same fact shape; a stripe_pi_ ref is never a Viva ref.
+  if (opts.collect?.method === 'tap-to-pay' || isStripeTerminalRef(r.paymentRef)) {
+    conds.push('tapToPay')
   }
 
   // subset is a FACT about opts.itemIds vs the reservation's seats
@@ -575,6 +583,12 @@ async function runCollectStart(
     return runCollectStartCard(r, state, row, opts, amount)
   }
 
+  // Tap to Pay (Stripe Terminal): same no-anonId rule and demo carve-out as the card rail.
+  if (collect.method === 'tap-to-pay' && !collect.demo) {
+    await prisma.reservation.update({ where: { id: r.id }, data: { paymentAmount: amount } })
+    return runCollectStartTapToPay(r, state, row, amount)
+  }
+
   // mintAnonId + persist the DB-computed amount (non-state columns — direct write).
   const anonId = r.anonId ?? randomUUID()
   await prisma.reservation.update({
@@ -667,7 +681,8 @@ async function runCollectStartCard(
       error: 'card-present (Viva) payments are not available while the launch promotion waives commission (track 024 Q2/Q3)',
     }
   }
-  const feeAmount = round(calculateServiceFeeAmount(matchedFee, amount))
+  // Commission rule: serviceFeeForUnits (fixed per bed, percentage once on the total) — same as the PLATFORM invoice.
+  const feeAmount = serviceFeeForUnits(matchedFee, { total: amount, units: r.items.length })
   const amountCents = toCents(amount)
   const feeCents = toCents(feeAmount)
 
@@ -705,6 +720,91 @@ async function runCollectStartCard(
   return { outcome: 'applied', transition: row, state, data: { amount, card: true, sessionId } }
 }
 
+/**
+ * Tap to Pay collect.start (Stripe Terminal, direct charge on the connected account).
+ * Fee = the `sunbed-rental` cascade commission + Stripe processing pass-through
+ * (`stripeApplicationFee`). No launch-promotion refusal: Stripe tolerates a zero fee
+ * and the pass-through still applies. Any failure REVERTS to the unsettled cash walk-in.
+ */
+async function runCollectStartTapToPay(
+  r: Loaded,
+  state: CompoundState,
+  row: TransitionSpec,
+  amount: number,
+): Promise<ApplyResult> {
+  const fail = async (error: string): Promise<ApplyResult> => {
+    await prisma.reservation.update({
+      where: { id: r.id },
+      data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
+    })
+    return { outcome: 'effect-failed', effect: 'stripeTerminalIntent', event: row.event, error }
+  }
+
+  const { site, partnerAccount, settings } = await loadFeeContext(r.siteId, VIVA_SERVICE_CODE)
+  if (!partnerAccount?.stripeConnectChargesEnabled || !partnerAccount.stripeConnectAccountId) {
+    return fail('venue has not connected Stripe')
+  }
+  const stripeAccount = partnerAccount.stripeConnectAccountId
+
+  try {
+    const tier = partnerAccount.subscription?.plan?.tier ?? null
+    const resolvedFee = resolveServiceFee(
+      site.serviceFees, partnerAccount.serviceFees, settings?.serviceFees ?? [], VIVA_SERVICE_CODE, tier,
+    )
+    // Commission rule: serviceFeeForUnits (fixed per bed, percentage once on the total).
+    const commission = serviceFeeForUnits(
+      chargeableServiceFee(resolvedFee, partnerAccount, r.createdAt),
+      { total: amount, units: r.items.length },
+    )
+    const applicationFee = stripeApplicationFee(commission, amount)
+
+    const country = partnerAccount.country && partnerAccount.country.length === 2
+      ? partnerAccount.country.toUpperCase()
+      : (settings?.country ?? 'FI')
+    const locationId = await ensureTerminalLocation(
+      {
+        id: site.id,
+        name: site.name,
+        stripeTerminalLocationId: site.stripeTerminalLocationId ?? null,
+        address: partnerAccount.address,
+        city: partnerAccount.city,
+        postalCode: partnerAccount.postalCode,
+        taxRegion: partnerAccount.taxRegion,
+        country,
+      },
+      stripeAccount,
+    )
+
+    const seatCount = r.items.length
+    const { paymentIntentId, clientSecret } = await createTerminalPaymentIntent({
+      amount,
+      applicationFee,
+      stripeAccount,
+      description: site.name ? `${site.name} · ${seatCount} seat${seatCount === 1 ? '' : 's'}` : 'Sunbnb',
+      meta: { type: 'reservation', entityId: r.id, siteId: r.siteId, collect: true },
+    })
+
+    await prisma.reservation.update({
+      where: { id: r.id },
+      data: { paymentRef: stripeTerminalRef(paymentIntentId), status: RESERVATION_PROCESSING },
+    })
+    return {
+      outcome: 'applied',
+      transition: row,
+      state,
+      data: {
+        amount,
+        tapToPay: { paymentIntentId, clientSecret, stripeAccount, locationId, currency: 'eur' },
+      },
+    }
+  } catch (e) {
+    // Log the provider error server-side: callers map effect-failed to a generic message, so this
+    // is the only place a misconfigured Location / key permission is visible (track 028).
+    console.error('[collect.start tap-to-pay] Stripe setup failed for reservation', r.id, e instanceof Error ? e.message : e)
+    return fail(e instanceof Error ? e.message : 'Stripe Tap to Pay setup failed')
+  }
+}
+
 // ─── Composite executor: collect.abandon (operator closed the QR) ────────────
 
 /**
@@ -734,6 +834,10 @@ async function runCollectAbandon(
 
   if (isVivaPaymentRef(r.paymentRef)) {
     return runCollectAbandonCard(r, state, row, opts, asConfirm)
+  }
+
+  if (isStripeTerminalRef(r.paymentRef)) {
+    return runCollectAbandonTapToPay(r, state, row, opts, asConfirm)
   }
 
   const cancel = await cancelReservationMolliePayment(r.id)
@@ -824,6 +928,55 @@ async function runCollectAbandonCard(
   return { outcome: 'applied', transition: row, state, data: { paymentStatus: 'processing' } }
 }
 
+/**
+ * Tap to Pay collect.abandon. Same invariant as the Viva card leg: never revert
+ * while the PaymentIntent may still capture. 'paid' (tap landed first) finalizes;
+ * 'canceled' reverts; 'error' (still processing / API failure) polls the PI.
+ */
+async function runCollectAbandonTapToPay(
+  r: Loaded,
+  state: CompoundState,
+  row: TransitionSpec,
+  opts: ApplyOpts,
+  asConfirm: () => ApplyResult,
+): Promise<ApplyResult> {
+  const stillProcessing = (): ApplyResult =>
+    ({ outcome: 'applied', transition: row, state, data: { paymentStatus: 'processing' } })
+  const revertToCash = async (): Promise<ApplyResult> => {
+    await prisma.reservation.update({
+      where: { id: r.id },
+      data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
+    })
+    return { outcome: 'applied', transition: row, state, data: { paymentStatus: 'cash' } }
+  }
+
+  const piId = stripeIdFromRef(r.paymentRef!)
+  const stripeAccount = await stripeAccountForSite(r.siteId)
+  if (!stripeAccount) return stillProcessing() // cannot ask Stripe — never guess
+
+  const cancel = await cancelTerminalPaymentIntent(piId, stripeAccount)
+  if (cancel === 'canceled') return revertToCash()
+  if (cancel === 'paid') {
+    const fin = await reverifyAndFinalizeReservation(r.id)
+    return fin.settled === 'complete' ? asConfirm() : stillProcessing()
+  }
+
+  const pollMs = opts.collect?.abortPollMs ?? DEFAULT_ABORT_POLL_MS
+  const deadline = (opts.now ?? new Date()).getTime() + pollMs
+  let pi: Awaited<ReturnType<typeof fetchPaymentIntentState>> | null = null
+  for (;;) {
+    try { pi = await fetchPaymentIntentState(piId, stripeAccount) } catch { pi = null }
+    if ((pi && pi.state !== 'pending') || Date.now() >= deadline) break
+    await new Promise((resolve) => setTimeout(resolve, ABORT_POLL_INTERVAL_MS))
+  }
+  if (pi?.state === 'paid' || pi?.state === 'refunded') {
+    const fin = await reverifyAndFinalizeReservation(r.id)
+    return fin.settled === 'complete' ? asConfirm() : stillProcessing()
+  }
+  if (pi?.state === 'failed') return revertToCash()
+  return stillProcessing()
+}
+
 // ─── applyTransition ─────────────────────────────────────────────────────────
 
 export async function applyTransition(
@@ -898,7 +1051,7 @@ export async function applyTransition(
   // provider ref (demo refs have nothing to refund). Runs BEFORE the status
   // write; a throw here propagates and the cancel never happens.
   if (row.effects.includes('providerRefund')) {
-    const needsRefund = state.pay === 'complete' && r.paymentRef && !r.paymentRef.startsWith('pi_demo_')
+    const needsRefund = state.pay === 'complete' && r.paymentRef && !isDemoPayment(r.paymentRef)
     if (needsRefund) {
       if (!opts.refund) {
         return { outcome: 'effect-failed', effect: 'providerRefund', event, error: 'refund handler not supplied' }

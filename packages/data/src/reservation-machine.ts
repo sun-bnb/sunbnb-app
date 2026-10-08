@@ -197,6 +197,7 @@ export const CONDITIONS = [
   'stale15m',        // row older than the 15-minute payment-flow cutoff
   'stale24h',        // row older than the 24-hour failed-row cutoff
   'expired',         // stay is over (venue-local `to` in the past)
+  'tapToPay',        // collect via Stripe Terminal Tap to Pay on the staff phone; a FACT from opts.collect.method on start, from the stripe_pi_ ref prefix on abandon
   'cardPresent',     // collect via a card-present terminal (Viva) rather than QR/Mollie; a FACT from opts.collect.method on start, from the paymentRef prefix on abandon
 ] as const
 export type Condition = (typeof CONDITIONS)[number]
@@ -234,6 +235,8 @@ export const EFFECTS = [
   'deleteRow',           // hard delete — ONLY permitted where I4 allows (never money rows)
   'vivaSale',            // push a card-present sale to the paired terminal via Cloud Terminal ISV API; writes viva_<sessionId> ref
   'vivaAbort',           // abort the terminal session (reverify-once first); after card read → poll, never revert a possibly-authorised card
+  'stripeTerminalIntent', // create a card_present PaymentIntent on the connected account (app fee = commission + pass-through); writes stripe_pi_<id> ref, returns the client secret to the staff device
+  'stripeTerminalCancel', // cancel the PaymentIntent (reverify-once first); a succeeded race finalizes, unresolved → poll, never revert a possibly-captured tap
 ] as const
 export type EffectKey = (typeof EFFECTS)[number]
 
@@ -277,12 +280,14 @@ export const TRANSITIONS: TransitionSpec[] = [
   // ── Payment rail ──
   { event: 'pay.initiate', pre: { kind: ['online'], pay: ['pending'] }, post: { pay: 'processing' }, effects: ['mollieCreate', 'setPaymentRef'] },
   { event: 'pay.initiate.fail', pre: { kind: ['online'], pay: ['pending'] }, post: { pay: 'payment_failed' }, effects: [] },
+  { event: 'collect.start', pre: { kind: ['walkin'], pay: ['unsettled'], occ: ['present'] }, when: ['tapToPay'], post: { pay: 'collecting' }, effects: ['amountFromDb', 'stripeTerminalIntent', 'setPaymentRef'], note: 'Stripe Tap to Pay on the staff phone — no mintAnonId (nothing for the guest\'s browser)' },
   { event: 'collect.start', pre: { kind: ['walkin'], pay: ['unsettled'], occ: ['present'] }, when: ['cardPresent'], post: { pay: 'collecting' }, effects: ['amountFromDb', 'vivaSale', 'setPaymentRef'], note: 'card-present via Viva Cloud Terminal — no mintAnonId (nothing for the guest\'s browser)' },
   { event: 'collect.start', pre: { kind: ['walkin'], pay: ['unsettled'], occ: ['present'] }, post: { pay: 'collecting' }, effects: ['amountFromDb', 'mintAnonId', 'mollieCreate', 'setPaymentRef'], note: 'settled NOT in pre — D6 reject cell' },
   { event: 'pay.confirm', pre: { kind: ['online'], pay: ['processing'] }, post: { pay: 'complete' }, effects: ['invoiceOnline', 'email'] },
   { event: 'pay.confirm', pre: { kind: ['walkin'], pay: ['collecting'] }, post: { pay: 'collected' }, effects: ['invoiceOnline', 'email'] },
   { event: 'pay.fail', pre: { kind: ['online'], pay: ['processing'] }, post: { pay: 'payment_failed' }, effects: [] },
   { event: 'pay.fail', pre: { kind: ['walkin'], pay: ['collecting'] }, post: { pay: 'unsettled' }, effects: ['clearPaymentRef'] },
+  { event: 'collect.abandon', pre: { kind: ['walkin'], pay: ['collecting'], occ: ['present'] }, when: ['tapToPay'], post: { pay: 'unsettled' }, effects: ['reverifyOnce', 'stripeTerminalCancel', 'clearPaymentRef'], note: 'NEVER frees — D5; never reverts while a tap may be mid-capture' },
   { event: 'collect.abandon', pre: { kind: ['walkin'], pay: ['collecting'], occ: ['present'] }, when: ['cardPresent'], post: { pay: 'unsettled' }, effects: ['reverifyOnce', 'vivaAbort', 'clearPaymentRef'], note: 'NEVER frees — D5; never reverts while a card may be mid-auth' },
   { event: 'collect.abandon', pre: { kind: ['walkin'], pay: ['collecting'], occ: ['present'] }, post: { pay: 'unsettled' }, effects: ['reverifyOnce', 'mollieCancel', 'clearPaymentRef'], note: 'NEVER deletes/frees — D5' },
   { event: 'pay.refund.webhook', pre: { kind: ['online'], pay: ['complete'] }, post: { pay: 'refunded' }, effects: [] },

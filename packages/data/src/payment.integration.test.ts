@@ -1134,3 +1134,112 @@ describe('processCashRentalBooking', () => {
     expect(invoices.map((i) => i.issuerType).sort()).toEqual(['PARTNER', 'PLATFORM'])
   })
 })
+
+// ─── Stripe: processing pass-through on the PLATFORM invoice (track 028, P3a) ──
+
+describe('PLATFORM invoice — Stripe processing pass-through', () => {
+  async function setup(opts: { paymentRef: string; feeAmount?: number }) {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+    const settings = await createTestSettings()
+    await createTestServiceFee(settings.id, opts.feeAmount === undefined ? undefined : { feeAmount: opts.feeAmount })
+    const item1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const item2 = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    return createTestReservation(user.id, site.id, [item1.id, item2.id], { paymentRef: opts.paymentRef })
+  }
+
+  const platformOf = (reservationId: string) =>
+    prisma.invoice.findFirst({
+      where: { reservationId, issuerType: 'PLATFORM' },
+      include: { invoiceLines: { orderBy: { amount: 'desc' } } },
+    })
+
+  it('Stripe ref: commission line + VAT-exempt processing line; total = commission + pass-through', async () => {
+    const reservation = await setup({ paymentRef: 'stripe_cs_test_1' })
+    await processConfirmedReservation(reservation.id)
+
+    const platform = (await platformOf(reservation.id))!
+    // 2 items x 10.00 gross = 20.00 -> pass-through round(20 * 1.5% + 0.25) = 0.55; commission 2 x 1.00
+    expect(platform.totalAmount).toBe(2.55)
+    expect(platform.processingFee).toBe(0.55)
+    expect(platform.invoiceLines).toHaveLength(2)
+    const [commission, processing] = platform.invoiceLines
+    expect(commission!.productCode).toBe('sunbnb-service-fee')
+    expect(commission!.amount).toBe(2.0)
+    expect(processing).toMatchObject({
+      productCode: 'payment-processing',
+      amount: 0.55,
+      charge: 0.55,
+      tax: 0,
+      vatRate: 0,
+      description: 'Card payment processing (Stripe)',
+    })
+    // processing is VAT-exempt: invoice tax equals the commission VAT only
+    expect(platform.totalTax).toBe(commission!.tax)
+    expect(platform.totalCharge).toBe(Math.round((commission!.charge + 0.55) * 100) / 100)
+    // PARTNER stays gross and untouched by the pass-through
+    const partner = await prisma.invoice.findFirst({ where: { reservationId: reservation.id, issuerType: 'PARTNER' } })
+    expect(partner!.totalAmount).toBe(20.0)
+  })
+
+  it('Mollie ref: unchanged — one commission line, no processingFee', async () => {
+    const reservation = await setup({ paymentRef: 'tr_abc123' })
+    await processConfirmedReservation(reservation.id)
+
+    const platform = (await platformOf(reservation.id))!
+    expect(platform.totalAmount).toBe(2.0)
+    expect(platform.processingFee).toBeNull()
+    expect(platform.invoiceLines).toHaveLength(1)
+    expect(platform.invoiceLines[0]!.productCode).toBe('sunbnb-service-fee')
+  })
+
+  it('zero-commission Stripe payment (launch promo): PLATFORM invoice with only the processing line', async () => {
+    const reservation = await setup({ paymentRef: 'stripe_cs_test_2', feeAmount: 0 })
+    await processConfirmedReservation(reservation.id)
+
+    const platform = (await platformOf(reservation.id))!
+    expect(platform.totalAmount).toBe(0.55)
+    expect(platform.processingFee).toBe(0.55)
+    expect(platform.invoiceLines).toHaveLength(1)
+    expect(platform.invoiceLines[0]!.productCode).toBe('payment-processing')
+  })
+
+  it('zero-commission Mollie payment still creates no PLATFORM invoice', async () => {
+    const reservation = await setup({ paymentRef: 'tr_zero', feeAmount: 0 })
+    await processConfirmedReservation(reservation.id)
+    expect(await platformOf(reservation.id)).toBeNull()
+  })
+
+  it('is idempotent — a second call does not add a second PLATFORM invoice', async () => {
+    const reservation = await setup({ paymentRef: 'stripe_cs_test_3' })
+    await processConfirmedReservation(reservation.id)
+    await processConfirmedReservation(reservation.id)
+    const platforms = await prisma.invoice.findMany({ where: { reservationId: reservation.id, issuerType: 'PLATFORM' } })
+    expect(platforms).toHaveLength(1)
+  })
+
+  it('rental bookings carry the pass-through too', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id, { rentalVat: 25.5 })
+    const settings = await createTestSettings()
+    await createTestServiceFee(settings.id, { serviceCode: 'equipment-rental', chargeType: 'fixed', feeAmount: 1.0 })
+    const rentalItem = await createTestRentalItem(site.id, { name: 'Surfboard' })
+    const paymentRef = 'stripe_cs_rental_1'
+    await createTestRentalBooking(user.id, site.id, rentalItem.id, {
+      paymentRef, status: 'pending', paymentAmount: 10.0, totalPrice: 10.0,
+    })
+
+    await processConfirmedRentalBooking(paymentRef)
+
+    const platform = await prisma.invoice.findFirst({
+      where: { paymentRef, issuerType: 'PLATFORM' },
+      include: { invoiceLines: true },
+    })
+    // round(10 * 1.5% + 0.25) = 0.40; commission 1.00
+    expect(platform!.totalAmount).toBe(1.4)
+    expect(platform!.processingFee).toBe(0.4)
+    expect(platform!.invoiceLines.map((l) => l.productCode).sort()).toEqual(['payment-processing', 'sunbnb-service-fee'])
+  })
+})

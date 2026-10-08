@@ -20,13 +20,16 @@ import prisma from '../index'
 import {
   loadFeeContext,
   chargeableServiceFee, resolveServiceFee,
-  calculateServiceFeeAmount,
-  round,
+  serviceFeeForUnits,
   processConfirmedReservation,
 } from './payment'
 import { getValidMollieToken } from './mollie-tokens'
 import { isOwnAccountApplicationFeeError } from './mollie-app-fee'
 import { isTestMode } from './env'
+import { providerFromRef } from './payment-refs'
+import { getStripeRefStatus, stripeAccountForPartner } from './payment-providers/stripe-account'
+import { stripeAdapter } from './payment-providers/stripe-adapter'
+import { getVivaCheckoutRefStatus } from './payment-providers/viva-adapter'
 import {
   RESERVATION_PROCESSING,
   RESERVATION_PAYMENT_FAILED,
@@ -41,13 +44,6 @@ export type CancelPaymentResult =
 const MOLLIE_API_BASE = 'https://api.mollie.com/v2'
 const SERVICE_CODE = 'sunbed-rental'
 
-/** Mollie payment IDs start with `tr_`; demo refs with `pi_demo_`. */
-function isMolliePaymentRef(ref: string): boolean {
-  return ref.startsWith('tr_')
-}
-function isDemoPaymentRef(ref: string): boolean {
-  return ref.startsWith('pi_demo_')
-}
 
 export interface CreatePaymentOptions {
   /** Where Mollie returns the payer after checkout (origin-validated by the caller). */
@@ -95,6 +91,7 @@ export async function createReservationMolliePayment(
 ): Promise<CreatePaymentResult> {
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
+    include: { _count: { select: { items: true } } },
   })
   if (!reservation) {
     return { status: 'error', error: 'Reservation not found', reason: 'invalid_amount' }
@@ -146,7 +143,11 @@ export async function createReservationMolliePayment(
     partnerAccount,
     reservation.createdAt
   )
-  const applicationFeeAmount = round(calculateServiceFeeAmount(matchedFee, paymentAmount))
+  // Commission rule: serviceFeeForUnits (fixed per bed, percentage once on the total) — same {total, units} as the PLATFORM invoice.
+  const applicationFeeAmount = serviceFeeForUnits(matchedFee, {
+    total: paymentAmount,
+    units: reservation._count.items,
+  })
 
   const testmode = isTestMode()
 
@@ -252,6 +253,29 @@ export async function createReservationMolliePayment(
   return { status: 'ok', checkoutUrl, paymentId: payment.id }
 }
 
+/**
+ * Sanctioned writer for the online-checkout adapters (track 028): record the
+ * provider's ref and move the reservation to `processing`. Mirrors the write
+ * `createReservationMolliePayment` does on success.
+ */
+export async function markReservationCheckoutStarted(
+  reservationId: string,
+  paymentRef: string,
+): Promise<void> {
+  await prisma.reservation.update({
+    where: { id: reservationId },
+    data: { paymentRef, status: RESERVATION_PROCESSING },
+  })
+}
+
+/** Mirrors the provider-error write in `createReservationMolliePayment`. */
+export async function markReservationCheckoutFailed(reservationId: string): Promise<void> {
+  await prisma.reservation.update({
+    where: { id: reservationId },
+    data: { status: RESERVATION_PAYMENT_FAILED },
+  })
+}
+
 export type PaymentStatusResult =
   | { status: 'ok'; providerStatus: string; succeeded: boolean; failed: boolean }
   | { status: 'error'; error: string }
@@ -274,28 +298,35 @@ export async function getReservationPaymentStatus(
   }
   const ref = reservation.paymentRef
 
-  if (isDemoPaymentRef(ref)) {
-    return { status: 'ok', providerStatus: 'paid', succeeded: true, failed: false }
-  }
-  if (isVivaPaymentRef(ref)) {
-    // unknown (transient 404) reads as pending, not failed — a live tap must
-    // never be reverted by a lookup race (see reservation-machine-apply.ts's
-    // abandon-while-pending divergence).
-    try {
-      const session = await getVivaClient().getSession(sessionFromVivaRef(ref))
-      return {
-        status: 'ok',
-        providerStatus: session.state,
-        succeeded: session.state === 'approved',
-        failed: session.state === 'declined' || session.state === 'aborted',
+  switch (providerFromRef(ref)) {
+    case 'demo':
+      return { status: 'ok', providerStatus: 'paid', succeeded: true, failed: false }
+    case 'viva-terminal': {
+      // unknown (transient 404) reads as pending, not failed — a live tap must
+      // never be reverted by a lookup race (see reservation-machine-apply.ts's
+      // abandon-while-pending divergence).
+      try {
+        const session = await getVivaClient().getSession(sessionFromVivaRef(ref))
+        return {
+          status: 'ok',
+          providerStatus: session.state,
+          succeeded: session.state === 'approved',
+          failed: session.state === 'declined' || session.state === 'aborted',
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Viva session lookup failed'
+        return { status: 'error', error: msg }
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Viva session lookup failed'
-      return { status: 'error', error: msg }
     }
-  }
-  if (!isMolliePaymentRef(ref)) {
-    return { status: 'error', error: `Unknown payment provider for ref: ${ref}` }
+    case 'mollie':
+      break
+    case 'stripe':
+    case 'stripe-terminal':
+      return getStripeRefStatus(ref, reservation.site.userId)
+    case 'viva':
+      return getVivaCheckoutRefStatus(ref)
+    default:
+      return { status: 'error', error: `Unknown payment provider for ref: ${ref}` }
   }
 
   let token: string
@@ -385,16 +416,37 @@ export async function cancelReservationMolliePayment(
 
   const paymentRef = reservation?.paymentRef ?? null
 
-  // Early viva branch — the name stays Mollie-specific (every app imports it)
-  // but a viva_ ref delegates to the Viva abort path instead.
-  if (paymentRef && isVivaPaymentRef(paymentRef)) {
-    return cancelReservationVivaPayment(reservationId, cashRegisterId)
+  // The name stays Mollie-specific (every app imports it) but dispatch is by ref.
+  switch (providerFromRef(paymentRef)) {
+    case 'viva-terminal':
+      return cancelReservationVivaPayment(reservationId, cashRegisterId)
+    case 'demo':
+      return { status: 'canceled' }
+    case 'mollie':
+      break
+    case 'stripe': {
+      // Checkout session -> expire it on the connected account (paid-while-cancelling -> 'paid').
+      const account = await stripeAccountForPartner(reservation!.site.userId)
+      if (!account) return { status: 'error', error: 'Partner has not connected Stripe' }
+      const outcome = await stripeAdapter.cancel!(paymentRef!, {
+        partnerAccountId: reservation!.site.userId,
+        stripeConnectAccountId: account,
+      })
+      return outcome === 'error' ? { status: 'error', error: 'Failed to cancel Stripe payment' } : { status: outcome }
+    }
+    case 'viva':
+      // Smart Checkout orders can't be cancelled from our side (adapter.cancel -> 'error'); callers poll.
+      return { status: 'error', error: 'Viva online checkout cannot be cancelled; poll for the outcome' }
+    case 'stripe-terminal':
+      return { status: 'error', error: 'provider not wired yet (track 028)' }
+    default:
+      // No ref (nothing to cancel with a provider) or an unrecognised one —
+      // preserved legacy behaviour: nothing to cancel.
+      if (!paymentRef) return { status: 'canceled' }
+      return { status: 'error', error: `Unknown payment provider for ref: ${paymentRef}` }
   }
-
-  // No ref or demo ref — nothing to cancel with a provider.
-  if (!paymentRef || isDemoPaymentRef(paymentRef)) {
-    return { status: 'canceled' }
-  }
+  // Only a Mollie ref reaches here (so paymentRef is non-null).
+  if (!paymentRef) return { status: 'canceled' }
 
   // Resolve the partner's Mollie token via the site owner (PartnerAccount.userId
   // === Site.userId), exactly as createReservationMolliePayment does for the
