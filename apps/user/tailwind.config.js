@@ -25,6 +25,10 @@ module.exports = {
           'cyan-dark': '#00b8d8',
           gold: 'rgb(142,114,49)',
           'gold-light': 'rgb(168,140,75)',
+          // Sea-pine ink — the landing page's text colour (app/view.tsx), used as
+          // the dark tone on reservation surfaces. ≥4.5:1 on cream and white.
+          ink: '#17323a',
+          'ink-hover': '#0f262c',
         },
       },
       fontFamily: {

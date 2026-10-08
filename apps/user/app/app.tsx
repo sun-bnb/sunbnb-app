@@ -26,7 +26,10 @@ const App = ({ children }: {
       // The short QR entry (track 022) is the same chrome-free landing as /pos.
       // startsWith, not includes: '/q' as a substring would match unrelated paths.
       pathname.startsWith('/q/') ||
-      (pathname.includes('/reservations') && status === 'unauthenticated') ||
+      // A guest's SUNBED reservation page now gets the app header (a way back
+      // into the app). The table-deposit page keeps its chrome-free guest view:
+      // it is a return target for embedded restaurant flows.
+      (pathname.startsWith('/table-reservations') && status === 'unauthenticated') ||
       pathname.includes('/receipt') || 
       pathname.includes('/pass') || 
       pathname.startsWith('/sign-in') ||

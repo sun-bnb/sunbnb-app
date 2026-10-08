@@ -5,11 +5,8 @@ import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { getProducts, createOrder, getOrders, completeUnpaidOrder } from './actions'
 import { Product, Invoice } from '@/app/types/types'
-import Badge from '@mui/material/Badge'
 import Drawer from '@mui/material/Drawer'
 import CircularProgress from '@mui/material/CircularProgress'
-import Snackbar from '@mui/material/Snackbar'
-import Alert from '@mui/material/Alert'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
 import ListAltIcon from '@mui/icons-material/ListAlt'
 import { useSession } from 'next-auth/react'
@@ -63,10 +60,10 @@ export default function Menu({
   const t = useTranslations('Menu')
 
   const CATEGORY_LABELS: Record<string, string> = {
-    food: `🍽️ ${t('Food')}`,
-    drink: `🥤 ${t('Drinks')}`,
-    snack: `🍿 ${t('Snacks')}`,
-    accessory: `🏖️ ${t('Accessories')}`,
+    food: t('Food'),
+    drink: t('Drinks'),
+    snack: t('Snacks'),
+    accessory: t('Accessories'),
   }
 
   const { data: session } = useSession()
@@ -92,10 +89,10 @@ export default function Menu({
   const [placing, setPlacing] = useState(false)
 
   useEffect(() => {
-    if (!showConfirmation) return
-    const timer = setTimeout(() => setOpenConfirmation(false), 3000)
+    if (!openConfirmation) return
+    const timer = setTimeout(() => setOpenConfirmation(false), 4000)
     return () => clearTimeout(timer)
-  }, [showConfirmation])
+  }, [openConfirmation])
 
   useEffect(() => {
     getProducts(siteId)
@@ -153,7 +150,10 @@ export default function Menu({
     if (result?.status === 'ok' && result.id) {
       if (isUnpaid) {
         // Off-platform billing: complete immediately without payment
-        await completeUnpaidOrder(result.id)
+        // A guest proves ownership with the anonId the order was created under —
+        // without it the action refuses ('Authentication required') and the
+        // order stays pending, invisible to the kitchen.
+        await completeUnpaidOrder(result.id, anonId)
         // Refresh orders list, clear basket, close drawer, show confirmation
         getOrders({ reservationId }).then(r => { if (Array.isArray(r)) setCurrentOrders(r) })
         setBasket([])
@@ -184,78 +184,89 @@ export default function Menu({
 
   const anonId = typeof window !== 'undefined' ? localStorage.getItem('sunbnb-anonId') : null
 
+  const fmt = (n: number) => `€${n.toFixed(2)}`
+
+  // Step 1 — review: items (with per-item notes), kitchen notes, one CTA that
+  // says what happens next. Step 2 (paid sites) — the payment panel, headed by a
+  // compact summary of what is being paid for.
   const orderPreview = !order ? (
-    <div className="flex flex-col" style={{ height: '50dvh' }}>
-      {/* Header */}
-      <div className="px-5 pt-5 pb-3">
-        <h3 className="text-lg font-semibold text-gray-900">{isUnpaid ? t('Confirm your order') : t('Review your order')}</h3>
+    <div className="flex flex-col" style={{ maxHeight: '75dvh' }}>
+      <div className="px-5 pt-3 pb-2">
+        <h3 className="text-lg font-semibold text-brand-ink">{isUnpaid ? t('Confirm your order') : t('Review your order')}</h3>
+        <p className="mt-0.5 text-xs text-brand-ink/70">
+          {totalItems} {totalItems === 1 ? t('item') : t('items')}
+        </p>
       </div>
 
-      {/* Items */}
       <div className="flex-1 overflow-auto px-5">
-        {basket.map(item => (
-          <div key={item.product.id} className="py-3 border-b border-gray-100 last:border-0">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-xs font-medium text-gray-600">
-                  {item.quantity}
+        <ul className="divide-y divide-brand-ink/[0.07]">
+          {basket.map(item => (
+            <li key={item.product.id} className="py-3">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="flex min-w-0 items-baseline gap-2.5">
+                  <span className="text-sm font-semibold text-brand-gold tabular-nums">{item.quantity}×</span>
+                  <span className="truncate text-sm font-medium text-brand-ink">{item.product.name}</span>
                 </span>
-                <span className="text-sm text-gray-800">{item.product.name}</span>
+                <span className="text-sm font-medium text-brand-ink tabular-nums">{fmt(item.product.totalPrice * item.quantity)}</span>
               </div>
-              <span className="text-sm font-medium text-gray-900">
-                {(item.product.totalPrice * item.quantity).toFixed(2)}&nbsp;€
-              </span>
-            </div>
-            <div className="ml-9 mt-1">
               <input
                 type="text"
+                aria-label={`${t('Special instructions (optional)')} — ${item.product.name}`}
                 placeholder={t('Special instructions (optional)')}
                 value={item.notes ?? ''}
                 onChange={(e) => updateItemNotes(item.product.id, e.target.value)}
                 maxLength={200}
-                className="w-full text-xs text-gray-500 bg-transparent border-b border-gray-100 focus:border-gray-300 outline-none py-1 placeholder:text-gray-300"
+                className="mt-1.5 ml-7 w-[calc(100%-1.75rem)] border-0 border-b border-transparent bg-transparent py-1 text-xs text-brand-ink
+                           placeholder:text-brand-ink/40 focus:border-brand-ink/20 focus:outline-none"
               />
-            </div>
-          </div>
-        ))}
+            </li>
+          ))}
+        </ul>
 
-        {/* Order-level notes */}
-        <div className="mt-3">
-          <textarea
-            placeholder={t('Notes for the kitchen (optional)')}
-            value={orderNotes}
-            onChange={(e) => setOrderNotes(e.target.value)}
-            maxLength={500}
-            rows={2}
-            className="w-full text-xs text-gray-600 bg-gray-50 rounded-lg border border-gray-200 focus:border-gray-300 outline-none p-2 placeholder:text-gray-300 resize-none"
-          />
-        </div>
+        <textarea
+          aria-label={t('Notes for the kitchen (optional)')}
+          placeholder={t('Notes for the kitchen (optional)')}
+          value={orderNotes}
+          onChange={(e) => setOrderNotes(e.target.value)}
+          maxLength={500}
+          rows={2}
+          className="mt-2 mb-3 w-full resize-none rounded-xl bg-cream-light p-3 text-xs text-brand-ink ring-1 ring-brand-ink/[0.08]
+                     placeholder:text-brand-ink/40 focus:outline-none focus:ring-brand-ink/25"
+        />
       </div>
 
-      {/* Footer */}
-      <div className="border-t border-gray-200 px-5 pb-5 pt-3 space-y-3">
-        <div className="flex justify-between items-center">
-          <span className="text-base font-semibold text-gray-900">{t('Total')}</span>
-          <span className="text-base font-semibold text-gray-900">
-            {totalPrice.toFixed(2)}&nbsp;€
-          </span>
+      <div className="space-y-3 border-t border-brand-ink/[0.08] px-5 pt-3 pb-5">
+        <div className="flex items-baseline justify-between">
+          <span className="text-sm font-semibold text-brand-ink">{t('Total')}</span>
+          <span className="text-lg font-semibold text-brand-ink tabular-nums">{fmt(totalPrice)}</span>
         </div>
+        {isUnpaid && <p className="-mt-1 text-xs text-brand-ink/70">{t('You pay at the venue')}</p>}
         <button
           onClick={handlePlaceOrder}
           disabled={placing || basket.length === 0}
-          className="w-full py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold
-                     disabled:opacity-40 active:bg-gray-800 transition-colors"
+          className="flex h-12 w-full items-center justify-center rounded-xl bg-brand-ink text-sm font-semibold text-cream
+                     transition-colors hover:bg-brand-ink-hover active:bg-brand-ink-hover disabled:opacity-40"
         >
-          {placing ? t('Placing order') : isUnpaid ? t('Confirm Order') : t('Place Order')}
+          {placing
+            ? t('Placing order')
+            : <span className="tabular-nums">{isUnpaid ? t('Send order') : t('Continue to payment')}&ensp;·&ensp;{fmt(totalPrice)}</span>}
         </button>
       </div>
     </div>
   ) : (
-    <div className="flex items-center justify-between px-5 py-4">
-      <h3 className="text-lg font-semibold text-gray-900">{t('Order payment')}</h3>
-      <span className="text-lg font-semibold text-gray-900">
-        {totalPrice.toFixed(2)}&nbsp;€
-      </span>
+    <div className="px-5 pt-3 pb-4">
+      <div className="flex items-baseline justify-between">
+        <h3 className="text-lg font-semibold text-brand-ink">{t('Order payment')}</h3>
+        <span className="text-lg font-semibold text-brand-ink tabular-nums">{fmt(order.totalPrice)}</span>
+      </div>
+      <ul className="mt-2 space-y-1">
+        {basket.map(item => (
+          <li key={item.product.id} className="flex justify-between gap-3 text-xs text-brand-ink/70">
+            <span className="truncate">{item.quantity}× {item.product.name}</span>
+            <span className="tabular-nums">{fmt(item.product.totalPrice * item.quantity)}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 
@@ -263,7 +274,7 @@ export default function Menu({
     orderState === ORDER_PROCESSING || orderState === 'payment_in_progress' ? (
       !order ? (
         <div className="flex justify-center py-12">
-          <CircularProgress size={32} />
+          <CircularProgress size={28} sx={{ color: '#17323a' }} />
         </div>
       ) : (
         <OrderPaymentView
@@ -297,14 +308,17 @@ export default function Menu({
             if (catProducts.length === 0) return null
             return (
               <div key={cat}>
-                <h3 className="text-sm font-medium text-gray-500 mb-2 px-1">{CATEGORY_LABELS[cat]}</h3>
+                <h3 className="mb-3 flex items-center gap-3 px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-gold">
+                  {CATEGORY_LABELS[cat]}
+                  <span className="h-px flex-1 bg-brand-ink/10" aria-hidden="true" />
+                </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {catProducts.map(product => {
                     const qty = basket.find(b => b.product.id === product.id)?.quantity ?? 0
                     return (
                       <div
                         key={product.id}
-                        className="flex items-start gap-3 bg-white rounded-xl p-3 shadow-sm border border-gray-100"
+                        className="flex items-start gap-3 rounded-2xl bg-white p-3 ring-1 ring-brand-ink/[0.07]"
                       >
                         {/* Image */}
                         {product.imageUrl ? (
@@ -313,41 +327,43 @@ export default function Menu({
                             alt={product.name}
                             width={64}
                             height={64}
-                            className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
+                            className="w-16 h-16 rounded-xl object-cover flex-shrink-0"
                           />
                         ) : (
-                          <div className="w-16 h-16 rounded-lg bg-gray-50 flex-shrink-0" />
+                          <ProductPlaceholder category={product.category ?? 'food'} />
                         )}
 
                         {/* Info + controls */}
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">{product.name}</p>
+                          <p className="text-[15px] font-medium leading-snug text-brand-ink truncate">{product.name}</p>
                           {product.description && (
-                            <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{product.description}</p>
+                            <p className="text-xs leading-snug text-brand-ink/70 mt-0.5 line-clamp-2">{product.description}</p>
                           )}
                           <div className="flex items-center justify-between mt-2">
-                            <span className="text-sm font-semibold text-gray-900">
-                              {product.totalPrice.toFixed(2)}&nbsp;€
+                            <span className="text-sm font-semibold text-brand-ink tabular-nums">
+                              {fmt(product.totalPrice)}
                             </span>
                             <div className="flex items-center gap-1">
                               {qty > 0 && (
                                 <>
                                   <button
                                     onClick={() => updateQuantity(product, -1)}
-                                    className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center
-                                               text-gray-600 active:bg-gray-200 transition-colors"
+                                    aria-label={t('Remove one')}
+                                    className="w-8 h-8 rounded-full bg-white ring-1 ring-brand-ink/15 flex items-center justify-center
+                                               text-brand-ink hover:bg-cream-light active:bg-cream transition-colors"
                                   >
                                     <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
                                       <path d="M4 10a.75.75 0 01.75-.75h10.5a.75.75 0 010 1.5H4.75A.75.75 0 014 10z" />
                                     </svg>
                                   </button>
-                                  <span className="w-6 text-center text-sm font-medium text-gray-900">{qty}</span>
+                                  <span className="w-6 text-center text-sm font-semibold text-brand-ink tabular-nums">{qty}</span>
                                 </>
                               )}
                               <button
                                 onClick={() => updateQuantity(product, 1)}
-                                className="w-7 h-7 rounded-full bg-gray-900 flex items-center justify-center
-                                           text-white active:bg-gray-700 transition-colors"
+                                aria-label={t('Add one')}
+                                className="w-8 h-8 rounded-full bg-brand-ink flex items-center justify-center
+                                           text-cream hover:bg-brand-ink-hover active:bg-brand-ink-hover transition-colors"
                               >
                                 <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
                                   <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
@@ -366,52 +382,46 @@ export default function Menu({
         </div>
       )}
 
-      {/* Order-confirmed toast */}
-      <Snackbar
-        open={openConfirmation}
-        onClose={() => setOpenConfirmation(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        sx={{ bottom: 112 }}
-      >
-        <Alert onClose={() => setOpenConfirmation(false)} severity="success" sx={{ width: '100%' }}>
-          {t('Order received')}
-        </Alert>
-      </Snackbar>
+      {/* Order-confirmed toast — sits just above the order bar, auto-dismisses */}
+      {openConfirmation && (
+        <div className="fixed inset-x-4 bottom-[7.5rem] z-20 flex justify-center" role="status">
+          <div className="flex items-center gap-2.5 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800 shadow-[0_8px_24px_-12px_rgba(23,50,58,0.35)]">
+            <svg className="h-4 w-4 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path fillRule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-8 8a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4L8 12.58l7.3-7.3a1 1 0 0 1 1.4 0Z" clipRule="evenodd" />
+            </svg>
+            {t('Order received')}
+            <button onClick={() => setOpenConfirmation(false)} aria-label={t('Dismiss')} className="-mr-1 ml-1 rounded p-0.5 text-green-700/70 hover:text-green-800">
+              <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M5.3 5.3a1 1 0 0 1 1.4 0L10 8.6l3.3-3.3a1 1 0 1 1 1.4 1.4L11.4 10l3.3 3.3a1 1 0 0 1-1.4 1.4L10 11.4l-3.3 3.3a1 1 0 0 1-1.4-1.4L8.6 10 5.3 6.7a1 1 0 0 1 0-1.4Z" /></svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Fixed bottom bar */}
-      <div className="fixed bottom-12 inset-x-0 px-4 py-2.5 bg-white/95 backdrop-blur-sm border-t border-gray-100 flex items-center gap-2 z-10">
+      <div className="fixed bottom-12 inset-x-0 px-4 py-2.5 bg-cream/95 backdrop-blur-sm border-t border-brand-ink/10 flex items-center gap-2 z-10">
         <button
           onClick={() => { setDrawerContent('new-order'); setDrawerOpen(true) }}
           disabled={basket.length === 0}
-          className="flex-1 flex items-center justify-center gap-2.5 h-11 rounded-xl bg-gray-900 text-white text-sm font-semibold
-                     disabled:opacity-30 active:bg-gray-800 transition-colors"
+          className="flex-1 flex items-center justify-center gap-2.5 h-11 rounded-xl bg-brand-ink text-cream text-sm font-semibold
+                     disabled:opacity-30 hover:bg-brand-ink-hover active:bg-brand-ink-hover transition-colors"
         >
-          <Badge
-            badgeContent={totalItems}
-            color="secondary"
-            sx={{ '& .MuiBadge-badge': { fontSize: 10, minWidth: 18, height: 18 } }}
-          >
+          <span className="relative mr-2 inline-flex">
             <ShoppingCartIcon sx={{ fontSize: 18 }} />
-          </Badge>
-          <span>{isUnpaid ? t('Order') : t('Checkout')}&ensp;–&ensp;{totalPrice.toFixed(2)}&nbsp;€</span>
+            {totalItems > 0 && <CountBubble count={totalItems} className="bg-cream text-brand-ink" />}
+          </span>
+          <span className="tabular-nums">{isUnpaid ? t('Order') : t('Checkout')}&ensp;·&ensp;{fmt(totalPrice)}</span>
         </button>
 
         <button
           onClick={handleOpenOrders}
-          className="h-11 w-11 rounded-xl border border-gray-200 bg-white flex items-center justify-center
-                     text-gray-600 active:bg-gray-50 transition-colors"
+          aria-label={t('Your orders')}
+          className="h-11 w-11 rounded-xl bg-white ring-1 ring-brand-ink/15 flex items-center justify-center
+                     text-brand-ink hover:bg-cream-light active:bg-cream transition-colors"
         >
-          {currentOrders.length > 0 ? (
-            <Badge
-              badgeContent={currentOrders.length}
-              color="error"
-              sx={{ '& .MuiBadge-badge': { fontSize: 10, minWidth: 16, height: 16 } }}
-            >
-              <ListAltIcon sx={{ fontSize: 20 }} />
-            </Badge>
-          ) : (
+          <span className="relative inline-flex">
             <ListAltIcon sx={{ fontSize: 20 }} />
-          )}
+            {currentOrders.length > 0 && <CountBubble count={currentOrders.length} className="bg-brand-ink text-cream" />}
+          </span>
         </button>
       </div>
 
@@ -420,11 +430,47 @@ export default function Menu({
         anchor="bottom"
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        PaperProps={{ sx: { borderTopLeftRadius: 16, borderTopRightRadius: 16 } }}
+        PaperProps={{ sx: { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '85dvh' } }}
       >
-        <div className="w-12 h-1 rounded-full bg-gray-300 mx-auto mt-2 mb-1" />
+        <div className="mx-auto mt-2.5 mb-1 h-1 w-10 rounded-full bg-brand-ink/15" aria-hidden="true" />
         {drawerContent === 'new-order' ? paymentContent : <Orders orders={currentOrders} reservationId={reservationId} />}
       </Drawer>
+    </div>
+  )
+}
+
+/** Item count on an icon — replaces MUI Badge (whose palette colours clashed). */
+function CountBubble({ count, className }: { count: number; className: string }) {
+  return (
+    <span
+      className={`absolute -right-2.5 -top-2 grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 text-[10px] font-bold leading-none tabular-nums ${className}`}
+    >
+      {count}
+    </span>
+  )
+}
+
+/** Drawn stand-in for a product without a photo: a plate for food, a glass for drinks. */
+function ProductPlaceholder({ category }: { category: string }) {
+  const drink = category === 'drink'
+  return (
+    <div className="grid h-16 w-16 flex-shrink-0 place-items-center rounded-xl bg-cream-dark" aria-hidden="true">
+      <svg viewBox="0 0 32 32" className="h-7 w-7 text-brand-gold/70" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+        {drink ? (
+          <>
+            <path d="M10 6h12l-1.6 19.2A2 2 0 0 1 18.4 27h-4.8a2 2 0 0 1-2-1.8L10 6Z" />
+            <path d="M10.6 12h10.8" />
+          </>
+        ) : (
+          <>
+            {/* plate, fork left, knife right */}
+            <circle cx="16" cy="16" r="7.5" />
+            <circle cx="16" cy="16" r="4.5" />
+            <path d="M5 6v20M3.5 6v4.5a1.5 1.5 0 0 0 3 0V6" />
+            <path d="M27.5 26V6c-1.7 1-2.5 3.3-2.5 6.5V15h2.5" />
+          </>
+        )}
+      </svg>
     </div>
   )
 }

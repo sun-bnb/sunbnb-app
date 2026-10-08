@@ -103,7 +103,12 @@
     "Returned at": "Palautettu",
     "Cancel booking": "Peruuta varaus",
     "Canceling": "Peruutetaan…",
-    "Cancel failed": "Peruutus epäonnistui — ota yhteyttä tukeen"
+    "Cancel failed": "Peruutus epäonnistui — ota yhteyttä tukeen",
+    "PAID ONLINE": "MAKSETTU VERKOSSA",
+    "PAY AT THE VENUE": "MAKSETAAN PAIKAN PÄÄLLÄ",
+    "Nothing has been charged — you pay at the venue when you arrive": "Mitään ei ole veloitettu – maksat paikan päällä saapuessasi.",
+    "Confirmation emailed to {email}": "Lähetimme vahvistuksen osoitteeseen {email}",
+    "Sunbed reservation": "Aurinkotuolivaraus"
   },
   "Payment": {
     "Payment confirms acceptance of": "Maksu vahvistaa suostumisen",
@@ -114,7 +119,9 @@
     "Cancel reservation": "Peruuta varaus",
     "Payment failed — please try again": "Maksu epäonnistui — yritä uudelleen",
     "An unexpected error occurred": "Tapahtui odottamaton virhe",
-    "Demo mode — click Pay now to simulate payment": "Demotila — klikkaa Maksa nyt simuloidaksesi maksun"
+    "Demo mode — click Pay now to simulate payment": "Demotila — klikkaa Maksa nyt simuloidaksesi maksun",
+    "Demo mode — no card is charged": "Demotila – korttia ei veloiteta",
+    "Pay {amount}": "Maksa {amount}"
   },
   "ForgotPassword": {
     "Forgot your password": "Unohditko salasanasi?",
@@ -194,7 +201,14 @@
     "Snacks": "Naposteltavat",
     "Accessories": "Tarvikkeet",
     "item": "tuote",
-    "items": "tuotetta"
+    "items": "tuotetta",
+    "Add one": "Lisää yksi",
+    "Remove one": "Poista yksi",
+    "Your orders": "Tilauksesi",
+    "You pay at the venue": "Maksat paikan päällä",
+    "Send order": "Lähetä tilaus",
+    "Continue to payment": "Jatka maksamaan",
+    "Dismiss": "Sulje"
   },
   "PaymentComplete": {
     "Processing payment": "Käsitellään maksua...",
@@ -349,5 +363,27 @@
     "cancelNo": "Säilytä varaus",
     "guest": "vieras",
     "guests": "vierasta"
+  },
+  "Orders": {
+    "Your orders": "Tilauksesi",
+    "No orders yet": "Ei vielä tilauksia",
+    "Order": "Tilaus",
+    "Total": "Yhteensä",
+    "Including VAT {amount}": "sis. ALV {amount}",
+    "View receipt": "Näytä kuitti",
+    "item": "tuote",
+    "items": "tuotetta",
+    "Awaiting payment": "Odottaa maksua",
+    "Processing payment": "Maksua käsitellään",
+    "Received": "Vastaanotettu",
+    "Accepted": "Hyväksytty",
+    "Preparing": "Valmistetaan",
+    "Ready": "Valmis",
+    "Delivered": "Toimitettu",
+    "Done": "Valmis",
+    "Payment failed": "Maksu epäonnistui",
+    "Rejected": "Hylätty",
+    "Canceled": "Peruttu",
+    "Refunded": "Hyvitetty"
   }
 }

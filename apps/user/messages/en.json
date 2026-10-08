@@ -104,7 +104,12 @@
     "Returned at": "Returned at",
     "Cancel booking": "Cancel booking",
     "Canceling": "Canceling…",
-    "Cancel failed": "Cancellation failed — please contact support"
+    "Cancel failed": "Cancellation failed — please contact support",
+    "PAID ONLINE": "PAID ONLINE",
+    "PAY AT THE VENUE": "PAY AT THE VENUE",
+    "Nothing has been charged — you pay at the venue when you arrive": "Nothing has been charged — you pay at the venue when you arrive.",
+    "Confirmation emailed to {email}": "We emailed your confirmation to {email}",
+    "Sunbed reservation": "Sunbed reservation"
   },
   "Payment": {
     "Payment confirms acceptance of": "Payment confirms acceptance of",
@@ -115,7 +120,9 @@
     "Cancel reservation": "Cancel reservation",
     "Payment failed — please try again": "Payment failed — please try again",
     "An unexpected error occurred": "An unexpected error occurred",
-    "Demo mode — click Pay now to simulate payment": "Demo mode — click Pay now to simulate payment"
+    "Demo mode — click Pay now to simulate payment": "Demo mode — click Pay now to simulate payment",
+    "Demo mode — no card is charged": "Demo mode — no card is charged",
+    "Pay {amount}": "Pay {amount}"
   },
   "ForgotPassword": {
     "Forgot your password": "Forgot your password?",
@@ -195,7 +202,14 @@
     "Snacks": "Snacks",
     "Accessories": "Accessories",
     "item": "item",
-    "items": "items"
+    "items": "items",
+    "Add one": "Add one",
+    "Remove one": "Remove one",
+    "Your orders": "Your orders",
+    "You pay at the venue": "You pay at the venue",
+    "Send order": "Send order",
+    "Continue to payment": "Continue to payment",
+    "Dismiss": "Dismiss"
   },
   "PaymentComplete": {
     "Processing payment": "Processing payment…",
@@ -350,5 +364,27 @@
     "cancelNo": "Keep reservation",
     "guest": "guest",
     "guests": "guests"
+  },
+  "Orders": {
+    "Your orders": "Your orders",
+    "No orders yet": "No orders yet",
+    "Order": "Order",
+    "Total": "Total",
+    "Including VAT {amount}": "Including VAT {amount}",
+    "View receipt": "View receipt",
+    "item": "item",
+    "items": "items",
+    "Awaiting payment": "Awaiting payment",
+    "Processing payment": "Processing payment",
+    "Received": "Received",
+    "Accepted": "Accepted",
+    "Preparing": "Preparing",
+    "Ready": "Ready",
+    "Delivered": "Delivered",
+    "Done": "Done",
+    "Payment failed": "Payment failed",
+    "Rejected": "Rejected",
+    "Canceled": "Canceled",
+    "Refunded": "Refunded"
   }
 }

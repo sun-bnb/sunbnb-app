@@ -49,6 +49,14 @@ Consumer-facing + **mobile-first**, so it diverges from partner:
   (shared gradients). The per-seat QR page (`pos/[itemId]`) still uses the PNGs. The marketing site
   paints the same art on canvas (`paintBed`/`paintParasol`, `@repo/schematic/art`) — change the look in
   `bed-art.ts` and both surfaces follow.
+- **Reservation view (`app/reservations/[id]/` + `components/reservation/confirmation/view.tsx`):** one
+  cream page under both swipe pages (ticket + menu). Dark tone is `brand-ink` (`#17323a`, the landing's
+  sea-pine; `brand-ink-hover`), accents `brand-gold`; muted text is `brand-ink/70` (≥4.5:1 on white —
+  gray-400/500 fail on cream). The ticket: gold small-caps eyebrow, venue name in Fraunces, status as a
+  green/blue/amber/red pill, details in a 2-col `dl`, hairlines `brand-ink/[0.06–0.15]`. The page's one
+  dark CTA is the ink "Food & Drinks" bar; on the menu the Order button is, so "Back to reservation" is a
+  quiet cream bar. Menu cards are white with `ring-brand-ink/[0.07]`, no shadow; photo-less products get
+  a drawn plate/glass placeholder; counts are Tailwind bubbles, not MUI `Badge`.
 - **MUI + Tailwind coexist** (per the stack); migrate off MUI opportunistically, same stance as partner.
 - Shared building blocks usable here: `Toggle` (`@repo/table-reservations-ui`), `SaveStatusBanner`
   (`@repo/schematic-editor`); consumer table-booking components live in

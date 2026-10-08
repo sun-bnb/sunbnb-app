@@ -103,7 +103,12 @@
     "Returned at": "Devuelto el",
     "Cancel booking": "Cancelar reserva",
     "Canceling": "Cancelando…",
-    "Cancel failed": "La cancelación ha fallado — contacta con soporte"
+    "Cancel failed": "La cancelación ha fallado — contacta con soporte",
+    "PAID ONLINE": "PAGADO ONLINE",
+    "PAY AT THE VENUE": "PAGO EN EL LOCAL",
+    "Nothing has been charged — you pay at the venue when you arrive": "No se ha cobrado nada: pagas en el local al llegar.",
+    "Confirmation emailed to {email}": "Te hemos enviado la confirmación a {email}",
+    "Sunbed reservation": "Reserva de hamaca"
   },
   "Payment": {
     "Payment confirms acceptance of": "El pago implica aceptación de",
@@ -114,7 +119,9 @@
     "Cancel reservation": "Cancelar reserva",
     "Payment failed — please try again": "Pago fallido — inténtalo de nuevo",
     "An unexpected error occurred": "Se ha producido un error inesperado",
-    "Demo mode — click Pay now to simulate payment": "Modo demo — haz clic en Pagar ahora para simular el pago"
+    "Demo mode — click Pay now to simulate payment": "Modo demo — haz clic en Pagar ahora para simular el pago",
+    "Demo mode — no card is charged": "Modo demo: no se cobra ninguna tarjeta",
+    "Pay {amount}": "Pagar {amount}"
   },
   "ForgotPassword": {
     "Forgot your password": "¿Olvidaste tu contraseña?",
@@ -194,7 +201,14 @@
     "Snacks": "Snacks",
     "Accessories": "Accesorios",
     "item": "artículo",
-    "items": "artículos"
+    "items": "artículos",
+    "Add one": "Añadir uno",
+    "Remove one": "Quitar uno",
+    "Your orders": "Tus pedidos",
+    "You pay at the venue": "Pagas en el local",
+    "Send order": "Enviar pedido",
+    "Continue to payment": "Continuar al pago",
+    "Dismiss": "Cerrar"
   },
   "PaymentComplete": {
     "Processing payment": "Procesando pago...",
@@ -349,5 +363,27 @@
     "cancelNo": "Mantener reserva",
     "guest": "comensal",
     "guests": "comensales"
+  },
+  "Orders": {
+    "Your orders": "Tus pedidos",
+    "No orders yet": "Aún no hay pedidos",
+    "Order": "Pedido",
+    "Total": "Total",
+    "Including VAT {amount}": "IVA incluido {amount}",
+    "View receipt": "Ver recibo",
+    "item": "artículo",
+    "items": "artículos",
+    "Awaiting payment": "Pendiente de pago",
+    "Processing payment": "Procesando el pago",
+    "Received": "Recibido",
+    "Accepted": "Aceptado",
+    "Preparing": "En preparación",
+    "Ready": "Listo",
+    "Delivered": "Entregado",
+    "Done": "Completado",
+    "Payment failed": "Pago fallido",
+    "Rejected": "Rechazado",
+    "Canceled": "Cancelado",
+    "Refunded": "Reembolsado"
   }
 }

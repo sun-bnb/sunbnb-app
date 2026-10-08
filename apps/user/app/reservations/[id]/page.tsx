@@ -1,5 +1,7 @@
 import prisma from '@repo/data/PrismaCient'
 import { resolveSiteFees } from '@repo/data/payment'
+import { reservationListPrice } from '@repo/data/reservation-price'
+import { RESERVATION_COMPLETE } from '@repo/data/reservation-status'
 import { auth } from '@/app/auth'
 import ReservationView from './view'
 import { Order } from '@/app/types/types'
@@ -93,6 +95,26 @@ export default async function ReservationPage({ params, searchParams }: { params
   const siteType = reservation.site.type ?? 'paid'
   const orderPaymentType = (reservation.site as any).orderPaymentType ?? siteType
 
-  return <ReservationView signedIn={signedIn} showTerms={terms === 'true'} serviceFee={serviceFee} siteType={siteType} orderPaymentType={orderPaymentType} paymentProvider={reservation.site.paymentProvider} reservation={reservation} apiKey={apiKey} order={order} />
+  // An off-platform-billing (unpaid) site completes bookings without charging,
+  // so paymentAmount is 0 — state what the guest pays at the venue instead.
+  // Same formula the booking action charges with (reservationListPrice).
+  const amountDue = !reservation.paymentAmount && reservation.site.type === 'unpaid'
+    ? reservationListPrice({
+        sitePrice: reservation.site.price,
+        itemPrices: reservation.items.map(i => i.price),
+        from: reservation.from,
+        to: reservation.to,
+      }) || null
+    : null
+
+  // Where the confirmation went: sendConfirmationEmail fires once a booking is
+  // COMPLETE (after payment, or at creation for an unpaid site) to the guest
+  // email for an anonymous booking, the account email otherwise. QR/POS
+  // walk-ins give no email, so there is nothing to claim.
+  const confirmationEmail = reservation.status === RESERVATION_COMPLETE
+    ? (reservation.anonId ? reservation.guestEmail : session?.user?.email) ?? null
+    : null
+
+  return <ReservationView signedIn={signedIn} showTerms={terms === 'true'} serviceFee={serviceFee} siteType={siteType} orderPaymentType={orderPaymentType} paymentProvider={reservation.site.paymentProvider} reservation={reservation} apiKey={apiKey} order={order} amountDue={amountDue} confirmationEmail={confirmationEmail} />
 
 }

@@ -5,8 +5,10 @@ import logger from '@/utils/logger'
 import { requestReceipt } from '@/app/reservations/[id]/receipt/actions'
 
 import LaunchIcon from '@mui/icons-material/Launch'
+import MailOutlineIcon from '@mui/icons-material/MailOutline'
 import CircularProgress from '@mui/material/CircularProgress'
 import { useTranslations } from 'next-intl'
+import { Fraunces } from 'next/font/google'
 import { useSession } from 'next-auth/react'
 import { Reservation } from '@/app/sites/types'
 import {
@@ -19,30 +21,45 @@ import {
 } from '@repo/data/reservation-status'
 import { formatSeatId } from '@repo/data/seat-label'
 
-const STATUS_CONFIG: {
-  [key: string]: {
-    text: string
-    textColor: string
-    dotColor: string
-  }
-} = {
-  [RESERVATION_COMPLETE]:  { text: 'PAID',             textColor: '#118811', dotColor: '#22c55e' },
-  reserved:  { text: 'RESERVED',         textColor: '#1e40af', dotColor: '#3b82f6' },
-  [RESERVATION_PROCESSING]:{ text: 'Processing',       textColor: '#6b7280', dotColor: '#9ca3af' },
-  confirmed: { text: 'Confirmed',        textColor: '#1e40af', dotColor: '#3b82f6' },
-  default:   { text: 'Pending',          textColor: '#6b7280', dotColor: '#9ca3af' },
-  [RESERVATION_PENDING]:   { text: 'Pending',          textColor: '#6b7280', dotColor: '#9ca3af' },
-  [RESERVATION_PAYMENT_FAILED]: { text: 'Payment failed', textColor: '#dc2626', dotColor: '#ef4444' },
-  [RESERVATION_CANCELED]:  { text: 'Canceled',         textColor: '#dc2626', dotColor: '#ef4444' },
-  [RESERVATION_REFUNDED]:  { text: 'Refunded',         textColor: '#6b7280', dotColor: '#9ca3af' },
+// Status = green / blue / amber / red pills (.claude/rules/ui.md).
+const PILL = {
+  green: 'bg-green-50 border-green-200 text-green-700',
+  blue: 'bg-blue-50 border-blue-200 text-blue-700',
+  amber: 'bg-amber-50 border-amber-200 text-amber-700',
+  red: 'bg-red-50 border-red-200 text-red-700',
+} as const
+const DOT = { green: 'bg-green-500', blue: 'bg-blue-500', amber: 'bg-amber-500', red: 'bg-red-500' } as const
+
+const STATUS_CONFIG: Record<string, { text: string; tone: keyof typeof PILL }> = {
+  [RESERVATION_COMPLETE]:  { text: 'PAID', tone: 'green' },
+  reserved:                { text: 'RESERVED', tone: 'blue' },
+  confirmed:               { text: 'Confirmed', tone: 'blue' },
+  [RESERVATION_PROCESSING]:{ text: 'Processing', tone: 'amber' },
+  [RESERVATION_PENDING]:   { text: 'Pending', tone: 'amber' },
+  default:                 { text: 'Pending', tone: 'amber' },
+  [RESERVATION_PAYMENT_FAILED]: { text: 'Payment failed', tone: 'red' },
+  [RESERVATION_CANCELED]:  { text: 'Canceled', tone: 'red' },
+  [RESERVATION_REFUNDED]:  { text: 'Refunded', tone: 'amber' },
 }
+
+// The landing page's display face, for the venue name on the ticket.
+const display = Fraunces({ subsets: ['latin'], axes: ['SOFT', 'opsz'], display: 'swap' })
+
+/** Small caps label above a value — ink at 70% keeps ≥4.5:1 on white. */
+const LABEL = 'text-[10px] font-medium uppercase tracking-[0.16em] text-brand-ink/70'
 
 export default function ReservationConfirmationView({
   reservation,
-  processingStatus
+  processingStatus,
+  amountDue,
+  confirmationEmail,
 } : {
   reservation: Reservation,
   processingStatus?: string
+  /** Owed at the venue for an off-platform-billing booking (nothing was charged). */
+  amountDue?: number | null
+  /** Address the confirmation email went to; omitted when none was sent. */
+  confirmationEmail?: string | null
 }) {
 
   const t = useTranslations('Reservation')
@@ -101,58 +118,84 @@ export default function ReservationConfirmationView({
   const seats = reservation.items?.map(item => formatSeatId(item)).join(', ')
   const showReceipt = status === RESERVATION_COMPLETE && !isUnpaid
 
-  return (
-    <div id="payment-status" className="bg-cream min-h-full flex items-center justify-center px-5 py-8">
-      <div className="w-full max-w-xs rounded-2xl bg-white shadow-card overflow-hidden">
+  const paidAmount = reservation.paymentAmount ?? 0
 
-        {/* ── Header: site + status ── */}
-        <div className="px-6 pt-8 pb-5 text-center">
-          <h1 className="text-xl font-bold tracking-tight text-brand-gold leading-snug">
+  return (
+    <div id="payment-status" className="min-h-full flex items-start sm:items-center justify-center px-5 pt-4 pb-10">
+      <article className="w-full max-w-sm overflow-hidden rounded-[22px] bg-white ring-1 ring-brand-ink/[0.07]
+                          shadow-[0_1px_2px_rgba(23,50,58,0.05),0_18px_40px_-18px_rgba(23,50,58,0.28)]">
+
+        {/* ── Header: what this is, where, and its state ── */}
+        <header className="px-6 pt-6 pb-5">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-gold">
+              {t('Sunbed reservation')}
+            </span>
+            <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold tracking-wide ${PILL[cfg.tone]}`}>
+              {effectiveStatus === RESERVATION_PROCESSING ? (
+                <CircularProgress size={10} thickness={6} sx={{ color: 'currentColor' }} />
+              ) : (
+                <span className={`h-1.5 w-1.5 rounded-full ${DOT[cfg.tone]}`} aria-hidden="true" />
+              )}
+              {ts(cfg.text)}
+            </span>
+          </div>
+          <h1 className={`${display.className} mt-3 text-[28px] leading-[1.1] text-brand-ink text-balance`}>
             {reservation.site?.name}
           </h1>
-          <div className="mt-3 inline-flex items-center gap-1.5" style={{ color: cfg.textColor }}>
-            {effectiveStatus === RESERVATION_PROCESSING ? (
-              <CircularProgress size={12} thickness={5} sx={{ color: cfg.textColor }} />
-            ) : (
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: cfg.dotColor }} />
-            )}
-            <span className="text-xs font-semibold tracking-wide">{ts(cfg.text)}</span>
-          </div>
-        </div>
+        </header>
 
-        {/* ── Perforated divider ── */}
-        <div className="relative h-6 flex items-center">
-          <div className="absolute -left-3 w-6 h-6 rounded-full bg-cream" />
-          <div className="absolute -right-3 w-6 h-6 rounded-full bg-cream" />
-          <div className="w-full border-t-2 border-dashed border-neutral-200 mx-5" />
+        {/* ── Perforation: notches take the page colour ── */}
+        <div className="relative flex h-5 items-center" aria-hidden="true">
+          <div className="absolute -left-2.5 h-5 w-5 rounded-full bg-cream ring-1 ring-inset ring-brand-ink/[0.07]" />
+          <div className="absolute -right-2.5 h-5 w-5 rounded-full bg-cream ring-1 ring-inset ring-brand-ink/[0.07]" />
+          <div className="mx-5 w-full border-t border-dashed border-brand-ink/15" />
         </div>
 
         {/* ── Details ── */}
-        <div className="px-6 pt-3 pb-5 text-center space-y-3">
-          {/* Seats */}
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-neutral-400 mb-0.5">{t('SEATS')}</div>
-            <div className="text-2xl font-bold text-brand-gold tabular-nums">{seats}</div>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-5 px-6 pt-5 pb-6">
+          <div className="col-span-2">
+            <dt className={LABEL}>{t('SEATS')}</dt>
+            <dd className="mt-1 text-[22px] font-semibold leading-tight tracking-tight text-brand-ink tabular-nums">{seats}</dd>
           </div>
-          {/* Date */}
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-neutral-400 mb-0.5">{t('VALID')}</div>
-            <div className="text-sm font-medium text-neutral-700">{validity}</div>
+            <dt className={LABEL}>{t('VALID')}</dt>
+            <dd className="mt-1 text-sm font-medium text-brand-ink">{validity}</dd>
           </div>
-          {/* Amount */}
-          {reservation.paymentAmount && reservation.paymentAmount > 0 && (
-            <div className="text-sm text-neutral-500">
-              €{reservation.paymentAmount.toFixed(2)}
+          {/* Amount — booleans, not `amount && …`: a 0 amount rendered as a stray "0". */}
+          {paidAmount > 0 ? (
+            <div className="text-right">
+              <dt className={LABEL}>{status === RESERVATION_COMPLETE ? t('PAID ONLINE') : t('Amount')}</dt>
+              <dd className="mt-1 text-sm font-semibold text-brand-ink tabular-nums">€{paidAmount.toFixed(2)}</dd>
             </div>
-          )}
-        </div>
+          ) : amountDue ? (
+            <div className="text-right">
+              <dt className={LABEL}>{t('PAY AT THE VENUE')}</dt>
+              <dd className="mt-1 text-lg font-semibold leading-none text-brand-ink tabular-nums">€{amountDue.toFixed(2)}</dd>
+            </div>
+          ) : null}
+        </dl>
 
-        {/* ── Receipt footer ── */}
+        {amountDue && !(paidAmount > 0) ? (
+          <p className="mx-6 mb-6 -mt-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-snug text-amber-800">
+            {t('Nothing has been charged — you pay at the venue when you arrive')}
+          </p>
+        ) : null}
+
+        {/* ── Where the confirmation went ── */}
+        {confirmationEmail && (
+          <div className="flex items-center justify-center gap-2 border-t border-brand-ink/[0.06] px-6 py-3.5 text-xs text-brand-ink/70" role="status">
+            <MailOutlineIcon sx={{ fontSize: 15 }} aria-hidden="true" />
+            <span className="min-w-0 break-words">{t('Confirmation emailed to {email}', { email: confirmationEmail })}</span>
+          </div>
+        )}
+
+        {/* ── Receipt ── */}
         {showReceipt && (
           <button
             onClick={() => window.open(authUrl(`/reservations/${reservation.id}/receipt`), '_blank')}
-            className="w-full border-t border-neutral-100 px-6 py-3 flex items-center justify-center gap-1.5
-                       text-xs font-medium text-neutral-500 hover:bg-neutral-50 active:bg-neutral-100 transition-colors"
+            className="flex w-full items-center justify-center gap-1.5 border-t border-brand-ink/[0.06] px-6 py-3.5
+                       text-xs font-semibold text-brand-ink hover:bg-cream-light active:bg-cream transition-colors"
           >
             {t('Open receipt')}
             <LaunchIcon sx={{ fontSize: 14 }} />
@@ -161,12 +204,12 @@ export default function ReservationConfirmationView({
 
         {/* ── Email-me-a-receipt — anonymous viewers only ── */}
         {showReceipt && !session?.user?.id && (
-          <div className="border-t border-neutral-100 px-6 py-4">
+          <div className="border-t border-brand-ink/[0.06] px-6 py-4">
             {receiptSent ? (
-              <p className="text-xs text-center text-green-700 font-medium">{t('Receipt sent')}</p>
+              <p className="text-center text-xs font-medium text-green-700" role="status">{t('Receipt sent')}</p>
             ) : (
               <form onSubmit={handleEmailReceipt} className="flex flex-col gap-2">
-                <label htmlFor="receipt-email" className="text-[10px] uppercase tracking-widest text-neutral-400 text-center">
+                <label htmlFor="receipt-email" className={`${LABEL} text-center`}>
                   {t('Email me a receipt')}
                 </label>
                 <input
@@ -177,13 +220,13 @@ export default function ReservationConfirmationView({
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder={t('Enter your email')}
-                  className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                  className="w-full rounded-lg border border-brand-ink/15 px-3 py-2 text-sm text-brand-ink focus:border-brand-ink/40 focus:outline-none focus:ring-2 focus:ring-brand-ink/10"
                 />
-                {receiptError && <p className="text-xs text-red-600 text-center" role="status">{receiptError}</p>}
+                {receiptError && <p className="text-center text-xs text-red-600" role="status">{receiptError}</p>}
                 <button
                   type="submit"
                   disabled={isSending || email.trim().length === 0}
-                  className="w-full rounded-lg bg-brand-gold py-2 text-sm font-semibold text-white active:scale-95 transition-transform disabled:opacity-50"
+                  className="w-full rounded-lg bg-brand-ink py-2 text-sm font-semibold text-cream transition-colors hover:bg-brand-ink-hover disabled:opacity-40"
                 >
                   {isSending ? '…' : t('Email receipt')}
                 </button>
@@ -192,7 +235,7 @@ export default function ReservationConfirmationView({
           </div>
         )}
 
-      </div>
+      </article>
     </div>
   )
 }

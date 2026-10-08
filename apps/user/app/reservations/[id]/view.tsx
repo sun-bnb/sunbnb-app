@@ -21,6 +21,10 @@ interface ReservationViewProps {
   siteType?: string
   orderPaymentType?: string
   paymentProvider?: string
+  /** Owed at the venue for an off-platform-billing booking (nothing was charged). */
+  amountDue?: number | null
+  /** Address the confirmation email went to; null when none was sent. */
+  confirmationEmail?: string | null
   serviceFee: {
     chargeType: string
     feeAmount?: number | null
@@ -28,7 +32,7 @@ interface ReservationViewProps {
   } | undefined
 }
 
-export default function ReservationView({ serviceFee, siteType, orderPaymentType, showTerms, signedIn, reservation, order, paymentProvider }: ReservationViewProps) {
+export default function ReservationView({ serviceFee, siteType, orderPaymentType, showTerms, signedIn, reservation, order, paymentProvider, amountDue, confirmationEmail }: ReservationViewProps) {
 
   const t = useTranslations('Reservations')
   const containerRef = useRef<HTMLDivElement>(null)
@@ -133,11 +137,18 @@ export default function ReservationView({ serviceFee, siteType, orderPaymentType
         }}
       >
         {/* Page 0: Reservation */}
-        <div className="flex flex-col w-full" style={{ height: '100dvh', paddingTop: signedIn ? '80px' : '0px' }}>
-          {signedIn && (
-            <Link href="/reservations" className="ml-5 mt-2 mb-1 flex items-center gap-1 text-sm text-brand-gold self-start">
+        {/* The app header is shown for everyone (app.tsx), so both pages clear it. */}
+        <div className="flex flex-col w-full" style={{ height: '100dvh', paddingTop: '80px' }}>
+          {signedIn ? (
+            <Link href="/reservations" className="ml-5 mt-3 mb-1 flex items-center gap-1 text-sm font-medium text-brand-ink/70 hover:text-brand-ink self-start">
               <ArrowBackIcon sx={{ fontSize: 18 }} />
               <span>{t('Reservations')}</span>
+            </Link>
+          ) : reservation.site?.id && (
+            // A guest has no reservations list — the way out is back to the beach.
+            <Link href={`/sites/${reservation.site.id}`} className="ml-5 mt-3 mb-1 flex items-center gap-1 text-sm font-medium text-brand-ink/70 hover:text-brand-ink self-start">
+              <ArrowBackIcon sx={{ fontSize: 18 }} />
+              <span>{reservation.site.name}</span>
             </Link>
           )}
           <div
@@ -149,13 +160,13 @@ export default function ReservationView({ serviceFee, siteType, orderPaymentType
             className="overflow-y-auto flex-1"
             style={{ overscrollBehavior: 'contain' }}
           >
-            <ReservationConfirmationView reservation={reservation} />
+            <ReservationConfirmationView reservation={reservation} amountDue={amountDue} confirmationEmail={confirmationEmail} />
           </div>
           {serviceFee && (
             <button
               onClick={() => goToPage(1)}
-              className="h-12 w-full bg-brand-cyan text-cream font-semibold text-sm tracking-widest uppercase
-                         active:bg-brand-cyan-dark transition-colors flex items-center justify-center gap-2"
+              className="h-12 w-full bg-brand-ink text-cream font-semibold text-[13px] tracking-[0.16em] uppercase
+                         hover:bg-brand-ink-hover active:bg-brand-ink-hover transition-colors flex items-center justify-center gap-2"
             >
               <span>{t('Food & Drinks')}</span>
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -166,7 +177,7 @@ export default function ReservationView({ serviceFee, siteType, orderPaymentType
         </div>
 
         {/* Page 1: Menu */}
-        <div className="flex flex-col w-full bg-white" style={{ height: '100dvh', paddingTop: signedIn ? '80px' : '0px' }}>
+        <div className="flex flex-col w-full bg-cream" style={{ height: '100dvh', paddingTop: '80px' }}>
           <div
             ref={menuRef}
             className="overflow-y-auto flex-1"
@@ -184,8 +195,8 @@ export default function ReservationView({ serviceFee, siteType, orderPaymentType
           </div>
           <button
             onClick={() => goToPage(0)}
-            className="h-12 w-full bg-brand-cyan text-cream font-semibold text-sm tracking-widest uppercase
-                       active:bg-brand-cyan-dark transition-colors flex items-center justify-center gap-2"
+            className="h-12 w-full bg-cream border-t border-brand-ink/10 text-brand-ink font-semibold text-[13px] tracking-[0.16em] uppercase
+                       hover:bg-cream-dark active:bg-cream-dark transition-colors flex items-center justify-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
