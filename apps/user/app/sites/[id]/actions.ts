@@ -5,6 +5,8 @@ import dayjs from 'dayjs'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { reserveWithConflictGuard, createRentalBookingsWithGuard } from '@repo/data/reservations'
+import { reservationListPrice } from '@repo/data/reservation-price'
+import { sendConfirmationEmail } from '@repo/data/reservation-emails'
 import { siteAnchoredDay } from '@repo/data/site-day'
 import { getAvailabilityForItems } from '@/service/availabilityService'
 import { isValidEntityId } from '@/app/api/_lib/payment-ids'
@@ -175,11 +177,9 @@ export async function saveReservationForMultipleItems(
   // Determine status server-side: only explicitly 'paid' sites enter the payment flow
   const status = site.type === 'paid' ? RESERVATION_PENDING : RESERVATION_COMPLETE
 
-  const timeBetween = to.getTime() - from.getTime()
-  const daysBetween = Math.round(timeBetween / (1000 * 60 * 60 * 24))
-
-  // Fetch item prices from DB — never trust client-supplied prices
-  let totalPrice = 0
+  // Fetch item prices from DB — never trust client-supplied prices. One
+  // formula with the confirmation page and email (`reservationListPrice`).
+  let paymentAmount = 0
   if (site.type === 'paid' && reservation.items?.length) {
     const itemIds = reservation.items.map(i => i.id)
     const dbItems = await prisma.inventoryItem.findMany({
@@ -187,13 +187,13 @@ export async function saveReservationForMultipleItems(
       select: { id: true, price: true },
     })
     const dbItemMap = new Map(dbItems.map(i => [i.id, i]))
-    totalPrice = reservation.items.reduce((sum, item) => {
-      const dbItem = dbItemMap.get(item.id)
-      return sum + ((dbItem?.price ?? null) || site.price || 0)
-    }, 0)
+    paymentAmount = reservationListPrice({
+      sitePrice: site.price,
+      itemPrices: reservation.items.map(item => dbItemMap.get(item.id)?.price ?? null),
+      from,
+      to,
+    })
   }
-
-  const paymentAmount = totalPrice * daysBetween
 
   // Expand to the full item set the client sent (page already expands
   // SunbedGroup / pair siblings before calling this action).
@@ -220,6 +220,14 @@ export async function saveReservationForMultipleItems(
       status: 'error',
       errors: ['Some items are not available for the requested dates'],
     }
+  }
+
+  // An off-platform-billing (unpaid) booking is final right here — no payment
+  // step will ever call processConfirmedReservation, which is what sends the
+  // confirmation for paid ones. Send it now (non-throwing; awaited so a
+  // serverless invocation cannot end before it leaves).
+  if (status === RESERVATION_COMPLETE) {
+    await sendConfirmationEmail(result.reservationId)
   }
 
   revalidatePath('/sites')

@@ -15,6 +15,7 @@ import { buildReservationReceipt } from './receipt'
 import type { ReceiptModel } from './receipt-model'
 import { sendEmail } from './email'
 import { siteDayKey } from './site-day'
+import { reservationListPrice } from './reservation-price'
 import {
   RESERVATION_COMPLETE,
   RESERVATION_PROCESSING,
@@ -23,7 +24,7 @@ import {
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-interface ReservationEmailData {
+export interface ReservationEmailData {
   reservationId: string
   userEmail: string
   siteName: string
@@ -32,7 +33,15 @@ interface ReservationEmailData {
   fromDate: Date
   toDate: Date
   amount: number | null
+  /**
+   * What the guest owes AT THE VENUE: set only for an off-platform-billing
+   * (Site.type 'unpaid') booking, which completes without any payment, so
+   * `amount` is 0 there and "Free" would be wrong.
+   */
+  amountDue: number | null
   guestName: string | null
+  /** Absolute link to the reservation view (carries anonId for a guest booking). */
+  viewUrl: string
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -49,6 +58,17 @@ function formatDate(d: Date): string {
 function formatCurrency(amount: number | null): string {
   if (amount == null || amount === 0) return 'Free'
   return `€${amount.toFixed(2)}`
+}
+
+/**
+ * Absolute URL of the consumer reservation view. Emails need an absolute link;
+ * CONSUMER_APP_URL is the user app's origin per environment (same variable the
+ * receipt QR uses), falling back to production.
+ */
+export function reservationViewUrl(reservationId: string, anonId: string | null): string {
+  const base = (process.env.CONSUMER_APP_URL || 'https://sunbnb.app').replace(/\/+$/, '')
+  const path = `/reservations/${encodeURIComponent(reservationId)}`
+  return anonId ? `${base}${path}?anonId=${encodeURIComponent(anonId)}` : `${base}${path}`
 }
 
 function dateRange(from: Date, to: Date): string {
@@ -86,7 +106,8 @@ function emailLayout(content: string): string {
 
 // ─── Template: Confirmation ─────────────────────────────────────────────────
 
-function confirmationHtml(data: ReservationEmailData): string {
+/** Exported for tests and previews; send through `sendConfirmationEmail`. */
+export function confirmationHtml(data: ReservationEmailData): string {
   return emailLayout(`
     <h1 style="margin:0 0 8px;font-size:22px;color:#1a1a2e;">Booking Confirmed ✓</h1>
     <p style="color:#666;margin:0 0 24px;font-size:15px;">Your sunbed reservation is all set.</p>
@@ -106,9 +127,16 @@ function confirmationHtml(data: ReservationEmailData): string {
       </tr>
       <tr>
         <td style="padding:10px 0;color:#888;">Amount</td>
-        <td style="padding:10px 0;font-weight:600;">${formatCurrency(data.amount)}</td>
+        <td style="padding:10px 0;font-weight:600;">${amountText(data)}</td>
       </tr>
     </table>
+${data.amountDue ? `
+    <p style="margin:16px 0 0;font-size:14px;color:#92400e;background:#fffbeb;border-radius:8px;padding:12px 16px;">
+      Nothing has been charged. You pay ${formatCurrency(data.amountDue)} at the venue when you arrive.
+    </p>` : ''}
+    <div style="margin:28px 0 0;text-align:center;">
+      <a href="${data.viewUrl}" style="display:inline-block;background:#1a1a2e;color:#fff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 24px;border-radius:8px;">View your reservation</a>
+    </div>
 
     <div style="margin:28px 0 0;padding:16px;background:#f0fdf4;border-radius:8px;border-left:4px solid #22c55e;">
       <p style="margin:0;font-size:14px;color:#166534;">
@@ -118,9 +146,16 @@ function confirmationHtml(data: ReservationEmailData): string {
     </div>
 
     <p style="margin:24px 0 0;font-size:13px;color:#999;">
-      Need to cancel? Open your reservations in the Sunbnb app.
+      Need to cancel? <a href="${data.viewUrl}" style="color:#999;">Open your reservation</a>.
     </p>
   `)
+}
+
+/** Paid online → the amount; due at the venue → the amount and where; neither → Free. */
+function amountText(data: ReservationEmailData): string {
+  if (data.amount) return formatCurrency(data.amount)
+  if (data.amountDue) return `${formatCurrency(data.amountDue)} — pay at the venue`
+  return formatCurrency(null)
 }
 
 // ─── Template: Reminder ─────────────────────────────────────────────────────
@@ -279,8 +314,8 @@ async function loadReservationEmailData(reservationId: string): Promise<Reservat
     where: { id: reservationId },
     include: {
       user: { select: { email: true, name: true } },
-      site: { select: { name: true, id: true } },
-      items: { select: { number: true }, orderBy: { number: 'asc' } },
+      site: { select: { name: true, id: true, type: true, price: true } },
+      items: { select: { number: true, price: true }, orderBy: { number: 'asc' } },
     },
   })
 
@@ -304,7 +339,16 @@ async function loadReservationEmailData(reservationId: string): Promise<Reservat
     fromDate: reservation.from,
     toDate: reservation.to,
     amount: reservation.paymentAmount,
+    amountDue: !reservation.paymentAmount && reservation.site?.type === 'unpaid'
+      ? reservationListPrice({
+          sitePrice: reservation.site.price,
+          itemPrices: reservation.items.map(i => i.price),
+          from: reservation.from,
+          to: reservation.to,
+        }) || null
+      : null,
     guestName: reservation.guestName,
+    viewUrl: reservationViewUrl(reservation.id, reservation.anonId),
   }
 }
 
@@ -454,7 +498,9 @@ export async function sendDueReminders(): Promise<number> {
       fromDate: reservation.from,
       toDate: reservation.to,
       amount: reservation.paymentAmount,
+      amountDue: null, // the reminder template shows no amount
       guestName: reservation.guestName,
+      viewUrl: reservationViewUrl(reservation.id, reservation.anonId),
     }
 
     try {

@@ -30,6 +30,7 @@ import prisma from '@repo/data/PrismaCient'
 import { getAvailabilityForItems } from '@/service/availabilityService'
 import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 import { reserveWithConflictGuard, createRentalBookingsWithGuard } from '@repo/data/reservations'
+import { sendConfirmationEmail } from '@repo/data/reservation-emails'
 
 const mockAuth = vi.mocked(auth)
 const mockGetAvailability = vi.mocked(getAvailabilityForItems)
@@ -1054,5 +1055,55 @@ describe('findAnonRentalBooking', () => {
         }),
       })
     )
+  })
+})
+
+// ─── Confirmation email at booking time ─────────────────────────────────────
+// A paid booking is confirmed (and emailed) by processConfirmedReservation after
+// payment. An off-platform-billing (unpaid) booking never reaches that step, so
+// the action itself must send its confirmation — or the guest gets nothing.
+describe('saveReservationForMultipleItems — confirmation email', () => {
+  const book = () =>
+    saveReservationForMultipleItems({
+      siteId: 'site-1',
+      items: [{ id: 'item-1' } as any],
+      type: 'days',
+      from: '2025-07-01',
+      to: '2025-07-01',
+      anonId: '11111111-1111-4111-8111-111111111111',
+      email: 'guest@example.com',
+    })
+
+  beforeEach(() => {
+    mockGetAvailability.mockResolvedValue([{ itemId: 'item-1', available: true }] as any)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ id: 'item-1', price: null }] as any)
+  })
+
+  it('emails the confirmation for an unpaid-site booking, which is final at creation', async () => {
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ id: 'site-1', userId: 'owner-1', type: 'unpaid', price: 12 } as any)
+    mockReserveWithConflictGuard.mockResolvedValueOnce({ outcome: 'created', reservationId: 'res-unpaid' })
+
+    const res = await book()
+
+    expect(res).toEqual({ status: 'ok', id: 'res-unpaid' })
+    expect(vi.mocked(sendConfirmationEmail)).toHaveBeenCalledWith('res-unpaid')
+  })
+
+  it('leaves a paid booking’s email to the payment confirmation', async () => {
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ id: 'site-1', userId: 'owner-1', type: 'paid', price: 12 } as any)
+
+    await book()
+
+    expect(vi.mocked(sendConfirmationEmail)).not.toHaveBeenCalled()
+  })
+
+  it('sends nothing when the seats were taken in the meantime', async () => {
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ id: 'site-1', userId: 'owner-1', type: 'unpaid', price: 12 } as any)
+    mockReserveWithConflictGuard.mockResolvedValueOnce({ outcome: 'conflict' } as any)
+
+    const res = await book()
+
+    expect(res.status).toBe('error')
+    expect(vi.mocked(sendConfirmationEmail)).not.toHaveBeenCalled()
   })
 })

@@ -50,6 +50,7 @@
     "./tab-payment": "./src/tab-payment.ts",
     "./invoice-series": "./src/invoice-series.ts",
     "./payment-math": "./src/payment-math.ts",
+    "./reservation-price": "./src/reservation-price.ts",
     "./receipt": "./src/receipt.ts",
     "./receipt-model": "./src/receipt-model.ts",
     "./invoice-fiscal": "./src/invoice-fiscal.ts",
@@ -193,6 +194,9 @@
       ],
       "payment-math": [
         "./src/payment-math.ts"
+      ],
+      "reservation-price": [
+        "./src/reservation-price.ts"
       ],
       "receipt": [
         "./src/receipt.ts"
