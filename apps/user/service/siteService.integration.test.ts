@@ -18,6 +18,7 @@ import {
   createTestSite,
   createTestInventoryItem,
   createTestReservation,
+  createTestPartnerAccount,
 } from '@/app/test/fixtures'
 import { BLOCKING_STATUSES, OP_NO_SHOW, OP_DEPARTED } from '@repo/data/reservation-status'
 import { siteDayBounds } from '@repo/data/site-day'
@@ -412,5 +413,76 @@ describe('countAvailableToday', () => {
     // The stay is the venue's tomorrow — today's bed is free.
     expect(result.availableCount).toBe(1)
     expect(result.itemCount).toBe(1)
+  })
+})
+
+// ─── searchSites: payment-provider readiness gate (track 028 P2d) ─────────────
+// Must agree with packages/data/src/payment-providers/readiness.ts.
+
+describe('searchSites payment-provider readiness gate', () => {
+  async function paidSiteListed(opts: {
+    siteProvider?: string
+    account?: Record<string, unknown>
+    type?: string
+  }) {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id, opts.account ?? {})
+    const site = await createReadySite(user)
+    await prisma.site.update({
+      where: { id: site.id },
+      data: {
+        type: opts.type ?? 'paid',
+        price: 10,
+        vat: 21,
+        ...(opts.siteProvider ? { paymentProvider: opts.siteProvider } : {}),
+      },
+    })
+    await createTestInventoryItem(user.id, site.id, { number: 1, status: 'active' })
+    const { sites } = await searchSites()
+    return sites.some(s => s.id === site.id)
+  }
+
+  const mollieReady = { mollieAccessToken: 'tok', mollieOnboardingStatus: 'completed' }
+
+  it('lists a paid Mollie site whose account has token + completed onboarding', async () => {
+    expect(await paidSiteListed({ account: mollieReady })).toBe(true)
+  })
+  it('hides a paid Mollie site whose onboarding is in-review', async () => {
+    expect(await paidSiteListed({ account: { ...mollieReady, mollieOnboardingStatus: 'in-review' } })).toBe(false)
+  })
+  it('hides a paid Mollie site with no token', async () => {
+    expect(await paidSiteListed({ account: { mollieOnboardingStatus: 'completed' } })).toBe(false)
+  })
+  it('lists a paid Viva site with merchant id + verified', async () => {
+    expect(
+      await paidSiteListed({
+        siteProvider: 'viva',
+        account: { vivaMerchantId: 'm1', vivaVerificationStatus: 'verified' },
+      }),
+    ).toBe(true)
+  })
+  it('hides a paid Viva site that is still pending', async () => {
+    expect(
+      await paidSiteListed({
+        siteProvider: 'viva',
+        account: { vivaMerchantId: 'm1', vivaVerificationStatus: 'pending' },
+      }),
+    ).toBe(false)
+  })
+  it('lists a paid Stripe site with charges enabled', async () => {
+    expect(
+      await paidSiteListed({ siteProvider: 'stripe', account: { stripeConnectChargesEnabled: true } }),
+    ).toBe(true)
+  })
+  it('hides a paid Stripe site with charges disabled', async () => {
+    expect(
+      await paidSiteListed({ siteProvider: 'stripe', account: { stripeConnectChargesEnabled: false } }),
+    ).toBe(false)
+  })
+  it('hides a site whose effective provider (stripe) is not ready even if Mollie is ready', async () => {
+    expect(await paidSiteListed({ siteProvider: 'stripe', account: mollieReady })).toBe(false)
+  })
+  it('lists a non-paid site regardless of provider readiness', async () => {
+    expect(await paidSiteListed({ type: 'free', siteProvider: 'stripe', account: {} })).toBe(true)
   })
 })

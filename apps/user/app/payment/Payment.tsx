@@ -1,8 +1,10 @@
 /**
  * Payment Component
  *
- * Renders a Mollie redirect payment or a demo payment form, depending on
- * NEXT_PUBLIC_DEMO_MODE.
+ * Renders a redirect payment or a demo payment form, depending on NEXT_PUBLIC_DEMO_MODE.
+ * The redirect goes through the venue's provider: Mollie (default) uses its dedicated
+ * create-payment route; Stripe / Viva use the neutral POST /api/payment/create. The server
+ * re-resolves the provider; the `paymentProvider` prop only picks the endpoint.
  *
  * Key design decisions:
  * - Demo mode is controlled SERVER-SIDE via env var (not localStorage)
@@ -18,6 +20,7 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Button from '@mui/material/Button'
 import { useTranslations } from 'next-intl'
 import { initiateDemoReservationPayment } from './actions'
+import { usesLegacyMollieEndpoint, neutralCheckoutBody } from './checkout-endpoint'
 import { RESERVATION_COMPLETE } from '@repo/data/reservation-status'
 import CheckoutForm from './CheckoutForm'
 import ReservationItem from './ReservationItem'
@@ -75,8 +78,10 @@ export function MolliePayment({
   preview,
   completeUrl,
   onCancel,
+  paymentProvider,
 }: {
   reservation: Reservation
+  paymentProvider?: string
   preview?: React.ReactNode
   completeUrl?: string
   onCancel?: () => Promise<void>
@@ -100,14 +105,15 @@ export function MolliePayment({
       const anonSuffix = anonId ? `&anonId=${anonId}` : ''
       const redirectUrl = `${baseUrl}${separator}reservationId=${reservation.id}${anonSuffix}`
 
-      const res = await fetch('/api/payment/mollie/create-payment', {
+      const legacy = usesLegacyMollieEndpoint(paymentProvider)
+      const res = await fetch(legacy ? '/api/payment/mollie/create-payment' : '/api/payment/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reservationId: reservation.id,
-          anonId,
-          redirectUrl,
-        }),
+        body: JSON.stringify(
+          legacy
+            ? { reservationId: reservation.id, anonId, redirectUrl }
+            : neutralCheckoutBody('reservation', { reservationId: reservation.id }, { anonId, redirectUrl }),
+        ),
       })
 
       const data = await res.json()
@@ -193,6 +199,7 @@ export default function Payment({
   preview,
   completeUrl,
   onCancel,
+  paymentProvider,
 }: {
   reservation: Reservation
   preview?: React.ReactNode
@@ -210,13 +217,14 @@ export default function Payment({
     )
   }
 
-  // Consumer reservations are paid via Mollie (redirect checkout).
+  // Redirect checkout via the venue's provider (Mollie default; Stripe / Viva via the neutral route).
   return (
     <MolliePayment
       reservation={reservation}
       preview={preview}
       completeUrl={completeUrl}
       onCancel={onCancel}
+      paymentProvider={paymentProvider}
     />
   )
 }

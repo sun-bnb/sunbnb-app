@@ -18,6 +18,7 @@
 import createMollieClient from '@mollie/api-client'
 import prisma from '@repo/data/PrismaCient'
 import { isTestMode } from '@repo/data/env'
+import { isMolliePaymentRef } from '@repo/data/payment-refs'
 
 /**
  * Create a Mollie client using the platform's own API key.
@@ -132,7 +133,7 @@ export async function getMolliePaymentStatus(paymentId: string): Promise<string>
  * Check if a paymentRef is a Mollie payment (Mollie IDs start with "tr_").
  */
 export function isMolliePayment(paymentRef: string | null): boolean {
-  return paymentRef?.startsWith('tr_') ?? false
+  return isMolliePaymentRef(paymentRef)
 }
 
 /**

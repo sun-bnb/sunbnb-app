@@ -432,6 +432,8 @@ export interface DineContext {
     number: number
     label: string | null
   }
+  /** Effective payment provider: linked site's, else the standalone restaurant's PartnerAccount selection. */
+  paymentProvider: string
   products: Array<{
     id: string
     name: string
@@ -481,7 +483,13 @@ export async function getDineContext(tableId: string): Promise<GetDineContextRes
       label: true,
       status: true,
       restaurant: {
-        select: { id: true, name: true, dineInEnabled: true },
+        select: {
+          id: true,
+          name: true,
+          dineInEnabled: true,
+          siteId: true,
+          partnerAccount: { select: { paymentProvider: true } },
+        },
       },
     },
   })
@@ -496,6 +504,18 @@ export async function getDineContext(tableId: string): Promise<GetDineContextRes
 
   if (!table.restaurant.dineInEnabled) {
     return { status: 'error', errors: ['Ordering is not available for this table'] }
+  }
+
+  // ── Effective payment provider ───────────────────────────────────────────
+  let paymentProvider: string
+  if (table.restaurant.siteId) {
+    const linked = await prisma.site.findUnique({
+      where: { id: table.restaurant.siteId },
+      select: { paymentProvider: true },
+    })
+    paymentProvider = linked?.paymentProvider ?? 'mollie'
+  } else {
+    paymentProvider = table.restaurant.partnerAccount?.paymentProvider ?? 'mollie'
   }
 
   // ── Menu ─────────────────────────────────────────────────────────────────
@@ -530,6 +550,7 @@ export async function getDineContext(tableId: string): Promise<GetDineContextRes
         number: table.number,
         label: table.label ?? null,
       },
+      paymentProvider,
       products,
     },
   }

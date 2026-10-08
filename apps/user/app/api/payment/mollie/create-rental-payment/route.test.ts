@@ -27,6 +27,7 @@ vi.mock('@repo/data/payment', () => ({
   resolveServiceFee: vi.fn().mockReturnValue(null),
   chargeableServiceFee: vi.fn((fee: unknown) => fee),
   calculateServiceFeeAmount: vi.fn().mockReturnValue(0),
+  serviceFeeForUnits: vi.fn().mockReturnValue(0),
   round: (v: number) => Math.round(v * 100) / 100,
 }))
 

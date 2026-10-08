@@ -7,9 +7,7 @@
  */
 
 /** Check if a paymentRef is a demo/fake payment (not a real provider charge). */
-export function isDemoPayment(paymentRef: string | null): boolean {
-  return paymentRef?.startsWith('pi_demo_') ?? false
-}
+export { isDemoPayment } from '@repo/data/payment-refs'
 
 /** Validate an entity ID format. Accepts both CUID (Prisma default) and UUID v4. */
 export function isValidEntityId(value: string): boolean {

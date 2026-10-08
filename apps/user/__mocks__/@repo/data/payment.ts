@@ -48,4 +48,5 @@ export const resolveServiceFee = vi.fn().mockReturnValue(null)
 // No launch promotion in unit tests: the resolved fee passes through unchanged (track 027 D9).
 export const chargeableServiceFee = vi.fn((fee: unknown) => fee)
 export const calculateServiceFeeAmount = vi.fn().mockReturnValue(0)
+export const serviceFeeForUnits = vi.fn().mockReturnValue(0)
 export const round = vi.fn((n: number) => Math.round(n * 100) / 100)

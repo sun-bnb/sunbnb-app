@@ -328,7 +328,7 @@ describe('cancelReservation', () => {
     const res = await cancelReservation(reservation.id)
 
     expect(res.status).toBe('ok')
-    expect(mockIssueRefund).toHaveBeenCalledWith('pi_real_stripe_ref')
+    expect(mockIssueRefund).toHaveBeenCalledWith('pi_real_stripe_ref', { reservationId: reservation.id })
     const updated = await prisma.reservation.findUnique({ where: { id: reservation.id } })
     expect(updated!.status).toBe('canceled')
   })

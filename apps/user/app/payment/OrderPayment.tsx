@@ -18,6 +18,7 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Button from '@mui/material/Button'
 import { useTranslations } from 'next-intl'
 import { initiateDemoOrderPayment } from './actions'
+import { usesLegacyMollieEndpoint, neutralCheckoutBody } from './checkout-endpoint'
 import CheckoutForm from './CheckoutForm'
 import { Order } from '@/app/types/types'
 
@@ -69,8 +70,10 @@ export function MollieOrderPayment({
   order,
   preview,
   completeUrl,
+  paymentProvider,
 }: {
   order: Order
+  paymentProvider?: string
   preview?: React.ReactNode
   completeUrl?: string
 }) {
@@ -91,14 +94,15 @@ export function MollieOrderPayment({
       const separator = baseUrl.includes('?') ? '&' : '?'
       const redirectUrl = `${baseUrl}${separator}orderId=${order.id}`
 
-      const res = await fetch('/api/order-payment/mollie/create-payment', {
+      const legacy = usesLegacyMollieEndpoint(paymentProvider)
+      const res = await fetch(legacy ? '/api/order-payment/mollie/create-payment' : '/api/payment/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderId: order.id,
-          anonId,
-          redirectUrl,
-        }),
+        body: JSON.stringify(
+          legacy
+            ? { orderId: order.id, anonId, redirectUrl }
+            : neutralCheckoutBody('order', { orderId: order.id }, { anonId, redirectUrl }),
+        ),
       })
 
       const data = await res.json()
@@ -163,6 +167,7 @@ export default function OrderPayment({
   order,
   preview,
   completeUrl,
+  paymentProvider,
 }: {
   order: Order
   serviceFee?: number
@@ -180,12 +185,13 @@ export default function OrderPayment({
     )
   }
 
-  // Consumer orders are paid via Mollie (redirect checkout).
+  // Redirect checkout via the venue's provider (Mollie default; Stripe / Viva via the neutral route).
   return (
     <MollieOrderPayment
       order={order}
       preview={preview}
       completeUrl={completeUrl}
+      paymentProvider={paymentProvider}
     />
   )
 }

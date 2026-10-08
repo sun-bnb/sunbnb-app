@@ -10,6 +10,10 @@
     {
       "path": "/api/cron/prune-telemetry",
       "schedule": "20 3 * * *"
+    },
+    {
+      "path": "/api/reconcile",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

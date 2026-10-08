@@ -37,6 +37,9 @@ const prisma = {
   restaurant: {
     findUnique: vi.fn(),
   },
+  partnerAccount: {
+    findUnique: vi.fn(),
+  },
   product: {
     findMany: vi.fn(),
   },

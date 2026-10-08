@@ -17,6 +17,7 @@ export default async function TableBookingPage({
       id: true,
       name: true,
       restaurantId: true,
+      paymentProvider: true,
     },
   })
   if (!site?.restaurantId) {
@@ -47,6 +48,7 @@ export default async function TableBookingPage({
   return (
     <TableBookingView
       siteId={site.id}
+      paymentProvider={site.paymentProvider}
       restaurant={{
         id: restaurant.id,
         name: restaurant.name,

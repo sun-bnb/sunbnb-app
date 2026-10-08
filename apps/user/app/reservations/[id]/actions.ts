@@ -50,7 +50,7 @@ export async function cancelReservation(reservationId: string) {
   // failure aborts the cancel; mid-payment (processing) cancels are reject
   // cells — the payment outcome must resolve first.
   const result = await applyTransition(reservationId, 'user.cancel', {
-    refund: () => issueRefund(reservation.paymentRef!),
+    refund: () => issueRefund(reservation.paymentRef!, { reservationId }),
   })
   if (result.outcome === 'effect-failed') {
     console.error(`[cancelReservation] Refund failed for ${reservationId}:`, result.error)

@@ -116,7 +116,7 @@ export async function searchSites(lat?: string, lng?: string) {
       )
       -- Must have a cover image
       AND image IS NOT NULL
-      -- Paid reservations require price, VAT, and Mollie
+      -- Paid reservations require price, VAT, and a ready payment provider
       AND (
         type IS DISTINCT FROM 'paid'
         OR (
@@ -124,14 +124,18 @@ export async function searchSites(lat?: string, lng?: string) {
           AND vat IS NOT NULL
         )
       )
-      -- Any service using integrated payments requires Mollie onboarding
+      -- Any service using integrated payments requires the site's payment provider to be ready.
+      -- Must agree with packages/data/src/payment-providers/readiness.ts (pinned by siteService integration test).
       AND (
         (type IS DISTINCT FROM 'paid' AND order_payment_type IS DISTINCT FROM 'paid' AND rental_payment_type IS DISTINCT FROM 'paid')
         OR EXISTS (
-          SELECT 1 FROM "PartnerAccount"
-          WHERE user_id = "Site".user_id
-            AND mollie_access_token IS NOT NULL
-            AND mollie_onboarding_status = 'completed'
+          SELECT 1 FROM "PartnerAccount" pa
+          WHERE pa.user_id = "Site".user_id
+            AND (
+              ("Site".payment_provider = 'mollie' AND pa.mollie_access_token IS NOT NULL AND pa.mollie_onboarding_status = 'completed')
+              OR ("Site".payment_provider = 'viva' AND pa.viva_merchant_id IS NOT NULL AND pa.viva_verification_status = 'verified')
+              OR ("Site".payment_provider = 'stripe' AND pa.stripe_connect_charges_enabled = true)
+            )
         )
       )
   `;

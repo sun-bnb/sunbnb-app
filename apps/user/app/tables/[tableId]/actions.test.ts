@@ -717,6 +717,34 @@ describe('getDineContext', () => {
     expect(ctx.products[0].totalPrice).toBe(7.5)
   })
 
+  it('context.paymentProvider = linked site effective provider', async () => {
+    mockTable({
+      restaurant: { id: RESTAURANT_ID, name: 'C', siteId: SITE_ID, dineInEnabled: true, partnerAccount: { paymentProvider: 'mollie' } },
+    })
+    vi.mocked(prisma.site.findUnique).mockResolvedValueOnce({ paymentProvider: 'viva' } as any)
+    vi.mocked(prisma.menuItem.findMany).mockResolvedValueOnce([] as any)
+    const res = await getDineContext(TABLE_ID)
+    expect((res as any).context.paymentProvider).toBe('viva')
+  })
+
+  it('context.paymentProvider = PartnerAccount selection for a standalone restaurant', async () => {
+    mockTable({
+      restaurant: { id: RESTAURANT_ID, name: 'C', siteId: null, dineInEnabled: true, partnerAccount: { paymentProvider: 'stripe' } },
+    })
+    vi.mocked(prisma.menuItem.findMany).mockResolvedValueOnce([] as any)
+    const res = await getDineContext(TABLE_ID)
+    expect((res as any).context.paymentProvider).toBe('stripe')
+  })
+
+  it('context.paymentProvider defaults to mollie when standalone with no selection', async () => {
+    mockTable({
+      restaurant: { id: RESTAURANT_ID, name: 'C', siteId: null, dineInEnabled: true, partnerAccount: { paymentProvider: null } },
+    })
+    vi.mocked(prisma.menuItem.findMany).mockResolvedValueOnce([] as any)
+    const res = await getDineContext(TABLE_ID)
+    expect((res as any).context.paymentProvider).toBe('mollie')
+  })
+
   it('returns error on invalid tableId', async () => {
     mockIsValidEntityId.mockReturnValueOnce(false)
 

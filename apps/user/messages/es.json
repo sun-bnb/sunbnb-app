@@ -232,7 +232,7 @@
     "fact2Desc": "Reembolso completo hasta 24 horas antes de la reserva, y la mitad hasta dos horas antes.",
     "fact2Link": "Leer la política",
     "fact3Title": "Paga con tarjeta",
-    "fact3Desc": "El pago lo gestiona Mollie. Pagas lo que anuncia el chiringuito, ni un céntimo más.",
+    "fact3Desc": "El pago lo gestiona un proveedor de pagos autorizado (Mollie, Stripe o Viva). Pagas lo que anuncia el chiringuito, ni un céntimo más.",
     "fact4Title": "En tu idioma",
     "fact4Desc": "English, español y suomi, según el idioma de tu navegador.",
     "ctaTitle": "Encuentra tu playa",

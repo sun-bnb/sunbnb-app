@@ -232,7 +232,7 @@
     "fact2Desc": "Täysi hyvitys 24 tuntia ennen varausta, puolet vielä kaksi tuntia ennen.",
     "fact2Link": "Lue ehdot",
     "fact3Title": "Maksa kortilla",
-    "fact3Desc": "Maksun hoitaa Mollie. Maksat sen minkä rantaklubi ilmoittaa, ei senttiaäkään enempää.",
+    "fact3Desc": "Maksun hoitaa lisensoitu maksupalvelu (Mollie, Stripe tai Viva). Maksat sen minkä rantaklubi ilmoittaa, ei senttiaäkään enempää.",
     "fact4Title": "Omalla kielelläsi",
     "fact4Desc": "English, español ja suomi, selaimesi kielen mukaan.",
     "ctaTitle": "Löydä rantasi",

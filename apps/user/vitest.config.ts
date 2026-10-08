@@ -29,6 +29,7 @@ export default defineConfig({
       '@repo/data/reservation-status': path.resolve(__dirname, '../../packages/data/src/reservation-status'),
       // Pure model — real source (no prisma); DB interpreter — mocked (track 018).
       '@repo/data/reservation-machine': path.resolve(__dirname, '../../packages/data/src/reservation-machine'),
+      '@repo/data/payment-refs': path.resolve(__dirname, '../../packages/data/src/payment-refs'),
       '@repo/data/reservation-machine-apply': path.resolve(__dirname, '__mocks__/@repo/data/reservation-machine-apply'),
       '@repo/data/reservation-emails': path.resolve(__dirname, '__mocks__/@repo/data/reservation-emails'),
       '@repo/data/rental-emails': path.resolve(__dirname, '__mocks__/@repo/data/rental-emails'),

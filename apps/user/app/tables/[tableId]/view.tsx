@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { usesLegacyMollieEndpoint, neutralCheckoutBody } from '@/app/payment/checkout-endpoint'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { useTranslations } from 'next-intl'
@@ -476,10 +477,13 @@ export default function DineView({
     const redirectUrl = `${window.location.origin}/tables/${tableId}?tabReturn=${tab.id}`
 
     try {
-      const res = await fetch('/api/tab-payment/mollie/create-payment', {
+      const legacy = usesLegacyMollieEndpoint(context.paymentProvider)
+      const res = await fetch(legacy ? '/api/tab-payment/mollie/create-payment' : '/api/payment/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tabId: tab.id, redirectUrl }),
+        body: JSON.stringify(
+          legacy ? { tabId: tab.id, redirectUrl } : neutralCheckoutBody('tab', { tabId: tab.id }, { redirectUrl }),
+        ),
       })
 
       const data = await res.json()

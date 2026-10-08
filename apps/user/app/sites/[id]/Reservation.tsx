@@ -35,6 +35,7 @@ import EquipmentSelection from '@/components/reservation/EquipmentSelection'
 import { saveReservationForMultipleItems, saveRentalBooking } from './actions'
 import { deleteReservation } from '@/app/reservations/[id]/actions'
 import PaymentView from '@/app/payment/Payment'
+import { usesLegacyMollieEndpoint, neutralCheckoutBody } from '@/app/payment/checkout-endpoint'
 import { initiateDemoRentalPayment } from '@/app/payment/actions'
 import { RESERVATION_PROCESSING } from '@repo/data/reservation-status'
 import { useRouter, usePathname } from 'next/navigation'
@@ -567,14 +568,15 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
       const anonSuffix = anonId ? `&anonId=${anonId}` : ''
       const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/payment/complete/rental?rentalBookingId=${bookingIds[0]}${anonSuffix}`
 
-      const res = await fetch('/api/payment/mollie/create-rental-payment', {
+      const legacy = usesLegacyMollieEndpoint(site.paymentProvider)
+      const res = await fetch(legacy ? '/api/payment/mollie/create-rental-payment' : '/api/payment/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          rentalBookingIds: bookingIds,
-          anonId: anonId ?? null,
-          redirectUrl,
-        }),
+        body: JSON.stringify(
+          legacy
+            ? { rentalBookingIds: bookingIds, anonId: anonId ?? null, redirectUrl }
+            : neutralCheckoutBody('rental', { rentalBookingIds: bookingIds }, { anonId, redirectUrl }),
+        ),
       })
 
       const data = await res.json()

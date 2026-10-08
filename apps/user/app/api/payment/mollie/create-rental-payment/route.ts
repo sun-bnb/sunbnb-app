@@ -15,7 +15,7 @@ import prisma from '@repo/data/PrismaCient'
 import {
   loadFeeContext,
   chargeableServiceFee, resolveServiceFee,
-  calculateServiceFeeAmount,
+  serviceFeeForUnits,
   round,
 } from '@repo/data/payment'
 import { isTestMode } from '@repo/data/env'
@@ -147,7 +147,8 @@ export async function POST(request: NextRequest) {
     partnerAccount,
     bookings[0]!.createdAt
   )
-  const applicationFeeAmount = round(calculateServiceFeeAmount(matchedFee, paymentAmount))
+  // Commission rule: serviceFeeForUnits (fixed per booking line, percentage once on the total) — same {total, units} as the PLATFORM invoice.
+  const applicationFeeAmount = serviceFeeForUnits(matchedFee, { total: paymentAmount, units: bookings.length })
 
   const amountValue = paymentAmount.toFixed(2)
   const feeValue = applicationFeeAmount.toFixed(2)

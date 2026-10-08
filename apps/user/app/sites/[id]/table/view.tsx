@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { usesLegacyMollieEndpoint, neutralCheckoutBody } from '@/app/payment/checkout-endpoint'
 import { useTranslations } from 'next-intl'
 import TextField from '@mui/material/TextField'
 import CircularProgress from '@mui/material/CircularProgress'
@@ -21,6 +22,8 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || ''
 
 interface Props {
   siteId: string
+  /** Site's effective payment provider. track 028 P3 consumes this */
+  paymentProvider: string
   restaurant: {
     id: string
     name: string
@@ -55,6 +58,7 @@ const ANON_ID_KEY = 'sunbnb-anonId'
 /** Full booking flow on a single page: pick slot → fill form → pay deposit (if required) → confirm. */
 export default function TableBookingView({
   siteId,
+  paymentProvider,
   restaurant,
   initialDate,
   initialPartySize,
@@ -185,6 +189,7 @@ export default function TableBookingView({
     // Mollie redirect path
     return (
       <DepositMollieStep
+        paymentProvider={paymentProvider}
         restaurantName={restaurant.name}
         reservationId={reservationId}
         depositAmount={depositAmount}
@@ -196,12 +201,17 @@ export default function TableBookingView({
           setDepositError(null)
           try {
             const redirectUrl = `${APP_URL}/table-reservations/${reservationId}`
+            const legacy = usesLegacyMollieEndpoint(paymentProvider)
             const res = await fetch(
-              `/api/table-reservations/${reservationId}/deposit/mollie`,
+              legacy ? `/api/table-reservations/${reservationId}/deposit/mollie` : '/api/payment/create',
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ redirectUrl, anonId }),
+                body: JSON.stringify(
+                  legacy
+                    ? { redirectUrl, anonId }
+                    : neutralCheckoutBody('table-deposit', { tableReservationId: reservationId }, { anonId, redirectUrl }),
+                ),
               },
             )
             const data = await res.json()
@@ -448,6 +458,7 @@ export default function TableBookingView({
 // ── Deposit pay-step sub-components ──────────────────────────────────────────
 
 interface DepositStepProps {
+  paymentProvider?: string
   restaurantName: string
   reservationId: string
   depositAmount: number

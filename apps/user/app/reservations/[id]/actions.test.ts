@@ -101,7 +101,7 @@ describe('cancelReservation', () => {
     expect(event).toBe('user.cancel')
     expect(typeof (opts as any).refund).toBe('function')
     await (opts as any).refund()
-    expect(mockIssueRefund).toHaveBeenCalledWith('pi_real_123')
+    expect(mockIssueRefund).toHaveBeenCalledWith('pi_real_123', { reservationId: 'res-1' })
   })
 
   it('does not refund demo payments', async () => {
