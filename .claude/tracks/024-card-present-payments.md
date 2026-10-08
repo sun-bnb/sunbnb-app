@@ -3,7 +3,7 @@ id: 024-card-present-payments
 title: Card-present payments — Viva as the card rail, and the floor app that hosts it
 status: active
 created: 2026-08-28
-updated: 2026-09-22
+updated: 2026-10-08
 worktree: null
 ---
 
@@ -134,6 +134,10 @@ Q1 (below) must be answered before the app repo is created.
 
 ## Resume here
 
+> **Provider end state resolved by [[track:028]] (2026-10-07)** — its D1: **multi-provider, not
+> single-provider** (one selected provider per `PartnerAccount`). Stripe Tap to Pay added as a second
+> card-present rail in `apps/mobile`; Viva Cloud Terminal unchanged (`viva_` refs, `VivaTerminal`).
+
 **Next action — chase Viva. The code is not what is blocking; the vendor relationship is.**
 Two separate threads, both stalled on their side:
 
@@ -143,8 +147,8 @@ Two separate threads, both stalled on their side:
 2. **Merchant account (Refactory DX Oy) — stuck in KYC.** Agreement signed 08-29. On 08-31 the
    Onboarding & Activation team asked for "a valid residence permit or Finnish ID card"; a passport
    photo went back 09-03 with the note that a Finnish citizen holds no residence permit. **No reply
-   in 19 days** — inbox, spam and trash all checked. Their own footer says account verification moves
-   faster through the **in-dashboard chat** than email. Founder action, not an agent one.
+   in 19 days** — inbox, spam and trash all checked. **Escalated via the in-dashboard chat 2026-10-06**
+   (still no email reply at 33 days) — watch the chat for their answer.
 
 **Buildable today with zero vendor dependency.** The stub rail is complete and was browser-verified
 2026-08-30, but nothing has been run since — **no `VIVA_*` variable is set in any `.env.local` or in
@@ -596,6 +600,22 @@ emulator/simulator — only the payment leg needs hardware.
   **Nothing was built or changed this session.** Founder actions, in order: chase KYC via the
   dashboard chat (it gates the merchant account regardless of how the partnership conversation goes),
   then wait on the ISV team.
+- **2026-10-06** — Chased Viva. Gmail (all folders, since 09-01) holds **nothing new**: no reply to the
+  09-03 passport email (33 days) and nothing from the ISV team since the 09-22 form (14 days).
+  **Founder escalated the KYC verification in the Viva dashboard chat** — the channel Viva's own footer
+  says is faster than email. Clarified the test loop: the stub runs end-to-end in the iOS Simulator or
+  on a phone (partner `:3011` plain HTTP), but a real tap through the Viva Terminal DEMO app needs ISV
+  demo credentials + demo-app whitelisting/TestFlight from Viva + an NFC handset — all still vendor-gated.
+  Unverified shortcut worth a docs check: a self-serve demo merchant account + the merchant (non-ISV)
+  Cloud Terminal endpoints could allow a real-card demo tap before the ISV team answers (would need a
+  merchant-credentials mode in `packages/data/src/viva/http-client.ts`, which only calls `/ecr/isv/v1/*`).
+- **2026-10-08** — Cross-link from [[track:028]] (multi-provider payments, P1–P5 shipped uncommitted).
+  028 D1 superseded this track's single-provider end state: partners select one of Mollie / Viva /
+  Stripe per account. Card-present is now two rails picked by the site context's `cardPresent` —
+  Viva Cloud Terminal (`terminal-app`, this track, untouched) and Stripe Tap to Pay (`tap-to-pay`,
+  `stripe_pi_` refs, `@stripe/stripe-terminal-react-native` dev build, `apps/mobile/src/lib/tap-to-pay.tsx`).
+  Viva Smart Checkout online exists as a stub behind the same KYC gate. Nothing in the Viva terminal
+  path changed beyond the `payment-refs` import swap.
 
 ## Open decisions
 

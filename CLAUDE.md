@@ -164,7 +164,7 @@ Vercel-managed via git branches: `main` → preview, `test` → test.sunbnb.app,
 | Database | PostgreSQL + PostGIS (spatial queries, GiST index on geometry) |
 | ORM | Prisma 7 with `@prisma/adapter-pg` driver adapter |
 | Auth | NextAuth v5 (beta) — JWT strategy |
-| Payments | Stripe + Mollie for Platforms (+ demo mode) |
+| Payments | Mollie for Platforms · Stripe Connect · Viva (online + Cloud Terminal) · Stripe Tap to Pay (+ demo mode); Stripe Billing for subscriptions |
 | State | Redux Toolkit + RTK Query (user app) |
 | Styling | Tailwind CSS 3 + MUI 5 (progressive migration to pure Tailwind) |
 | i18n | next-intl (EN, ES, FI) |
@@ -177,9 +177,15 @@ Vercel-managed via git branches: `main` → preview, `test` → test.sunbnb.app,
 ## Key Environment Variables
 
 - `POSTGRES_URL` — Database connection string
-- `STRIPE_SECRET_KEY` — Stripe credentials (**partner subscriptions only** — consumer Stripe removed)
+- `STRIPE_SECRET_KEY` — Stripe credentials for **partner subscriptions**
+- `STRIPE_CONNECT_SECRET_KEY` — Stripe Connect platform key (consumer direct charges, onboarding, Terminal; restricted key scopes in [[track:028]])
+- `NEXT_PUBLIC_STRIPE_CONNECT_PUBLIC_KEY` — publishable key for embedded Connect components (partner app)
+- `STRIPE_CONNECT_WEBHOOK_SECRET` — Connect payment webhook (`/api/webhooks/stripe-connect`, user app)
+- `STRIPE_CONNECT_ACCOUNT_WEBHOOK_SECRET` — Connect `account.updated` webhook (`/api/stripe-connect/webhook`, partner app)
 - `STRIPE_SUBSCRIPTION_WEBHOOK_SECRET` — signature verification for the subscription webhook (`/api/subscription/webhook`, partner app)
 - `MOLLIE_CLIENT_ID`, `MOLLIE_CLIENT_SECRET`, `MOLLIE_REDIRECT_URI` — Mollie OAuth (partner app)
+- `VIVA_MODE` (`stub`|`http`), `VIVA_CHECKOUT_SOURCE_CODE`, `VIVA_CHECKOUT_COLOR` — Viva Smart Checkout (online)
+- `VIVA_WEBHOOK_VERIFICATION_KEY` — Viva webhook URL-verification handshake (`GET /api/webhooks/viva`, user app)
 - `GOOGLE_MAPS_API_KEY` — Server-side Maps + Places API proxy
 - `NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY` — Client-side Maps (HTTP-referrer-restricted; falls back to `GOOGLE_MAPS_API_KEY`)
 - `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` — NextAuth
@@ -199,19 +205,25 @@ Vercel-managed via git branches: `main` → preview, `test` → test.sunbnb.app,
 
 ### Payment Architecture
 
-**Stripe = partner subscriptions only** (platform-as-merchant, correct for SaaS billing). Consumer
-Stripe was removed — it was a platform-collecting charge that did not meet the marketplace/commission
-legal model ([[track:003]]). Consumer payments are **Mollie or demo only**.
+**Multi-provider consumer rails** ([[track:028]]): each partner selects **one provider per
+account** from those available in their country (`/account/payments`, select-then-connect;
+`Site.paymentProvider` is the derived *effective* provider). The rail is identified by the
+`paymentRef` prefix (`@repo/data/payment-refs`); invoicing is provider-neutral.
 
-**Mollie for Platforms** carries real consumer marketplace payments; partner OAuth tokens on
-`PartnerAccount`, commission as `applicationFee`. **Demo mode** (`NEXT_PUBLIC_DEMO_MODE`) mints
-`pi_demo_*` refs through the same invoicing path.
+- **Mollie for Platforms** — partner OAuth tokens on `PartnerAccount`, commission as `applicationFee`.
+- **Stripe Connect direct charges** — the connected account is merchant of record (never a
+  platform charge, [[track:003]]); platform = the Sunbnb Test Stripe account; own-form API
+  onboarding (`requirement_collection: application`) + embedded components; commission + a
+  processing pass-through ride in `application_fee_amount`. Stripe also still bills **partner
+  subscriptions** (platform-as-merchant, `STRIPE_SECRET_KEY`).
+- **Viva Smart Checkout** online — stub only until the Viva merchant account clears KYC.
+- **Demo mode** (`NEXT_PUBLIC_DEMO_MODE`) mints `pi_demo_*` refs through the same invoicing path.
 
 **Agent model** — each payment yields a gross PARTNER invoice plus a separate B2B PLATFORM
 commission invoice; they do not sum to the consumer total. The rule is canonical in
 `.claude/rules/payments.md`; the subsystem walkthrough is `.claude/wiki/subsystems/payments.md`.
 
-**Card-present** (Viva, in progress): [[track:024]].
+**Card-present** (`apps/mobile`): Viva Cloud Terminal ([[track:024]]) + Stripe Tap to Pay ([[track:028]]).
 
 ### Settlement System
 

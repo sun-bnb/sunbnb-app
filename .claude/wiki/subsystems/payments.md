@@ -3,17 +3,13 @@ type: subsystem
 slug: payments
 status: stable
 sources:
-  - apps/user/app/api/_lib/payment-provider.ts
-  - apps/user/app/api/_lib/payment-ids.ts
-  - apps/user/app/api/_lib/mollie.ts
-  - apps/user/app/api/payment/mollie/create-payment/route.ts
-  - apps/user/app/api/webhooks/mollie/route.ts
-  - apps/user/app/api/reconcile/route.ts
-  - apps/user/app/payment/actions.ts
+  - packages/data/src/payment-refs.ts
+  - packages/data/src/payment-providers/readiness.ts
+  - packages/data/src/checkout.ts
   - packages/data/src/payment.ts
-  - apps/user/service/siteService.ts#searchSites
-  - apps/partner/app/api/_lib/mollie-permissions.ts
-  - apps/partner/app/api/_lib/mollie.ts
+  - apps/user/app/api/_lib/payment-provider.ts
+  - apps/user/app/api/_lib/payment-events.ts
+  - apps/user/app/api/webhooks/mollie/route.ts
   - .claude/rules/payments.md
 related:
   - entity:invoice
@@ -22,45 +18,75 @@ related:
   - flow:order-payment
   - flow:rental-booking
   - subsystem:auth
-last_verified: 2026-08-09
+last_verified: 2026-10-08
 ---
 
 # Subsystem: Payments
 
-**Consumer payment is Mollie-for-Platforms + Demo** behind a provider-agnostic abstraction. Webhook + polling + reconciliation as three layers of confirmation. Consumer Stripe was **removed** (2026-05-23) — see [[track:003-stripe-connect-compliance]]; Stripe now only powers **partner subscriptions** (a separate concern, partner app, platform-as-merchant).
+**Consumer payment is multi-provider** ([[track:028-multi-provider-payments]]): each partner selects
+ONE rail per account — Mollie for Platforms, Stripe Connect, or Viva — from those available in
+their country, plus Demo. The rail is identified **only by the `paymentRef` prefix** (no `Payment`
+ledger), and the invoicing core (`processConfirmed*`) is provider-neutral. Webhook + polling +
+reconciliation remain three layers of confirmation. Stripe additionally powers **partner
+subscriptions** (platform-as-merchant — a separate concern).
 
 ## Provider matrix
 
-| Provider | Used for | Direction | Money flow |
-|---|---|---|---|
-| **Mollie for Platforms** | All real consumer reservations & orders | Marketplace | Card → Mollie → partner Mollie account (with `applicationFee` routed to platform) |
-| **Demo** | `NEXT_PUBLIC_DEMO_MODE=true` | Faked | No real money; `paymentRef = pi_demo_<timestamp>` |
-| **Stripe** | Partner **subscriptions only** (not consumer) | Direct charge | Card → Stripe → platform account (correct for SaaS billing) |
+| Rail | Ref prefix (`payment-refs`) | Kind | Money flow | State |
+|---|---|---|---|---|
+| **Mollie for Platforms** | `tr_` | online | Card → partner's Mollie account; commission as `applicationFee` | live |
+| **Stripe Connect** | `stripe_cs_` (Checkout Session) | online | **Direct charge** on the partner's connected account (merchant of record); commission + processing pass-through as `application_fee_amount` | live (test-mode verified) |
+| **Viva Smart Checkout** | `vso_<orderCode>` | online | Card → partner's Viva account; ISV fee withheld by Viva, credited monthly (no pass-through) | **stub** until Viva KYC clears |
+| **Viva Cloud Terminal** | `viva_<sessionId>` | card-present | Server pushes the sale to the staff phone's Viva Terminal app ([[track:024-card-present-payments]]) | stub / vendor-gated |
+| **Stripe Tap to Pay** | `stripe_pi_` (PaymentIntent) | card-present | `card_present` PaymentIntent on the connected account; the floor app's Terminal SDK is the reader | built, Simulator run pending |
+| **Demo** | `pi_demo_<timestamp>` | faked | No money; same invoicing path | `NEXT_PUBLIC_DEMO_MODE` |
 
-Per-site consumer provider: stored on `Site` (via `setPaymentProvider` in `apps/partner/app/sites/[id]/site-actions.ts`) — **only `'mollie'` is accepted** (`VALID_PAYMENT_PROVIDERS = { 'mollie' }`), and it requires the partner has connected via OAuth (`mollieAccessToken` on `PartnerAccount`). The earlier consumer-Stripe path (platform-collecting reservation/order PaymentIntents) was deleted; if it ever returns it must be built on Stripe Connect from the start ([[track:003-stripe-connect-compliance]]).
+`providerFromRef(ref)` is the single discriminator — every refund, status poll, webhook and
+reconcile branch dispatches on it. Never write a private `startsWith('tr_')`-style check; no
+prefix is a prefix of another (hence the namespaced `stripe_*` wrappers).
+
+## Selection model (select-then-connect)
+
+- `PartnerAccount.paymentProvider` = the **selected** provider (`/account/payments` →
+  `selectPaymentProvider`, validated against `availableProviders(country)` from the pure,
+  founder-editable `payment-providers/availability.ts`). D3: one provider per account, all sites.
+- `Site.paymentProvider` = the **effective** provider, never written directly:
+  `syncEffectiveProvider` (`payment-providers/selection.ts`) applies `effectiveProviderFor` —
+  the selection once `providerReadiness(...).ready`, else the previous effective one if it still
+  works (switching never strands a venue mid-onboarding). Partner calls it after every
+  connection-state write via `syncEffectiveProviderSafe`.
+- Readiness: Mollie = token + onboarding `completed`; Viva = merchant id + `verified`; Stripe =
+  `stripeConnectChargesEnabled`. The same predicates are inlined in the discovery SQL (below) and
+  pinned by an integration test.
+- `cardPresent` (`none | terminal-app | tap-to-pay`) comes from the same availability matrix and
+  gates the floor app's card rails (`/api/manage/context`).
+- The guest picks a payment *method* on the provider's hosted page, never a PSP (D2).
 
 ## Discovery visibility gate (payment capability)
 
 Consumer site discovery — `apps/user/service/siteService.ts#searchSites`, the only such query (it powers both the `/sites` SSR list and the `/api/sites` coordinate search) — **hides any venue that can't actually take payment**. A `Site` is listed only when:
 
 - **all its services are off-platform** — `type`, `order_payment_type`, and `rental_payment_type` are each `IS DISTINCT FROM 'paid'` (paid on-site / outside the platform; no online payment), **OR**
-- the owning **`PartnerAccount` has completed Mollie onboarding** — `mollieAccessToken IS NOT NULL` **AND** `mollieOnboardingStatus = 'completed'`.
+- the owning **`PartnerAccount` is ready for the site's effective provider** (`"Site".payment_provider`): Mollie token + `completed`, Viva merchant id + `verified`, or Stripe `charges_enabled`. Must agree with `payment-providers/readiness.ts` (pinned by `siteService.integration.test.ts`).
 
-Rationale: a venue advertising an online-paid service it has no way to charge is unusable for the guest, so it's gated out of discovery. The clause references **only Mollie** — Stripe is not part of consumer payability today.
+Rationale: a venue advertising an online-paid service it has no way to charge is unusable for the guest, so it's gated out of discovery.
 
 The same `searchSites` WHERE also requires `status = 'active'`, a name, a valid non-zero location, a cover image, ≥1 `active` `InventoryItem`, ≥1 `SiteWorkingHours`, and (for `type = 'paid'`) a positive `price` + a `vat`. Restaurants have no separate consumer-discovery query yet — they're reached via their linked Site, so this gate governs their consumer visibility too.
 
 ## Provider abstraction
 
-`apps/user/app/api/_lib/payment-provider.ts` is the boundary:
-
-```ts
-getPaymentStatus(paymentRef)          // resolves Mollie or demo
-isPaymentSucceeded(status) / isPaymentFailed(status)  // provider-agnostic
-issueRefund(paymentRef)               // routes to Mollie (demo: no-op)
-```
-
-**Always use these helpers** in code that needs to be provider-agnostic (polling endpoints, reconciliation, refunds). Direct Mollie calls belong only inside the payment creation route and webhook handler.
+- **Create** — Mollie keeps its dedicated create-payment routes (byte-identical). Stripe and Viva go
+  through the neutral `POST /api/payment/create` (user app), which resolves the provider
+  **server-side from the entity's site** and calls `createOnlineCheckout` (`@repo/data/checkout`:
+  `resolveCheckoutIntent` computes amount + commission with the same fee loaders as the Mollie
+  paths, then `getOnlineAdapter('stripe'|'viva')`). Clients pick the URL with
+  `apps/user/app/payment/checkout-endpoint.ts#usesLegacyMollieEndpoint`.
+- **Confirm** — every webhook, poll route and reconcile funnels into one dispatcher,
+  `onPaymentState(meta, ref, state)` (`apps/user/app/api/_lib/payment-events.ts`, lifted verbatim
+  from the Mollie webhook), with `findPaymentEntity(ref)` to locate the entity.
+- **Status / refund** — `getPaymentStatus(ref)`, `isPaymentSucceeded/Failed`, `issueRefund(ref)` in
+  `apps/user/app/api/_lib/payment-provider.ts`, and `packages/data/src/refund.ts`, branch on
+  `providerFromRef`. Stripe refunds pass `refund_application_fee`.
 
 ### Default-deny check
 
@@ -68,19 +94,44 @@ Use `=== 'paid'` (or `isPaymentSucceeded(status)`), NEVER `!== 'unpaid'`. Unknow
 
 ### Demo detection
 
-`isDemoPayment(ref)` in `apps/user/app/api/_lib/payment-ids.ts` — checks for `pi_demo_` prefix. **Always check before any provider API call.** Demo payments otherwise look identical to real ones in downstream code (invoice creation runs unchanged).
+`isDemoPayment(ref)` lives in `@repo/data/payment-refs` (re-exported by `apps/user/app/api/_lib/payment-ids.ts`; the six old copies are gone). **Always check before any provider API call.** Demo payments otherwise look identical to real ones downstream.
 
 ### Entity id validation
 
 `isValidEntityId(value)` in `payment-ids.ts` — checks for CUID or UUID v4. Used at the entry of the Mollie create-payment route so a malformed id never reaches the provider.
 
-## Stripe (subscriptions only — not consumer)
+## Stripe specifics
 
-Consumer Stripe was **removed** (2026-05-23). Stripe survives **only** for partner subscription billing — a *separate* subsystem from this consumer-payment one:
+Two clients in `@repo/data/stripe/client`: `getStripeClient()` = **partner subscriptions**
+(`STRIPE_SECRET_KEY`, platform-as-merchant — correct for SaaS billing; webhook
+`/api/subscription/webhook`, `STRIPE_SUBSCRIPTION_WEBHOOK_SECRET`) and `getStripeConnectClient()` =
+the **Connect platform** (`STRIPE_CONNECT_SECRET_KEY`; platform = the Sunbnb Test account).
 
-- Client: `getStripeClient()` in `apps/partner/app/api/_lib/stripe.ts` — throws if `STRIPE_SECRET_KEY` missing
-- Subscription webhook: `apps/partner/app/api/subscription/webhook/route.ts`, signature-verified via `STRIPE_SUBSCRIPTION_WEBHOOK_SECRET` (a distinct secret from the old consumer `STRIPE_WEBHOOK_SECRET`, now unused)
-- Platform-as-merchant is **correct** here (the platform bills the partner for SaaS) — unlike the removed consumer path. [[track:003-stripe-connect-compliance]] covers what a compliant consumer Stripe (Connect) would require if it ever returns.
+- **Accounts**: created with `CONNECT_CONTROLLER` — `requirement_collection`, `losses.payments` and
+  `fees.payer` = `'application'`, `stripe_dashboard: 'none'`. Onboarding is our **own-form wizard**
+  (`/account/stripe`, Accounts API); management uses embedded components via
+  `/api/stripe-connect/account-session`. Consequence: the platform carries disputes/negative
+  balances and is billed Stripe's processing fee.
+- **Charges**: every consumer call passes `{ stripeAccount }` — **direct charges only**, never a
+  platform charge ([[track:003-stripe-connect-compliance]]).
+- **Tap to Pay**: `@repo/data/stripe/terminal` (location per site → `Site.stripeTerminalLocationId`,
+  connection tokens, `card_present` PaymentIntents); driven by the reservation machine's
+  `tapToPay` rows.
+
+### Fee pass-through
+
+`application_fee_amount` = commission + a processing estimate (`fee-policy.ts`,
+`STRIPE_PROCESSING_ESTIMATE` 1.5% + €0.25 — one constant). For Stripe refs every
+`processConfirmed*` (incl. table deposits) books it on the PLATFORM invoice as a VAT-exempt
+`payment-processing` line and sets `Invoice.processingFee` (`payment.ts#platformPassThroughFor`).
+Mollie and Viva pass nothing through and leave `processingFee` empty.
+
+## Viva online specifics
+
+`@repo/data/viva/checkout-{types,http,stub}` behind `VIVA_MODE`. Every unverified ISV field name
+is confined to the one `vivaOnlineHttp` builder. Return URL `/api/payment/viva/return?t=&s=`
+re-fetches before acting. The stub store lives on `globalThis` (Next dev splits API routes and
+RSC pages into separate module graphs).
 
 ## Mollie specifics
 
@@ -117,47 +168,53 @@ Anonymous demo payments require `anonId` argument and verify ownership via `anon
 
 ## Webhooks
 
+Rule: **the body only names a payment — always re-fetch state from the provider and act on that.**
+
 | Webhook | Route | Verification |
 |---|---|---|
-| Mollie | `apps/user/app/api/webhooks/mollie/route.ts` | Payment id format regex + provider state fetch |
+| Mollie | user `/api/webhooks/mollie` (keep forever — in-flight payments have it baked in) | `tr_` id regex → fetch by id |
+| Stripe Connect payments | user `/api/webhooks/stripe-connect` | `stripe-signature` (`STRIPE_CONNECT_WEBHOOK_SECRET`); requires `event.account`, re-fetches session / PaymentIntent with it. Events: `checkout.session.*` (completed, async succeeded/failed, expired), `payment_intent.*` (succeeded, payment_failed, canceled), `charge.refunded` |
+| Stripe Connect accounts | partner `/api/stripe-connect/webhook` | `stripe-signature` (`STRIPE_CONNECT_ACCOUNT_WEBHOOK_SECRET`); `account.updated` / `capability.updated` → snapshot columns → `syncEffectiveProviderSafe` |
+| Viva Smart Checkout | user `/api/webhooks/viva` | **UNSIGNED** — GET handshake returns `VIVA_WEBHOOK_VERIFICATION_KEY`; POST re-fetches the transaction, requires its orderCode to match (events 1796/1797/1798) |
 
-The Mollie webhook calls into `processConfirmed*` from `@repo/data/payment` — same idempotent logic as the polling fallback and reconcile. Double-firing is safe. (The partner subscription webhook is separate — see the Stripe section above.)
+All confirm paths call `processConfirmed*` from `@repo/data/payment` — idempotent, so double-firing
+is safe. (The partner subscription webhook is separate — see Stripe specifics.)
 
 ## Reconciliation
 
-`apps/user/app/api/reconcile/route.ts`:
+`apps/user/app/api/reconcile/route.ts` (GET + POST):
 
-- Requires `RECONCILIATION_SECRET` env var (returns 503 if unset; mandatory)
-- Caller must present matching `Authorization: Bearer <secret>` or equivalent (read route for the exact header check)
-- Sweeps reservations / orders / rental bookings in `processing` state; queries the provider; runs `processConfirmed*` if status is succeeded
-- The safety net for missed webhooks; should be wired to a cron in production
+- Authorized by `Bearer ${RECONCILIATION_SECRET}` **or** `Bearer ${CRON_SECRET}`; 503 only when neither is set
+- Runs as a `*/15` Vercel cron (`apps/user/vercel.json`)
+- Sweeps all five kinds — reservations, orders, rental bookings (paid-only), dine-in tabs, table deposits — across every provider via `providerFromRef`
+- The safety net for missed webhooks
 
 ## Refunds
 
-`issueRefund(paymentRef)` in `apps/user/app/api/_lib/payment-provider.ts`:
-- Mollie: creates a refund on the partner's payment for the full amount
-- Demo: no-op
-
-Triggered from `apps/user/app/reservations/[id]/actions.ts#cancelReservation` (and similar order/rental cancel actions). Updates reservation `status: refunded` on success.
+`issueRefund(ref)` (user) and `packages/data/src/refund.ts` dispatch on `providerFromRef`: Mollie
+refund on the partner's payment; Stripe refund on the connected account with
+`refund_application_fee` (`stripe_cs_` and `stripe_pi_` alike); Viva terminal via the Cloud Terminal client; Viva online via the Smart Checkout client; demo no-op; an unrecognised ref returns an error rather than guessing Mollie. Open: a refunded
+online payment leaves the PLATFORM commission invoice standing (no credit note) — same as Mollie
+today.
 
 ## Configuration
 
-Env vars (all required for the providers you use):
-
-- `MOLLIE_CLIENT_ID`, `MOLLIE_CLIENT_SECRET`, `MOLLIE_REDIRECT_URI`
-- `NEXT_PUBLIC_DEMO_MODE` — boolean-ish, enables demo path
-- `RECONCILIATION_SECRET` — required (503 if unset)
-- `APP_URL` / `NEXT_PUBLIC_APP_URL` — used for redirect URL validation
-- `CRON_SECRET` — for cron-triggered reconcile in production
-- *(subscriptions, partner app — separate subsystem)* `STRIPE_SECRET_KEY` + `STRIPE_SUBSCRIPTION_WEBHOOK_SECRET`. The old consumer `STRIPE_PUBLIC_KEY` / `STRIPE_WEBHOOK_SECRET` are no longer used.
+- Mollie: `MOLLIE_CLIENT_ID`, `MOLLIE_CLIENT_SECRET`, `MOLLIE_REDIRECT_URI`
+- Stripe Connect: `STRIPE_CONNECT_SECRET_KEY` (both apps), `NEXT_PUBLIC_STRIPE_CONNECT_PUBLIC_KEY` (partner), `STRIPE_CONNECT_WEBHOOK_SECRET` (user), `STRIPE_CONNECT_ACCOUNT_WEBHOOK_SECRET` (partner)
+- Viva online: `VIVA_MODE`, `VIVA_CHECKOUT_SOURCE_CODE`, `VIVA_CHECKOUT_COLOR`, `VIVA_WEBHOOK_VERIFICATION_KEY` (+ the `VIVA_ISV_*` vars in http mode)
+- `NEXT_PUBLIC_DEMO_MODE` — enables demo path
+- `RECONCILIATION_SECRET` / `CRON_SECRET` — reconcile auth
+- `APP_URL` / `NEXT_PUBLIC_APP_URL` — redirect URL validation
+- *(subscriptions, partner app)* `STRIPE_SECRET_KEY` + `STRIPE_SUBSCRIPTION_WEBHOOK_SECRET`
 
 ## Invariants
 
 1. **Idempotency end-to-end.** Webhook, polling, and reconciliation can all fire for the same payment. Each downstream `processConfirmed*` is idempotent.
 2. **All money math via `round()`** from `@repo/data`. VAT-inclusive everywhere; reverse-VAT for splits.
 3. **No client-supplied prices.** Server fetches from DB.
-4. **Verify webhook authenticity, never trust the payload.** Mollie sends only a payment id — validate its format, then re-fetch state from the provider; don't add a bypass. (The partner subscription webhook verifies a Stripe HMAC signature.)
-5. **Generic error messages on payment failures.** Never leak internal details (PI id, Mollie error.detail, DB row id) to the client. Pattern: `"Payment could not be processed. Please try again or contact support."`
+4. **Never trust a webhook payload.** Verify what can be verified (Mollie id format, Stripe signature + `event.account`), then re-fetch state from the provider and act on that alone — Viva webhooks are unsigned, so the re-fetch is the only defence.
+5. **Provider is resolved server-side.** The neutral create route reads the entity's site's effective provider; a client-sent provider is never trusted.
+6. **Generic error messages on payment failures.** Never leak internal details (PI id, Mollie error.detail, DB row id) to the client. Pattern: `"Payment could not be processed. Please try again or contact support."`
 
 ## Related
 
@@ -167,8 +224,8 @@ Env vars (all required for the providers you use):
 
 ## Common pitfalls
 
-- **Skipping `isDemoPayment` check** before calling Mollie — a `pi_demo_*` id has no provider record.
-- **Hardcoding currency.** Use site / platform config.
+- **Skipping `isDemoPayment` check** before calling a provider — a `pi_demo_*` id has no provider record.
+- **A Stripe call without `{ stripeAccount }`.** It lands on the platform — a platform charge, the exact thing [[track:003-stripe-connect-compliance]] removed.
 - **Forgetting `applicationFee` on Mollie.** Then the platform takes nothing.
 - **Trusting return-URL query params** (`reservationId` / `payment_intent`). Always re-verify status with the provider before treating a payment as paid.
 - **Logging full webhook payloads.** Contains PII / partial card data.

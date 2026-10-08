@@ -50,6 +50,7 @@ Migration doctrine: `.claude/rules/migrations.md` (rules) · `.claude/wiki/subsy
 - `computeVatAndBaseAmounts(gross, vatRate)` — reverse VAT: `base = round(gross / (1 + rate/100))`
 - `resolveServiceFee(siteFees, accountFees, settingsFees, serviceCode, tier?)` — three-tier cascade, first match wins
 - `calculateServiceFeeAmount(fee, referenceAmount)` — fixed (`feeAmount`) or percentage calculation
+- `serviceFeeForUnits(fee, { total, units })` — THE commission rule for every charge-time fee (Mollie `applicationFee`, Stripe `application_fee_amount`, Viva `isvAmount`) AND every PLATFORM invoice, so collected === invoiced. Fixed fee: per unit (bed / rental booking line); percentage: once on the total paid. Reservation units = items, rental units = bookings. Orders/tabs/deposits still use `calculateServiceFeeAmount` (single unit, identical result). Pinned by `payment.commission-parity.integration.test.ts`.
 - `computeInvoiceHash(number, date, amount, vatNumber, previousHash)` — SHA-256 chain for invoice integrity
 
 ### DB-Dependent Functions
@@ -75,9 +76,69 @@ Tab orders enter kitchen states at PLACEMENT, before payment — `order.status` 
 - **Agent/marketplace model**: the PARTNER invoice is booked GROSS (the full price the consumer paid); the fee is never netted out of partner revenue or added to the consumer total
 - Two invoices per payment: **PARTNER** (gross consumer sale, partner = merchant of record) and **PLATFORM** (B2B commission billed TO the partner — recipient fields populated; `reverseCharge` + 0 VAT for cross-border EU B2B). They do NOT sum to the consumer payment
 - All prices are VAT-inclusive; reverse calculation to get base amounts
-- `Invoice.processingFee` holds the (VAT-exempt) Mollie/PSP fee for reconciliation — populated by a deferred settlement-sync step
+- `Invoice.processingFee` holds the (VAT-exempt) PSP processing fee. **Written for Stripe refs only**, at confirmation, on the PLATFORM invoice as the processing pass-through (`platformPassThroughFor`, alongside a `payment-processing` line — see Payment providers below). Mollie and Viva refs leave it unpopulated (no fee capture for those rails)
 - Invoice numbers sequential per issuer type, protected by FOR UPDATE lock
 - Hash chain: each invoice's hash includes previous invoice's hash
+
+## Payment providers (track 028)
+
+One consumer rail per `PartnerAccount` (selected), mirrored onto `Site.paymentProvider` (effective).
+The invoicing core (`processConfirmed*`) is provider-neutral; coupling lives in create / confirm /
+refund / connect, all keyed off the ref prefix. **No `Payment` ledger — the prefix is the only
+discriminator.** Design record: `.claude/tracks/028-multi-provider-payments.md`.
+
+- **`payment-refs.ts`** (PURE, client-safe) — the one prefix vocabulary; every `tr_`/`pi_demo_`
+  check in data, floor-core and the apps imports it. `providerFromRef`, `isDemoPayment`,
+  `isMolliePaymentRef`, `isVivaCheckoutRef`, `isStripeCheckoutRef`, `isStripeTerminalRef`,
+  `isStripeRef`, plus `PaymentState` (`pending|paid|failed|refunded`):
+
+  | Prefix | Provider id | Rail |
+  |---|---|---|
+  | `tr_` | `mollie` | Mollie online |
+  | `pi_demo_` | `demo` | demo mode |
+  | `viva_` | `viva-terminal` | Viva Cloud Terminal (card-present, track 024) |
+  | `vso_` | `viva` | Viva Smart Checkout online (`vso_<orderCode>`) |
+  | `stripe_cs_` | `stripe` | Stripe Checkout Session, direct charge |
+  | `stripe_pi_` | `stripe-terminal` | Stripe Tap to Pay PaymentIntent |
+
+  Namespaced wrappers: no prefix is a prefix of another.
+- **`payment-providers/`** — `types` (PURE adapter contract `OnlineCheckoutAdapter`,
+  `ProviderNotWiredError`/`ProviderNotReadyError`); `index` (`getOnlineAdapter('stripe'|'viva')`);
+  `availability` (PURE, **founder-editable** country matrix → which providers + `cardPresent`
+  kind `none|terminal-app|tap-to-pay`); `readiness` (PURE `providerReadiness`,
+  `effectiveProviderFor`, `READINESS_SELECT`, token-free `toReadinessAccount`); `selection`
+  (`syncEffectiveProvider(userId)` — idempotent, flips sites only when the selected provider is
+  ready); `fee-policy` (PURE, one constant `STRIPE_PROCESSING_ESTIMATE` 1.5% + €0.25 →
+  `stripeApplicationFee` = commission + pass-through); `stripe-adapter` / `viva-adapter`
+  (server-only); `stripe-account` (`stripeAccountForSite`, `getStripeRefStatus`).
+- **`checkout.ts`** — `resolveCheckoutIntent` (amount + commission for the five kinds, same fee
+  loaders as the Mollie paths) and `createOnlineCheckout` (adapter dispatch). Reservation/rental
+  ref writes go through the sanctioned `markReservationCheckoutStarted/Failed` and
+  `markRentalCheckoutStarted/Failed` writers (single-writer ratchet). Mollie keeps its own routes.
+- **`stripe/`** (server-only; the `stripe` SDK lives here now) — `client`: `getStripeClient()` =
+  partner **subscriptions** (`STRIPE_SECRET_KEY`), `getStripeConnectClient()` = **Connect
+  platform** (`STRIPE_CONNECT_SECRET_KEY`, falls back to the former); `connect`: `CONNECT_CONTROLLER`
+  (`requirement_collection/losses.payments/fees.payer: 'application'`, `stripe_dashboard: 'none'`),
+  own-form onboarding helpers, `snapshotFromAccount`/`snapshotToColumns`, `createAccountSession`;
+  `checkout`: direct-charge Checkout Sessions (`{ stripeAccount }`, `application_fee_amount`),
+  state fetch, `refundPaymentIntent` (`refund_application_fee`); `terminal`:
+  `ensureTerminalLocation`, `createConnectionToken`, `createTerminalPaymentIntent`,
+  `cancelTerminalPaymentIntent`. Every consumer call passes `{ stripeAccount }` — never a
+  platform charge (track 003).
+- **`viva/checkout-{types,http,stub}`** — Smart Checkout (online), separate from the Cloud Terminal
+  `VivaClient`. `checkout-http`: **every unverified ISV field lives inside the one `vivaOnlineHttp`
+  builder** (developer.viva.com field names unconfirmed; KYC pending). `checkout-stub`: the store is
+  held on **`globalThis`** — Next dev compiles API routes and RSC pages into separate module graphs,
+  so a module-level map is two maps. `VIVA_MODE` picks stub/http like the other Viva clients.
+- **PLATFORM-invoice pass-through** — for Stripe refs (`stripe_cs_` / `stripe_pi_`), every
+  `processConfirmed*` (reservation, order, rental, tab, **table deposit**) adds a VAT-exempt
+  `payment-processing` line and sets `Invoice.processingFee` (`platformPassThroughFor`). Viva's ISV
+  fee is credited monthly → no pass-through.
+- **State machine** — condition `tapToPay` (from `opts.collect.method` on start, the `stripe_pi_`
+  prefix on abandon) and effects `stripeTerminalIntent` (card_present PaymentIntent on the
+  connected account, writes the ref, returns the client secret) / `stripeTerminalCancel`
+  (reverify-once; a succeeded race finalizes, never reverts a possibly-captured tap);
+  interpreter `runCollectStartTapToPay`.
 
 ## Status Constants (`src/reservation-status.ts`)
 
@@ -109,7 +170,7 @@ machine makes it explicit and is the ONLY sanctioned writer of reservation state
   `amount`, a `buildRedirectUrl` builder, a `refund` handler). Executors: day-row +
   parent mirror (atomic), till record/void/PARTITION (splits carry the money with the
   seats), receipts + credit notes, split lineage (`splitFromId`), collect flow
-  (demo/Mollie, abandon NEVER frees a bed), providerRefund, I4 delete defense (any
+  (demo/Mollie/Viva terminal/Stripe Tap to Pay, abandon NEVER frees a bed), providerRefund, I4 delete defense (any
   till/invoice history — voided included — blocks hard delete).
 - **`reservation-machine-guard.test.ts`** — single-writer ratchet: scans all apps for
   reservation state writes outside the sanctioned modules; exact-equality shrink-only

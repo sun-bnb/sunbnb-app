@@ -342,3 +342,23 @@ already dispatches purely on a normalized return shape from a per-provider funct
 parallel copy of the generic caller. When a stub client's session store is module-level, `vi.mock` +
 `vi.hoisted` a single memoized instance rather than spying per-call-site — spread-copying the object to
 override one method is safe exactly when the implementation doesn't close over `this`.
+
+## `migrate dev` refuses in a non-interactive shell when Prisma wants to warn (track 028 P2a, 2026-10-07)
+
+**Symptom:** adding a `@unique` column made `prisma migrate dev` stop on its data-loss/unique-index
+warning prompt; agent shells are non-interactive, and neither `--name` nor piping the answer on stdin
+gets past "non-interactive environment not supported".
+
+**Fix that keeps the lockstep:** generate the SQL instead of letting `migrate dev` do it —
+`npx prisma migrate diff --from-config-datasource --to-schema ./prisma/schema.prisma --script >
+prisma/migrations/<YYYYMMDDHHMMSS>_<name>/migration.sql` (timestamp from `date -u +%Y%m%d%H%M%S`),
+READ it (must be additive), then `npx prisma migrate deploy` (local) → `npx prisma generate` →
+`npm run migrate:integration` (sunbnb_test) → `npm run migrate:check` must say "No difference
+detected". Same end state as `migrate:local`. Never hand-edit the SQL after it has been applied.
+
+## Stripe Connect data layer (track 028 P3a) (2026-10-07)
+
+- `@repo/data/stripe` (client/connect/checkout) is server-only; all consumer calls pass `{ stripeAccount }` (direct charge, track 003). Tests mock `./client` (`getStripeClient`), not the `stripe` package.
+- PLATFORM invoice pass-through: `platformPassThroughFor(ref, gross)` in `payment.ts`; five PLATFORM blocks (reservation, rental, order, **table deposit**, tab) — deposits DO have a PLATFORM invoice (`no-show-deposit` fee), contrary to the packet brief. Zero-commission Stripe payments still get a PLATFORM invoice (processing line only); Mollie zero-commission stays invoice-less.
+- `fee-policy.ts` caps the application fee at `amount - 0.01`; the invoice pass-through is uncapped, so they diverge only for sub-EUR amounts.
+- `payment-providers/index.ts` now imports the Stripe SDK via `stripe-adapter` — only `checkout.ts` imports it; never import the barrel from client code (use `/types`, `/availability`, `/readiness`).

@@ -1,7 +1,8 @@
 # Mobile App (apps/mobile)
 
 Expo / React Native floor app for on-site staff — iOS + Android. The native home of the
-token-gated floor surfaces, and the host of Viva card-present payments ([[track:024]]).
+token-gated floor surfaces, and the host of card-present payments — Viva Terminal app
+([[track:024]]) and Stripe Tap to Pay ([[track:028]]).
 **Status: scaffolded and bundling** — pairing flow, tab shell, and a v0 sunbed grid running
 against the partner HTTP surface. Screens are being built toward web parity per the approved
 mockups (see the track).
@@ -39,7 +40,8 @@ the mkcert cert, so partner's dev server also listens on plain HTTP port **3011*
 RN cannot call Next server actions. The app uses the token-gated HTTP surface in
 apps/partner (track 024 P6.5):
 
-- `GET /api/manage/context?siteId&key` — pairing verification → `{ site, isAdmin }`
+- `GET /api/manage/context?siteId&key` — pairing verification → `{ site, isAdmin, paymentProvider,
+  cardPresent }` (the last two gate the card rails — `src/lib/site-context.ts`)
 - `GET /api/manage/grid?siteId&key` — the full grid payload (dates arrive as ISO strings)
 - `POST /api/manage/rpc` — `{ action, args }` forwarded to an allowlisted manage server
   action; the allowlist (`apps/partner/app/api/manage/rpc/registry.ts`) is test-enforced to
@@ -52,24 +54,55 @@ never a key in a URL. Admin keys unlock the Today tab (till summary / day close 
 ## Structure
 
 - `src/app/` — routes: `index` (pairing gate) · `pairing` · `(tabs)/{beds,rentals,guests,today}`
-- `src/lib/` — `api.ts` (HTTP client) · `pairing.ts` (secure-store + input parsing) · `config.ts`
+- `src/lib/` — `api.ts` (HTTP client + `reservationCollectActions`) · `pairing.ts` (secure-store +
+  input parsing) · `config.ts` · `site-context.ts` (payment rails) · `terminal.ts` (Viva terminal
+  choice) · `tap-to-pay.tsx` (Stripe Terminal SDK wrapper)
 - `src/theme.ts` — design-language tokens incl. the BedState → color map (mirrors
   `@repo/floor-core/bed-state`'s Tailwind vocabulary)
 
-## Three constraints that shape everything
+## Constraints that shape everything
 
 - **RN cannot call Next server actions** — everything goes through the HTTP surface above;
   new floor actions must be added to the RPC allowlist AND already sit in the gated-action
   registry (`apps/partner/app/test/gated-actions.ts`).
 - **The payment leg cannot run in an emulator, ever.** Play Integrity rejects emulators and
   an AVD has no NFC. UI work is fine in emulator/Simulator; the card tap needs a real
-  Android 8.1+ NFC handset (Viva Terminal DEMO app + demo account, no money moved).
-- **The payment UI is Viva's, not ours.** Card collect is **server-push**: the partner backend
-  sends the sale to the staff phone's `viva.com Terminal` app via Viva's Cloud Terminal API
-  (ISV endpoints) and the app polls the collect status exactly like the QR flow. The phone only
-  supplies a `terminalId` (picked once, stored with the pairing) — no Viva credentials, no
-  deep-link callback, nothing on the device is authoritative. The `sunbnbfloor` scheme stays
-  reserved but unused by the payment leg.
+  Android 8.1+ NFC handset (Viva Terminal DEMO app + demo account, no money moved). The one
+  exception is Stripe's **simulated** Tap to Pay reader, meant to run in the Simulator (not yet verified there).
+- **The phone is never authoritative for a payment.** Two card rails, picked by the site
+  context's `cardPresent`:
+  - **Viva (`terminal-app`) — the payment UI is Viva's, not ours.** Card collect is
+    **server-push**: the partner backend sends the sale to the staff phone's `viva.com Terminal`
+    app via Viva's Cloud Terminal API (ISV endpoints) and the app polls the collect status exactly
+    like the QR flow. The phone only supplies a `terminalId` (picked once, stored with the
+    pairing) — no Viva credentials, no deep-link callback. The `sunbnbfloor` scheme stays
+    reserved but unused by the payment leg.
+  - **Stripe (`tap-to-pay`) — Stripe's in-app SDK.** The server creates the PaymentIntent
+    (`collectReservationPayment {method:'tap-to-pay'}`); the app runs the Terminal SDK's
+    collect + confirm on that client secret (this phone is the reader), then polls
+    `getCollectStatus` like QR — the server settles from the PaymentIntent. A decline/cancel
+    on the phone calls `cancelCollection` and the bed stays unsettled cash. Gate is
+    provider `stripe` **and** `cardPresent: 'tap-to-pay'` (Mollie also reports `tap-to-pay` for
+    some countries — that's Mollie's own app, not ours). Rentals stay QR-only.
+
+## Stripe Tap to Pay (dev build only)
+
+- **Needs a dev build** — Expo Go has no `StripeTerminalReactNative` native module.
+  `npx expo prebuild --platform ios && npx expo run:ios` (`/ios` + `/android` are gitignored).
+  Without the module (`expo export`, Expo Go, web) `TapToPayProvider` is a no-op and
+  `useTapToPay().available` is false — the chooser simply hides "Tap to Pay".
+- **Simulated reader by default in dev** (`__DEV__`), auto-tapping test card 4242…; works in the
+  iOS Simulator against a Stripe **test-mode** connected account + Terminal location.
+  `EXPO_PUBLIC_STRIPE_TTP_REAL=true` uses the real phone reader (physical device only).
+- **Apple entitlement is a founder action.** A real tap on iPhone needs
+  `com.apple.developer.proximity-reader.payment.acceptance`, granted by Apple on request; once
+  granted add it under `expo.ios.entitlements` in `app.json`. Deliberately absent until then —
+  the simulated reader doesn't need it.
+  <!-- TODO(founder): add "com.apple.developer.proximity-reader.payment.acceptance": true to
+       expo.ios.entitlements once Apple approves the Tap to Pay on iPhone request. -->
+- SDK: `@stripe/stripe-terminal-react-native` (config plugin in `app.json` sets the location /
+  bluetooth usage strings; `bluetoothBackgroundMode: false`). Connection tokens come from the
+  `getStripeConnectionToken` RPC; the reader is connected lazily and kept between collects.
 
 ## Share vs reimplement
 

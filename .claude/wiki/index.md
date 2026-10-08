@@ -42,7 +42,7 @@ Invokable via `/wiki <op>` (see `.claude/commands/wiki.md`).
 
 ## Flows — end-to-end journeys
 
-- [`flow:reservation-payment`](flows/reservation-payment.md) — **stable** — booking → Mollie/Demo → invoice → confirmation email
+- [`flow:reservation-payment`](flows/reservation-payment.md) — **stable** — booking → provider branch (Mollie route / neutral `/api/payment/create` for Stripe·Viva / Demo) → invoice → confirmation email
 - [`flow:order-payment`](flows/order-payment.md) — **stable** — F&B order placement → payment → invoice (consumer pays listed price; commission parallel)
 - [`flow:rental-booking`](flows/rental-booking.md) — **stable** — equipment rental: availability check → booking → payment → pickup/return
 - [`flow:walk-in`](flows/walk-in.md) — **stable** — partner manage page: occupancy lifecycle (walk-in/hold/comp/block creators vs transitions), `[from,to]` + `until`, two-clock GC, pool seats, QR walk-in payment collection (Mollie + anonId capability + receipt)
@@ -52,7 +52,7 @@ Invokable via `/wiki <op>` (see `.claude/commands/wiki.md`).
 ## Subsystems — cross-cutting modules
 
 - [`subsystem:auth`](subsystems/auth.md) — **stable** — NextAuth setup per app, session lifetime, anonId, ownership checks, sudo
-- [`subsystem:payments`](subsystems/payments.md) — **stable** — consumer Mollie + Demo (Stripe = subscriptions only), webhooks, reconciliation, refunds
+- [`subsystem:payments`](subsystems/payments.md) — **stable** — multi-provider consumer rails (Mollie / Stripe Connect / Viva online + card-present Viva terminal / Stripe Tap to Pay / Demo), selection model, ref prefixes, webhooks, fee pass-through, reconciliation, refunds
 - [`subsystem:table-reservations`](subsystems/table-reservations.md) — **stable** — restaurant product: core/ui packages, availability engine, app wiring, extraction posture
 - [`subsystem:reservation-state-machine`](subsystems/reservation-state-machine.md) — **stable** — table-driven reservation transitions (track 018): `deriveState` compound state, `applyTransition` interpreter, conservation invariants I1–I7, single-writer ratchet, red-cell matrix. Edit the TABLE, never add action-level guards
 - [`subsystem:schematic-editor`](subsystems/schematic-editor.md) — **draft** — shared grid geometry + editor chrome behind sunbed inventory & restaurant tables
