@@ -1,6 +1,13 @@
 import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
 import { canCreateSite } from '@repo/data/subscription'
+import {
+  READINESS_SELECT,
+  isSelectableProvider,
+  providerReadiness,
+  selectedProvider,
+  toReadinessAccount,
+} from '@repo/data/payment-providers/readiness'
 import Link from 'next/link'
 import Image from 'next/image'
 import { getTranslations } from 'next-intl/server'
@@ -20,7 +27,7 @@ interface SiteCardProps {
   rentalPaymentType?: string | null
   workingHoursCount: number
   activeInventoryCount: number
-  mollieReady: boolean
+  paymentsReady: boolean
   _count: { inventoryItems: number; products: number; reservations: number }
 }
 
@@ -48,7 +55,7 @@ function countMissing(site: SiteCardProps): number {
   const hasIntegratedPayments = site.type === 'paid'
     || site.orderPaymentType === 'paid'
     || site.rentalPaymentType === 'paid'
-  if (hasIntegratedPayments && !site.mollieReady) missing++
+  if (hasIntegratedPayments && !site.paymentsReady) missing++
   if (site.activeInventoryCount === 0) missing++
   if (site.workingHoursCount === 0) missing++
   if (!site.image) missing++
@@ -207,6 +214,7 @@ export default async function Sites() {
         vat: true,
         orderPaymentType: true,
         rentalPaymentType: true,
+        paymentProvider: true,
         inventoryItems: { where: { status: 'active' }, select: { id: true } },
         _count: {
           select: {
@@ -225,12 +233,18 @@ export default async function Sites() {
     canCreateSite(session.user.id!),
     prisma.partnerAccount.findUnique({
       where: { userId: session.user.id! },
-      select: { mollieAccessToken: true, mollieOnboardingStatus: true },
+      select: READINESS_SELECT,
     }),
     getTranslations('Sites'),
   ])
 
-  const mollieReady = !!partnerAccount?.mollieAccessToken && partnerAccount?.mollieOnboardingStatus === 'completed'
+  // Each site is judged against its EFFECTIVE provider (Site.paymentProvider), not Mollie.
+  const readinessAccount = toReadinessAccount(partnerAccount ?? {})
+  const paymentsReadyFor = (provider: string | null | undefined) =>
+    providerReadiness(
+      readinessAccount,
+      isSelectableProvider(provider) ? provider : selectedProvider(readinessAccount)
+    ).ready
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-5xl">
@@ -252,7 +266,7 @@ export default async function Sites() {
           t={t as unknown as T}
         />
         {sites.map(site => (
-          <SiteCard key={site.id} site={{ ...site, mollieReady }} t={t as unknown as T} />
+          <SiteCard key={site.id} site={{ ...site, paymentsReady: paymentsReadyFor(site.paymentProvider) }} t={t as unknown as T} />
         ))}
       </div>
     </div>

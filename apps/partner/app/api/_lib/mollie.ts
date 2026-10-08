@@ -166,6 +166,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<MollieTo
 
 import createMollieClient from '@mollie/api-client'
 import { isTestMode } from '@repo/data/env'
+import { isDemoPayment } from '@repo/data/payment-refs'
 import { getValidMollieToken } from '@repo/data/mollie-tokens'
 
 /**
@@ -510,7 +511,7 @@ export async function refundDepositPayment(
   paymentRef: string,
   partnerAccountId: string | null | undefined,
 ): Promise<void> {
-  if (paymentRef.startsWith('pi_demo_')) return // demo — no real money to refund
+  if (isDemoPayment(paymentRef)) return // demo — no real money to refund
   if (!partnerAccountId) throw new Error('Partner has no Mollie connection')
   // Funnel through the centralized manager so an expired access token is
   // refreshed (and a dead one surfaces a reconnect) instead of 401-ing here.

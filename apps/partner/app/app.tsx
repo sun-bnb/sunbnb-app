@@ -7,6 +7,9 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import Header from './header'
 import LandingPage from './landing'
+import { PROVIDER_LABELS } from '@repo/data/payment-providers/availability'
+import type { ProviderReadiness } from '@repo/data/payment-providers/readiness'
+import type { SelectableProvider } from '@repo/data/payment-refs'
 
 interface BusinessEntity {
   companyName: string
@@ -17,9 +20,15 @@ interface BusinessEntity {
   contactPhone: string | null
 }
 
-// ─── Mollie banner ────────────────────────────────────────────────────────────
+// ─── Payments banner ──────────────────────────────────────────────────────────
 
-type MollieOnboardingStatus = 'completed' | 'in-review' | 'needs-data' | null
+/** Provider-neutral slice of `/api/onboarding-status` (track 028). */
+interface PaymentsInfo {
+  provider: SelectableProvider
+  selected: SelectableProvider
+  readiness: ProviderReadiness
+  selectedDiffersFromEffective: boolean
+}
 
 /**
  * Collapse missing OAuth scopes into the capabilities a partner would recognise
@@ -48,23 +57,122 @@ function missingCapabilities(missingScopes: string[]): string[] {
   return capabilities
 }
 
-function MollieBanner({
-  hasMollie,
-  mollieOnboardingStatus,
+const BANNER_TONES = {
+  amber: { wrap: 'bg-amber-50 border-amber-200', text: 'text-amber-800', sub: 'text-amber-600', btn: 'bg-amber-500 hover:bg-amber-600' },
+  blue: { wrap: 'bg-blue-50 border-blue-200', text: 'text-blue-800', sub: 'text-blue-500', btn: '' },
+} as const
+
+/** Generic (non-Mollie) payments banner: one message + one link. */
+function PaymentsNotice({
+  tone,
+  message,
+  detail,
+  href,
+  cta,
+}: {
+  tone: keyof typeof BANNER_TONES
+  message: string
+  detail?: string
+  href: string
+  cta: string
+}) {
+  const c = BANNER_TONES[tone]
+  return (
+    <div role="status" className={`${c.wrap} border-b`}>
+      <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-4">
+        <div className="min-w-0 flex-1">
+          <p className={`text-sm ${c.text}`}>{message}</p>
+          {detail && <p className={`text-xs ${c.sub} mt-0.5`}>{detail}</p>}
+        </div>
+        <Link
+          href={href}
+          className={
+            tone === 'blue'
+              ? 'flex-shrink-0 text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline'
+              : `flex-shrink-0 text-xs font-semibold text-white ${c.btn} px-3 py-1.5 rounded-lg transition-colors`
+          }
+        >
+          {cta}
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+function PaymentsBanner({
+  info,
   hasIntegratedPayments,
   missingScopes,
 }: {
-  hasMollie: boolean
-  mollieOnboardingStatus: MollieOnboardingStatus
+  info: PaymentsInfo | null
   hasIntegratedPayments: boolean
   missingScopes: string[]
 }) {
   const t = useTranslations('App')
 
   // Only show when at least one site uses integrated payments
-  if (!hasIntegratedPayments) return null
+  if (!hasIntegratedPayments || !info) return null
 
+  const { readiness, provider } = info
+  const label = PROVIDER_LABELS[provider]
   const reason = t('mollieIntegratedReason')
+
+  // Effective provider is ready: the only thing to flag is a selection that has not
+  // taken over yet (and Mollie's missing OAuth scopes when Mollie is the live one).
+  if (readiness.ready && !(provider === 'mollie' && missingScopes.length > 0)) {
+    if (!info.selectedDiffersFromEffective) return null
+    return (
+      <PaymentsNotice
+        tone="blue"
+        message={t('paymentsSelectedDiffers', {
+          selected: PROVIDER_LABELS[info.selected],
+          effective: label,
+        })}
+        href="/account/payments"
+        cta={t('paymentsViewPayments')}
+      />
+    )
+  }
+
+  // Viva / Stripe: generic banner from readiness.status + nextStep.
+  if (provider !== 'mollie') {
+    if (readiness.nextStep === 'connect') {
+      return (
+        <PaymentsNotice
+          tone="amber"
+          message={t('paymentsConnect', { provider: label })}
+          detail={reason}
+          href={readiness.connectPath}
+          cta={t('paymentsConnectCta', { provider: label })}
+        />
+      )
+    }
+    if (readiness.nextStep === 'wait_review') {
+      return (
+        <PaymentsNotice
+          tone="blue"
+          message={t('paymentsReviewing', { provider: label })}
+          detail={reason}
+          href={readiness.connectPath}
+          cta={t('viewMollieDetails')}
+        />
+      )
+    }
+    return (
+      <PaymentsNotice
+        tone="amber"
+        message={t('paymentsFinish', { provider: label })}
+        detail={reason}
+        href={readiness.connectPath}
+        cta={t('continueSetup')}
+      />
+    )
+  }
+
+  // ── Mollie: four dedicated states (kept as-is) ──
+  const hasMollie = readiness.connected
+  const mollieOnboardingStatus =
+    readiness.status === 'needs_data' ? 'needs-data' : readiness.status === 'in_review' ? 'in-review' : null
 
   // Not connected at all
   if (!hasMollie) {
@@ -206,6 +314,19 @@ function MollieBanner({
     )
   }
 
+  // Connected but onboarding state not yet reported: generic "finish setup".
+  if (readiness.status === 'in_progress' || readiness.status === 'restricted') {
+    return (
+      <PaymentsNotice
+        tone="amber"
+        message={t('paymentsFinish', { provider: label })}
+        detail={reason}
+        href={readiness.connectPath}
+        cta={t('continueSetup')}
+      />
+    )
+  }
+
   return null
 }
 
@@ -218,8 +339,7 @@ export default function App({ children, businessEntity }: { children: React.Reac
   const router = useRouter()
   const [onboardingChecked, setOnboardingChecked] = useState(false)
   const [needsOnboarding, setNeedsOnboarding] = useState(false)
-  const [hasMollie, setHasMollie] = useState(false)
-  const [mollieOnboardingStatus, setMollieOnboardingStatus] = useState<MollieOnboardingStatus>(null)
+  const [paymentsInfo, setPaymentsInfo] = useState<PaymentsInfo | null>(null)
   const [hasIntegratedPayments, setHasIntegratedPayments] = useState(false)
 
   // Public routes that don't need auth shell.
@@ -237,8 +357,12 @@ export default function App({ children, businessEntity }: { children: React.Reac
   // Routes where the onboarding guard should not redirect
   const isOnboardingRoute = pathname.startsWith('/onboarding')
 
-  // Don't show the banner when the user is already on the Mollie setup page
-  const isMolliePage = pathname.startsWith('/account/mollie')
+  // Don't show the banner while the user is already on a payments setup page
+  const isPaymentsSetupPage =
+    pathname.startsWith('/account/mollie') ||
+    pathname.startsWith('/account/viva') ||
+    pathname.startsWith('/account/stripe') ||
+    pathname.startsWith('/account/payments')
 
   // Stamped onto the token at sign-in (see the `jwt` callback in app/auth.ts),
   // so this needs no fetch of its own and stays fixed for the session.
@@ -259,8 +383,16 @@ export default function App({ children, businessEntity }: { children: React.Reac
           router.replace('/onboarding')
         } else {
           setNeedsOnboarding(false)
-          setHasMollie(!!data.hasMollie)
-          setMollieOnboardingStatus(data.mollieOnboardingStatus ?? null)
+          setPaymentsInfo(
+            data.readiness
+              ? {
+                  provider: data.provider,
+                  selected: data.selected,
+                  readiness: data.readiness,
+                  selectedDiffersFromEffective: !!data.selectedDiffersFromEffective,
+                }
+              : null,
+          )
           setHasIntegratedPayments(!!data.hasIntegratedPayments)
         }
         setOnboardingChecked(true)
@@ -310,10 +442,9 @@ export default function App({ children, businessEntity }: { children: React.Reac
   return (
     <div className="min-h-screen bg-gray-50/50">
       <Header />
-      {!isMolliePage && (
-        <MollieBanner
-          hasMollie={hasMollie}
-          mollieOnboardingStatus={mollieOnboardingStatus}
+      {!isPaymentsSetupPage && (
+        <PaymentsBanner
+          info={paymentsInfo}
           hasIntegratedPayments={hasIntegratedPayments}
           missingScopes={missingScopes}
         />

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { getVivaAccountsClient } from '@repo/data/viva'
+import { syncEffectiveProviderSafe } from '@/app/api/_lib/sync-effective-provider'
 
 /**
  * Viva shows this in its own onboarding UI — a fixed platform identity, not
@@ -61,6 +62,7 @@ export async function connectViva(): Promise<
           vivaMerchantId: connected.merchantId ?? null,
         },
       })
+      await syncEffectiveProviderSafe(session.user.id)
       revalidatePath('/account/viva')
       return { status: 'ok', redirectUrl: null, alreadyConnected: true }
     } catch (err) {
@@ -85,6 +87,7 @@ export async function connectViva(): Promise<
       },
     })
 
+    await syncEffectiveProviderSafe(session.user.id)
     revalidatePath('/account/viva')
     return { status: 'ok', redirectUrl: created.invitation.redirectUrl, alreadyConnected: false }
   } catch (err) {
@@ -120,6 +123,7 @@ export async function refreshVivaStatus(): Promise<
       },
     })
 
+    await syncEffectiveProviderSafe(session.user.id)
     revalidatePath('/account/viva')
     return {
       status: 'ok',
@@ -155,6 +159,7 @@ export async function disconnectViva(): Promise<
     },
   })
 
+  await syncEffectiveProviderSafe(session.user.id)
   revalidatePath('/account/viva')
   return { status: 'ok' }
 }

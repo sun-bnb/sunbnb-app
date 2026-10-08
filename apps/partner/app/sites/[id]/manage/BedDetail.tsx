@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import dayjs from 'dayjs'
 import NoteIcon from '@mui/icons-material/Note'
 import PaymentIcon from '@mui/icons-material/Payment'
+import { isRefundableOnlineRef } from '@repo/data/payment-refs'
 import { decodeSeatNumber, formatSeatId } from '@repo/data/seat-label'
 import { InventoryItem, Reservation } from '@/types/shared'
 import {
@@ -322,9 +323,9 @@ export default function BedDetail({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reservation?.id, reservation?.to])
 
-  // A refund is offered only for a real Mollie payment (tr_…). Demo/cash/comp/held
-  // bookings carry no refundable Mollie payment, so no refund control is shown.
-  const isMolliePaid = !!reservation?.paymentRef && reservation.paymentRef.startsWith('tr_')
+  // A refund is offered for any live online provider ref (Mollie, Viva, Stripe).
+  // Demo/cash/comp/held bookings carry no refundable payment, so no refund control is shown.
+  const isOnlinePaid = isRefundableOnlineRef(reservation?.paymentRef)
   const alreadyRefunded = refunded || !!reservation?.refundedAt
 
   /** Issue the Mollie refund without closing the dialog — flip the button to "Refunded". */
@@ -424,7 +425,7 @@ export default function BedDetail({
           automatically (the settlement is voided). Keeping the money is Depart's
           job, not Unreserve's, so there's no opt-out; the confirmUnreserve copy
           above already tells staff to settle the refund with the guest. */}
-      {pendingConfirm === 'cancel' && isMolliePaid && (
+      {pendingConfirm === 'cancel' && isOnlinePaid && (
         alreadyRefunded ? (
           <div
             role="status"

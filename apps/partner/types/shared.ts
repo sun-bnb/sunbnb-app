@@ -1,3 +1,6 @@
+import type { ProviderReadiness } from '@repo/data/payment-providers/readiness'
+import type { CardPresentKind } from '@repo/data/payment-providers/availability'
+
 export interface ServiceFee {
   id: string
   chargeType: string
@@ -74,8 +77,10 @@ export interface SiteProps {
   features?: string[]
   /** Guests may book part of a sunbed unit (a SunbedGroup), not just the whole unit. */
   partialGroupBookingEnabled?: boolean
-  mollieOnboardingStatus?: string | null
-  hasMollieToken?: boolean
+  /** Readiness of the site's EFFECTIVE payment provider (server-computed, token-free). */
+  paymentReadiness?: ProviderReadiness
+  /** How staff can take a card in person for the effective provider + the partner's country. */
+  cardPresent?: CardPresentKind
   // Server-computed inventory scalars (track 020 C2). Tabs that only needed a
   // COUNT used to force the whole item array (and every item's reservations,
   // with guest emails) into the payload. Optional so any caller that still

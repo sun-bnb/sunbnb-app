@@ -288,41 +288,18 @@ describe('setSiteStatus', () => {
 // ---------------------------------------------------------------------------
 
 describe('setPaymentProvider', () => {
-  it('rejects stripe and leaves the provider unchanged (Mollie-only)', async () => {
+  it('refuses for the owner and leaves the site provider unchanged (selection lives in Account -> Payments)', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id, { paymentProvider: 'mollie' })
     mockUserId = user.id
 
-    const result = await setPaymentProvider(site.id, 'stripe')
-    expect(result.status).toBe('error')
-
-    const updated = await prisma.site.findUnique({ where: { id: site.id } })
-    expect(updated!.paymentProvider).toBe('mollie')
-  })
-
-  it('rejects mollie without a Mollie access token in the database', async () => {
-    const user = await createTestUser()
-    const site = await createTestSite(user.id, { paymentProvider: 'stripe' })
-    mockUserId = user.id
-
-    // Create PartnerAccount WITHOUT mollieAccessToken
-    await prisma.partnerAccount.create({
-      data: {
-        userId: user.id,
-        firstName: 'Test',
-        lastName: 'Partner',
-        email: 'partner@test.com',
-        phoneNumber: '+358401234567',
-        company: 'Test Co',
-        address: 'Test Street 1',
-      },
-    })
-
-    const result = await setPaymentProvider(site.id, 'mollie')
-    expect(result.status).toBe('error')
-    expect(result.errors![0]).toMatch(/Mollie/)
+    for (const provider of ['mollie', 'viva', 'stripe']) {
+      const result = await setPaymentProvider(site.id, provider)
+      expect(result.status).toBe('error')
+      expect(result.errors![0]).toMatch(/Account → Payments/)
+    }
 
     const unchanged = await prisma.site.findUnique({ where: { id: site.id } })
-    expect(unchanged!.paymentProvider).toBe('stripe')
+    expect(unchanged!.paymentProvider).toBe('mollie')
   })
 })

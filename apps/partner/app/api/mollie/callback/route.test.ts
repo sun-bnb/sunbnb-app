@@ -33,6 +33,9 @@ import prisma from '@repo/data/PrismaCient'
 import { mollieTokenExpiresAtFrom } from '@repo/data/mollie-tokens'
 import { exchangeCodeForTokens, fetchMollieProfile, bootstrapMollieAccount } from '@/app/api/_lib/mollie'
 import { NextRequest } from 'next/server'
+import { syncEffectiveProvider } from '@repo/data/payment-providers/selection'
+
+const mockSync = vi.mocked(syncEffectiveProvider)
 
 const mockAuth = vi.mocked(auth)
 const mockExchangeCode = vi.mocked(exchangeCodeForTokens)
@@ -86,6 +89,18 @@ beforeEach(() => {
 })
 
 describe('GET /api/mollie/callback', () => {
+  it('re-syncs the effective payment provider after tokens are stored (best-effort)', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
+    const ok = await GET(makeRequest({ code: 'c', state: VALID_STATE, cookieState: VALID_STATE }))
+    expect(ok.headers.get('location')).toContain('success=true')
+    expect(mockSync).toHaveBeenCalledWith('user-1')
+
+    // A failing sync must not turn a successful connect into an error redirect.
+    mockSync.mockRejectedValueOnce(new Error('db down'))
+    const res = await GET(makeRequest({ code: 'c', state: VALID_STATE, cookieState: VALID_STATE }))
+    expect(res.headers.get('location')).toContain('success=true')
+  })
+
   // ── Auth gate ────────────────────────────────────────────────────────────────
 
   it('redirects unauthenticated users to error page — never proceeds to token exchange', async () => {

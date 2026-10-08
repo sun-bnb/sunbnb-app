@@ -1,6 +1,13 @@
 import prisma from '@repo/data/PrismaCient'
 import { getSiteFeeContext } from '@repo/data/payment'
 import { resolveServiceFee } from '@repo/data/payment'
+import {
+  isSelectableProvider,
+  providerReadiness,
+  selectedProvider,
+  toReadinessAccount,
+} from '@repo/data/payment-providers/readiness'
+import { availabilityFor } from '@repo/data/payment-providers/availability'
 import { auth } from '@/app/auth'
 import { SiteProps } from '@/types/shared'
 import SiteView from './site-view'
@@ -84,8 +91,14 @@ export default async function SitePage(
     const ctx = await getSiteFeeContext(params.id)
     ;(site as any).subscriptionTier = ctx.tier
     ;(site as any).subscriptionFeatures = ctx.features
-    ;(site as any).mollieOnboardingStatus = ctx.partnerAccount?.mollieOnboardingStatus ?? null
-    ;(site as any).hasMollieToken = !!ctx.partnerAccount?.mollieAccessToken
+    // Provider-neutral payment state (track 028): token-free readiness of the site's
+    // EFFECTIVE provider + how a card can be taken in person. Never ship the token.
+    const readinessAccount = toReadinessAccount(ctx.partnerAccount ?? {})
+    const effectiveProvider = isSelectableProvider(site.paymentProvider)
+      ? site.paymentProvider
+      : selectedProvider(readinessAccount)
+    site.paymentReadiness = providerReadiness(readinessAccount, effectiveProvider)
+    site.cardPresent = availabilityFor(effectiveProvider, readinessAccount.country).cardPresent
 
     const serviceCodes = ['sunbed-rental', 'food-and-beverage', 'equipment-rental']
     site.serviceFees = serviceCodes

@@ -38,6 +38,8 @@ import { processConfirmedReservation, processCashRentalBooking } from '@repo/dat
 import { getVivaClient } from '@repo/data/viva'
 import { applyDayTransition } from './reservation-day'
 import { applyTransition } from '@repo/data/reservation-machine-apply'
+import { availabilityFor } from '@repo/data/payment-providers/availability'
+import { ensureTerminalLocation, createConnectionToken } from '@repo/data/stripe'
 import { siteDayKey, siteDayBounds } from '@repo/data/site-day'
 import type { SiteTimezone } from '@repo/data/site-day'
 import type { Prisma } from '@prisma/client'
@@ -1969,6 +1971,21 @@ export async function settleReservation(
   return { status: 'ok' }
 }
 
+/** How the operator wants to collect. Omitted / `{method:'qr'}` = Mollie QR checkout. */
+export type CollectChoice =
+  | { method?: 'qr' }
+  | { method: 'card'; terminalId?: string }
+  | { method: 'tap-to-pay' }
+
+/** Everything the Stripe Terminal SDK needs to take the tap (no secret keys). */
+export interface TapToPayIntent {
+  paymentIntentId: string
+  clientSecret: string
+  stripeAccount: string
+  locationId: string
+  currency: string
+}
+
 /**
  * Begin collecting an online (Mollie) payment for an existing cash walk-in.
  *
@@ -1983,7 +2000,7 @@ export async function collectReservationPayment(
   siteId: string,
   reservationId: string,
   accessKey?: string,
-  opts?: { method?: 'qr' | 'card'; terminalId?: string },
+  opts?: CollectChoice,
 ) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
@@ -1996,8 +2013,45 @@ export async function collectReservationPayment(
     return { status: 'error', errors: ['Reservation not found'] }
   }
 
+  if (opts?.method === 'tap-to-pay') {
+    // Stripe Tap to Pay (track 028): the site's EFFECTIVE provider must be stripe
+    // and the venue's country must support phone-as-terminal. Checked before the
+    // machine so a mismatch never flips the reservation to processing.
+    const [site, account] = await Promise.all([
+      prisma.site.findUnique({ where: { id: siteId }, select: { paymentProvider: true } }),
+      prisma.partnerAccount.findUnique({
+        where: { userId: ownership.userId },
+        select: { country: true },
+      }),
+    ])
+    if (
+      site?.paymentProvider !== 'stripe' ||
+      availabilityFor('stripe', account?.country).cardPresent !== 'tap-to-pay'
+    ) {
+      return { status: 'error', errors: ['Tap to Pay is not available for this venue'] }
+    }
+
+    const tapResult = await applyTransition(reservationId, 'collect.start', {
+      collect: { method: 'tap-to-pay', demo: DEMO_MODE },
+    })
+    if (tapResult.outcome === 'effect-failed') {
+      return { status: 'error', errors: ['Could not start Tap to Pay. Please try again.'] }
+    }
+    if (tapResult.outcome !== 'applied') {
+      return { status: 'error', errors: ['Payment can only be collected for an unsettled walk-in'] }
+    }
+    revalidatePath(`/sites/${siteId}/manage`)
+    const tapData = tapResult.data ?? {}
+    if (tapData.demo) return { status: 'ok', amount: tapData.amount as number, demo: true }
+    return {
+      status: 'ok',
+      amount: tapData.amount as number,
+      tapToPay: tapData.tapToPay as TapToPayIntent,
+    }
+  }
+
   const isCard = opts?.method === 'card'
-  if (isCard && !opts?.terminalId) {
+  if (isCard && !opts.terminalId) {
     return { status: 'error', errors: ['A terminal is required to collect by card'] }
   }
 
@@ -2011,7 +2065,7 @@ export async function collectReservationPayment(
 
   const result = await applyTransition(reservationId, 'collect.start', {
     collect: isCard
-      ? { demo: DEMO_MODE, method: 'card', terminalId: opts!.terminalId }
+      ? { demo: DEMO_MODE, method: 'card', terminalId: opts.terminalId }
       : {
           demo: DEMO_MODE,
           buildRedirectUrl: (anonId) =>
@@ -2037,6 +2091,65 @@ export async function collectReservationPayment(
   if (data.demo) return { status: 'ok', amount: data.amount as number, demo: true }
   if (data.card) return { status: 'ok', amount: data.amount as number, card: true }
   return { status: 'ok', amount: data.amount as number, checkoutUrl: data.checkoutUrl as string }
+}
+
+/**
+ * Stripe Terminal connection token for the venue's connected account (Tap to Pay).
+ * Same token-or-session gate as the collect actions. Returns the short-lived
+ * connection-token `secret` + the site's Terminal Location id — never a secret key.
+ */
+export async function getStripeConnectionToken(
+  siteId: string,
+  accessKey?: string,
+): Promise<{ status: 'ok'; secret: string; locationId: string } | { status: 'error'; errors: string[] }> {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const [site, account] = await Promise.all([
+    prisma.site.findUnique({
+      where: { id: siteId },
+      select: { id: true, name: true, stripeTerminalLocationId: true },
+    }),
+    prisma.partnerAccount.findUnique({
+      where: { userId: ownership.userId },
+      select: {
+        stripeConnectAccountId: true,
+        stripeConnectChargesEnabled: true,
+        address: true,
+        city: true,
+        postalCode: true,
+        taxRegion: true,
+        country: true,
+      },
+    }),
+  ])
+  if (!site) return { status: 'error', errors: ['Site not found'] }
+  if (!account?.stripeConnectAccountId || !account.stripeConnectChargesEnabled) {
+    return { status: 'error', errors: ['Stripe is not connected for this venue'] }
+  }
+
+  try {
+    const country =
+      account.country && account.country.length === 2 ? account.country.toUpperCase() : 'FI'
+    const locationId = await ensureTerminalLocation(
+      {
+        id: site.id,
+        name: site.name,
+        stripeTerminalLocationId: site.stripeTerminalLocationId ?? null,
+        address: account.address,
+        city: account.city,
+        postalCode: account.postalCode,
+        taxRegion: account.taxRegion,
+        country,
+      },
+      account.stripeConnectAccountId,
+    )
+    const secret = await createConnectionToken(account.stripeConnectAccountId, locationId)
+    return { status: 'ok', secret, locationId }
+  } catch (e) {
+    console.error('getStripeConnectionToken failed', e)
+    return { status: 'error', errors: ['Could not start Tap to Pay. Please try again.'] }
+  }
 }
 
 /**

@@ -463,35 +463,24 @@ describe('setPartialGroupBooking', () => {
 // ─── setPaymentProvider ─────────────────────────────────────────────────────
 
 describe('setPaymentProvider', () => {
-  it('rejects invalid provider', async () => {
-    authorizeOwner()
-    const res = await setPaymentProvider(SITE_ID, 'paypal')
-    expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Invalid payment provider')
-  })
-
-  it('rejects stripe (consumer payments are Mollie-only)', async () => {
-    authorizeOwner()
-    const res = await setPaymentProvider(SITE_ID, 'stripe')
-    expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Invalid payment provider')
-  })
-
-  it('rejects mollie when partner has no Mollie token', async () => {
-    authorizeOwner()
-    vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue({ mollieAccessToken: null } as any)
+  it('rejects unauthenticated callers with the ownership error', async () => {
     const res = await setPaymentProvider(SITE_ID, 'mollie')
-    expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Mollie')
+    expect(res).toEqual({ status: 'error', errors: ['Not authenticated'] })
   })
 
-  it('accepts mollie when partner has valid token', async () => {
-    authorizeOwner()
-    vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue({ mollieAccessToken: 'tok_123' } as any)
-    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
-    const res = await setPaymentProvider(SITE_ID, 'mollie')
-    expect(res.status).toBe('ok')
-  })
+  it.each(['mollie', 'viva', 'stripe', 'paypal'])(
+    'never writes the site provider, even for the owner (%s) -- selection lives in Account -> Payments',
+    async (provider) => {
+      authorizeOwner()
+      vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue({ mollieAccessToken: 'tok_123' } as any)
+
+      const res = await setPaymentProvider(SITE_ID, provider)
+
+      expect(res.status).toBe('error')
+      expect(res.errors?.[0]).toContain('Account → Payments')
+      expect(prisma.site.update).not.toHaveBeenCalled()
+    },
+  )
 })
 
 // ─── checkSlug ──────────────────────────────────────────────────────────────

@@ -20,6 +20,9 @@ import { GET } from './route'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import createMollieClient from '@mollie/api-client'
+import { syncEffectiveProvider } from '@repo/data/payment-providers/selection'
+
+const mockSync = vi.mocked(syncEffectiveProvider)
 
 const mockAuth = vi.mocked(auth)
 const mockCreateMollieClient = vi.mocked(createMollieClient)
@@ -232,6 +235,7 @@ describe('GET /api/mollie/readiness-check', () => {
         data: expect.objectContaining({ mollieOnboardingStatus: 'in-review' }),
       }),
     )
+    expect(mockSync).toHaveBeenCalledWith(USER_ID)
   })
 
   it('skips DB update when live onboarding status matches the cached value', async () => {
@@ -251,5 +255,6 @@ describe('GET /api/mollie/readiness-check', () => {
 
     // No update needed — status already in sync
     expect(mockAccountUpdate).not.toHaveBeenCalled()
+    expect(mockSync).not.toHaveBeenCalled()
   })
 })

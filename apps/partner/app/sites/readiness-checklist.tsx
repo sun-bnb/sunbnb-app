@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { SiteProps } from '@/types/shared'
+import { PROVIDER_LABELS } from '@repo/data/payment-providers/availability'
 
 interface ReadinessItem {
   key: string
@@ -10,6 +11,10 @@ interface ReadinessItem {
   met: boolean
   tab: string
   hintKey: string
+  /** Interpolated into the hint (payment item: the provider's display name). */
+  hintValues?: Record<string, string>
+  /** Absolute path to navigate to instead of a site tab (payment item). */
+  path?: string
 }
 
 function computeMissing(site: SiteProps): ReadinessItem[] {
@@ -74,20 +79,31 @@ function computeMissing(site: SiteProps): ReadinessItem[] {
     })
   }
 
-  // Mollie onboarding required when any service uses integrated payments
+  // The EFFECTIVE provider must be ready when any service uses integrated payments
   const hasIntegratedPayments = isPaid
     || site.orderPaymentType === 'paid'
     || site.rentalPaymentType === 'paid'
 
   if (hasIntegratedPayments) {
-    const mollieReady = site.hasMollieToken && site.mollieOnboardingStatus === 'completed'
-    all.push({
-      key: 'mollie',
-      labelKey: 'connectPayments',
-      met: !!mollieReady,
-      tab: '', // navigates to /account/mollie, handled specially
-      hintKey: !site.hasMollieToken ? 'paymentHintConnect' : 'paymentHintComplete',
-    })
+    const readiness = site.paymentReadiness
+    // No payload readiness (e.g. a caller that did not compute it) -> do not nag falsely.
+    if (readiness) {
+      const hintKey =
+        readiness.nextStep === 'connect'
+          ? 'paymentHintConnect'
+          : readiness.nextStep === 'wait_review'
+            ? 'paymentHintWait'
+            : 'paymentHintComplete'
+      all.push({
+        key: 'payments',
+        labelKey: 'connectPayments',
+        met: readiness.ready,
+        tab: '',
+        path: readiness.connectPath,
+        hintKey,
+        hintValues: { provider: PROVIDER_LABELS[readiness.provider] },
+      })
+    }
   }
 
   return all.filter(item => !item.met)
@@ -133,7 +149,7 @@ export default function ReadinessChecklist({ site, onNavigate, className }: {
             <button
               key={item.key}
               type="button"
-              onClick={() => onNavigate(item.tab || '/account/mollie')}
+              onClick={() => onNavigate(item.path ?? item.tab)}
               className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-amber-50/50 cursor-pointer transition-colors"
             >
               <svg className="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -141,7 +157,7 @@ export default function ReadinessChecklist({ site, onNavigate, className }: {
               </svg>
               <div className="min-w-0 flex-1">
                 <span className="text-sm text-gray-800 font-medium">{t(item.labelKey)}</span>
-                <span className="text-xs text-gray-400 ml-2">{t(item.hintKey)}</span>
+                <span className="text-xs text-gray-400 ml-2">{t(item.hintKey, item.hintValues)}</span>
               </div>
               <svg className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />

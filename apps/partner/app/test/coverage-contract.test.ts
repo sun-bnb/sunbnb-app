@@ -335,6 +335,18 @@ const UNGATED_ALLOWLIST: AllowlistEntry[] = [
     reason: 'Stripe webhook — gated by stripe-signature header verification (constructEventAsync). Covered by subscription/webhook/route.test.ts',
   },
 
+  // ── Route handlers: Stripe Connect (track 028) ────────────────────────────
+  {
+    export: 'POST',
+    file: 'app/api/stripe-connect/account-session/route.ts',
+    reason: 'Session-gated (401): mints an embedded-component session only for session.user\'s own stripeConnectAccountId. Covered by stripe-connect/account-session/route.test.ts',
+  },
+  {
+    export: 'POST',
+    file: 'app/api/stripe-connect/webhook/route.ts',
+    reason: 'Stripe Connect webhook — gated by stripe-signature header verification (constructEvent, 503 without secret). Covered by stripe-connect/webhook/route.test.ts',
+  },
+
   // ── Route handlers: reservations API (session + ownership-gated) ──────────
   {
     export: 'GET',
@@ -422,6 +434,45 @@ const UNGATED_ALLOWLIST: AllowlistEntry[] = [
     export: 'disconnectViva',
     file: 'app/account/viva/actions.ts',
     reason: 'Session-gated: clears viva* fields on session.user\'s own PartnerAccount (where: { userId: session.user.id })',
+  },
+
+  // ── Server actions: account/stripe (session-scoped Stripe Connect onboarding) ─
+  {
+    export: 'startStripeOnboarding',
+    file: 'app/account/stripe/actions.ts',
+    reason: 'Session-gated: creates/resumes the Stripe Connect account on session.user\'s own PartnerAccount (where: { userId: session.user.id })',
+  },
+  {
+    export: 'submitStripeBusinessProfile',
+    file: 'app/account/stripe/actions.ts',
+    reason: 'Session-gated: submits the business profile for the Connect account stored on session.user\'s own PartnerAccount (where: { userId: session.user.id })',
+  },
+  {
+    export: 'submitStripeBankAccount',
+    file: 'app/account/stripe/actions.ts',
+    reason: 'Session-gated: attaches a payout bank account to the Connect account stored on session.user\'s own PartnerAccount (where: { userId: session.user.id })',
+  },
+  {
+    export: 'acceptStripeTerms',
+    file: 'app/account/stripe/actions.ts',
+    reason: 'Session-gated: records Stripe ToS acceptance for the Connect account stored on session.user\'s own PartnerAccount (where: { userId: session.user.id })',
+  },
+  {
+    export: 'refreshStripeStatus',
+    file: 'app/account/stripe/actions.ts',
+    reason: 'Session-gated: re-reads Connect status for the account stored on session.user\'s own PartnerAccount (where: { userId: session.user.id })',
+  },
+  {
+    export: 'disconnectStripe',
+    file: 'app/account/stripe/actions.ts',
+    reason: 'Session-gated: clears stripeConnect* columns on session.user\'s own PartnerAccount (where: { userId: session.user.id })',
+  },
+
+  // ── Server actions: account/payments (session-scoped provider selection) ──
+  {
+    export: 'selectPaymentProvider',
+    file: 'app/account/payments/actions.ts',
+    reason: 'Session-gated: updates paymentProvider on session.user\'s own PartnerAccount (where: { userId }) and syncs its sites',
   },
 
   // ── Server actions: account/subscription (session-scoped subscription read) ─

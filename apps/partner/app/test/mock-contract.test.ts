@@ -151,6 +151,17 @@ const SUBMODULE_SPECS: SubmoduleSpec[] = [
     mockFile: 'reservation-machine-apply.ts',
   },
   {
+    name: 'payment-providers/selection',
+    realFile: 'payment-providers/selection.ts',
+    mockFile: 'payment-providers-selection.ts',
+  },
+  // `@repo/data/stripe` is a barrel (`export *`) — the parser can't follow it, so each
+  // real file is listed against the single mock.
+  { name: 'stripe (connect)', realFile: 'stripe/connect.ts', mockFile: 'stripe.ts' },
+  { name: 'stripe (client)', realFile: 'stripe/client.ts', mockFile: 'stripe.ts' },
+  { name: 'stripe (checkout)', realFile: 'stripe/checkout.ts', mockFile: 'stripe.ts' },
+  { name: 'stripe (terminal)', realFile: 'stripe/terminal.ts', mockFile: 'stripe.ts' },
+  {
     name: 'subscription',
     realFile: 'subscription.ts',
     mockFile: 'subscription.ts',

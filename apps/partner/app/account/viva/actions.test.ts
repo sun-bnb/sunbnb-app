@@ -19,6 +19,9 @@ import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { getVivaAccountsClient } from '@repo/data/viva'
 import { revalidatePath } from 'next/cache'
+import { syncEffectiveProvider } from '@repo/data/payment-providers/selection'
+
+const mockSync = vi.mocked(syncEffectiveProvider)
 
 const mockAuth = vi.mocked(auth)
 const mockGetVivaAccountsClient = vi.mocked(getVivaAccountsClient)
@@ -42,6 +45,33 @@ beforeEach(() => {
 // ─── connectViva ─────────────────────────────────────────────────────────────
 
 describe('connectViva', () => {
+  it('re-syncs the effective provider after creating the connected account', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue({ email: 'a@b.c', vivaAccountId: null } as any)
+    mockClient.createConnectedAccount.mockResolvedValue({
+      accountId: ACCOUNT_ID,
+      invitation: { redirectUrl: 'https://viva.test/x' },
+    })
+    vi.mocked(prisma.partnerAccount.update).mockResolvedValue({} as any)
+    mockSync.mockRejectedValueOnce(new Error('db down'))
+
+    const res = await connectViva()
+
+    expect(res.status).toBe('ok') // sync failure never fails the request
+    expect(mockSync).toHaveBeenCalledWith(OWNER_ID)
+  })
+
+  it('re-syncs the effective provider when it refreshes an already-connected account', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue({ email: 'a@b.c', vivaAccountId: ACCOUNT_ID } as any)
+    mockClient.getConnectedAccount.mockResolvedValue({ accountId: ACCOUNT_ID, verificationStatus: 'verified', merchantId: 'm1' })
+    vi.mocked(prisma.partnerAccount.update).mockResolvedValue({} as any)
+
+    await connectViva()
+
+    expect(mockSync).toHaveBeenCalledWith(OWNER_ID)
+  })
+
   it('returns error when not authenticated', async () => {
     const result = await connectViva()
     expect(result).toEqual({ status: 'error', message: 'Not authenticated' })
@@ -160,6 +190,17 @@ describe('connectViva', () => {
 // ─── refreshVivaStatus ────────────────────────────────────────────────────────
 
 describe('refreshVivaStatus', () => {
+  it('re-syncs the effective provider after writing the new status', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue({ vivaAccountId: ACCOUNT_ID } as any)
+    mockClient.getConnectedAccount.mockResolvedValue({ accountId: ACCOUNT_ID, verificationStatus: 'verified', merchantId: 'm1' })
+    vi.mocked(prisma.partnerAccount.update).mockResolvedValue({} as any)
+
+    await refreshVivaStatus()
+
+    expect(mockSync).toHaveBeenCalledWith(OWNER_ID)
+  })
+
   it('returns error when not authenticated', async () => {
     const result = await refreshVivaStatus()
     expect(result).toEqual({ status: 'error', message: 'Not authenticated' })
@@ -241,6 +282,15 @@ describe('refreshVivaStatus', () => {
 // ─── disconnectViva ───────────────────────────────────────────────────────────
 
 describe('disconnectViva', () => {
+  it('re-syncs the effective provider after clearing the connection', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.partnerAccount.update).mockResolvedValue({} as any)
+
+    await disconnectViva()
+
+    expect(mockSync).toHaveBeenCalledWith(OWNER_ID)
+  })
+
   it('returns error when not authenticated', async () => {
     const result = await disconnectViva()
     expect(result).toEqual({ status: 'error', message: 'Not authenticated' })

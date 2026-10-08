@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { PRICING_TIERS, PRICING_TIER_ORDER } from '@repo/data/pricing-tiers'
 import {
@@ -38,6 +39,8 @@ import CardTerminalsCard from './CardTerminalsCard'
 
 import { useSite } from '@/app/sites/site-context'
 import { ServiceFee } from '@/types/shared'
+import { PROVIDER_LABELS } from '@repo/data/payment-providers/availability'
+import type { ReadinessStatus } from '@repo/data/payment-providers/readiness'
 import MapHandler from '@/components/maps/map-handler'
 import { CustomMapControl } from '@/components/maps/map-control'
 import {
@@ -334,12 +337,25 @@ const WEEK_DAYS = [
   { key: '7', short: 'Sun', label: 'Sunday' },
 ]
 
+const READINESS_BADGE: Record<ReadinessStatus, { key: string; cls: string }> = {
+  ready: { key: 'statusReady', cls: 'bg-green-50 text-green-700' },
+  in_progress: { key: 'statusInProgress', cls: 'bg-amber-50 text-amber-700' },
+  in_review: { key: 'statusInReview', cls: 'bg-amber-50 text-amber-700' },
+  needs_data: { key: 'statusNeedsData', cls: 'bg-amber-50 text-amber-700' },
+  restricted: { key: 'statusRestricted', cls: 'bg-red-50 text-red-700' },
+  not_connected: { key: 'statusNotConnected', cls: 'bg-gray-100 text-gray-600' },
+}
+
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
 export default function GeneralView() {
   const { site, apiKey } = useSite()
   const router = useRouter()
   const t = useTranslations('SiteGeneral')
+  const tp = useTranslations('Payments')
+  const readiness = site.paymentReadiness
+  // Effective provider = the one guests actually pay with (Site.paymentProvider).
+  const effectiveProvider = readiness?.provider ?? null
 
   const [selectedPlace, setSelectedPlace] =
     useState<google.maps.places.PlaceResult | null>(null)
@@ -595,7 +611,7 @@ export default function GeneralView() {
             />
           </div>
           <PriceBreakdown price={price} vat={vat} serviceFees={site.serviceFees} baseServiceFees={(site as any).baseServiceFees} tier={tier} />
-          <MolliePaymentExample price={price} vat={vat} serviceFees={site.serviceFees} baseServiceFees={(site as any).baseServiceFees} />
+          {effectiveProvider === 'mollie' && <MolliePaymentExample price={price} vat={vat} serviceFees={site.serviceFees} baseServiceFees={(site as any).baseServiceFees} />}
         </div>
       )}
 
@@ -762,24 +778,43 @@ export default function GeneralView() {
 
       <Divider sx={{ mb: 3 }} />
 
-      {/* Payment provider */}
+      {/* Payment provider — read-only; the choice is made per account in Account → Payments */}
       {isPaid && (
         <div className="mb-5">
           <h3 className="text-sm font-medium text-gray-700 mb-2">{t('paymentProvider')}</h3>
-          <div className="rounded-lg border-2 border-blue-500 bg-blue-50 p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <PaymentsIcon fontSize="small" className="text-blue-600" />
-              <span className="font-medium text-sm text-blue-700">{t('mollie')}</span>
+          <div className="rounded-lg border border-gray-200 bg-white p-4 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <PaymentsIcon fontSize="small" className="text-gray-500" />
+                <span className="font-medium text-sm text-gray-900">
+                  {effectiveProvider ? PROVIDER_LABELS[effectiveProvider] : tp('noEffective')}
+                </span>
+                {readiness && (
+                  <span className={`badge ${READINESS_BADGE[readiness.status].cls}`}>
+                    {tp(READINESS_BADGE[readiness.status].key as any)}
+                  </span>
+                )}
+              </div>
+              {effectiveProvider && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {tp('guestsPayWith', { provider: PROVIDER_LABELS[effectiveProvider] })}
+                </p>
+              )}
             </div>
-            <p className="text-xs text-gray-500">
-              {t('mollieDesc')}
-            </p>
+            <Link href="/account/payments" className="flex-shrink-0 text-xs font-medium text-gray-700 hover:text-gray-900 hover:underline">
+              {t('changePaymentProvider')}
+            </Link>
           </div>
         </div>
       )}
 
-      {/* Card terminals (Viva) — track 024 W8 packet C1 */}
-      {isPaid && site.id && <CardTerminalsCard siteId={site.id} />}
+      {/* Card at the lounger — depends on the effective provider + country (track 028) */}
+      {isPaid && site.id && site.cardPresent === 'terminal-app' && <CardTerminalsCard siteId={site.id} />}
+      {isPaid && site.cardPresent === 'tap-to-pay' && (
+        <div className="mb-5 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+          {t('tapToPayNote')}
+        </div>
+      )}
 
       <Divider sx={{ mb: 3 }} />
 

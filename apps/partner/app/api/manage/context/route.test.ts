@@ -8,6 +8,7 @@ vi.mock('@/app/sites/[id]/manage/token', () => ({
   validateManageToken: mockValidateManageToken,
 }))
 
+import prisma from '@repo/data/PrismaCient'
 import { GET } from './route'
 
 function makeRequest(qs: string): Request {
@@ -56,6 +57,9 @@ describe('GET /api/manage/context', () => {
       site: { id: 'site-1', name: 'Test Beach' },
     })
 
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ paymentProvider: 'stripe', userId: 'u1' } as any)
+    vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue({ country: 'FI' } as any)
+
     const response = await GET(makeRequest('?siteId=site-1&key=good-key') as any)
     expect(response.status).toBe(200)
     const data = await response.json()
@@ -63,6 +67,21 @@ describe('GET /api/manage/context', () => {
       status: 'ok',
       site: { id: 'site-1', name: 'Test Beach' },
       isAdmin: true,
+      paymentProvider: 'stripe',
+      cardPresent: 'tap-to-pay',
     })
+  })
+
+  it('defaults a legacy null provider to mollie and cardPresent none for an unknown country', async () => {
+    mockValidateManageToken.mockResolvedValue({
+      ok: true, token: { id: 't', resources: ['manage_site'] }, isAdmin: false,
+      site: { id: 'site-1', name: 'Test Beach' },
+    })
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ paymentProvider: null, userId: 'u1' } as any)
+    vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue({ country: null } as any)
+
+    const data = await (await GET(makeRequest('?siteId=site-1&key=k') as any)).json()
+    expect(data.paymentProvider).toBe('mollie')
+    expect(data.cardPresent).toBe('none')
   })
 })

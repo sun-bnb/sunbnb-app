@@ -5,6 +5,7 @@ import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { getValidMollieToken } from '@repo/data/mollie-tokens'
 import { fetchMollieProfile } from '@/app/api/_lib/mollie'
+import { syncEffectiveProviderSafe } from '@/app/api/_lib/sync-effective-provider'
 
 /**
  * Disconnect the partner's Mollie account.
@@ -24,6 +25,7 @@ export async function disconnectMollie() {
     },
   })
 
+  await syncEffectiveProviderSafe(session.user.id)
   revalidatePath('/account/mollie')
   return { status: 'ok' }
 }
@@ -51,6 +53,7 @@ export async function refreshMollieTokens() {
       },
     })
 
+    await syncEffectiveProviderSafe(session.user.id)
     revalidatePath('/account/mollie')
     return { status: 'ok' }
   } catch (err) {

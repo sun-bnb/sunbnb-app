@@ -38,3 +38,7 @@ export const cancelReservationVivaPayment = vi.fn().mockResolvedValue({
 export const refundReservationVivaPayment = vi.fn().mockResolvedValue({
   status: 'ok' as const,
 })
+
+// Track 028 P1: sanctioned writers used by @repo/data/checkout for non-Mollie online checkouts.
+export const markReservationCheckoutStarted = vi.fn().mockResolvedValue(undefined)
+export const markReservationCheckoutFailed = vi.fn().mockResolvedValue(undefined)

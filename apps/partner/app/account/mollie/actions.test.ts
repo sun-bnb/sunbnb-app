@@ -25,6 +25,9 @@ import prisma from '@repo/data/PrismaCient'
 import { getValidMollieToken } from '@repo/data/mollie-tokens'
 import { fetchMollieProfile } from '@/app/api/_lib/mollie'
 import { revalidatePath } from 'next/cache'
+import { syncEffectiveProvider } from '@repo/data/payment-providers/selection'
+
+const mockSync = vi.mocked(syncEffectiveProvider)
 
 const mockAuth = vi.mocked(auth)
 const mockGetValidMollieToken = vi.mocked(getValidMollieToken)
@@ -87,6 +90,7 @@ describe('disconnectMollie', () => {
     await disconnectMollie()
 
     expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith('/account/mollie')
+    expect(mockSync).toHaveBeenCalledWith(OWNER_ID)
   })
 })
 
@@ -193,5 +197,6 @@ describe('refreshMollieTokens', () => {
     await refreshMollieTokens()
 
     expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith('/account/mollie')
+    expect(mockSync).toHaveBeenCalledWith(OWNER_ID)
   })
 })

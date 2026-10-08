@@ -1,16 +1,6 @@
 /**
- * Shared Stripe Utilities for Partner App API Routes
+ * Shared Stripe client for Partner App API routes. The implementation lives in
+ * `@repo/data/stripe` (also used for Stripe Connect, track 028); this keeps the
+ * existing `@/app/api/_lib/stripe` import path (and its test mocks) stable.
  */
-
-import Stripe from 'stripe'
-
-/**
- * Create a Stripe client instance. Throws if STRIPE_SECRET_KEY is not set.
- */
-export function getStripeClient(): Stripe {
-  const { STRIPE_SECRET_KEY } = process.env
-  if (!STRIPE_SECRET_KEY) {
-    throw new Error('STRIPE_SECRET_KEY is not set')
-  }
-  return new Stripe(STRIPE_SECRET_KEY)
-}
+export { getStripeClient, getStripeConnectClient } from '@repo/data/stripe'

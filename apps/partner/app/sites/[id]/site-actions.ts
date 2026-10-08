@@ -329,40 +329,23 @@ export async function setPartialGroupBooking(siteId: string, enabled: boolean) {
 
 // ─── Set Payment Provider ───────────────────────────────────────────────────
 
+/**
+ * RETIRED (track 028): the payment provider is chosen per PARTNER ACCOUNT in
+ * Account → Payments (`PartnerAccount.paymentProvider` = selected), and
+ * `Site.paymentProvider` is the derived EFFECTIVE provider kept in sync by
+ * `syncEffectiveProvider`. Writing it per site would be overwritten by the next
+ * sync and could point a site at a provider the account has not connected.
+ * The export stays (the gated-action registry invokes it); it only enforces the
+ * ownership gate, then always refuses.
+ */
 export async function setPaymentProvider(
   siteId: string,
-  paymentProvider: string,
+  _paymentProvider: string,
 ): Promise<{ status: string; errors?: string[] }> {
-  const { session, error } = await requireSiteOwner(siteId)
+  const { error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error', errors: [error] }
 
-  // Consumer payments are Mollie-only (Stripe consumer payments were removed; a
-  // Stripe Connect path is future work — see .claude/tracks/003-stripe-connect-compliance.md).
-  if (paymentProvider !== 'mollie') {
-    return { status: 'error', errors: ['Invalid payment provider'] }
-  }
-
-  // If switching to Mollie, verify the partner has connected their Mollie account
-  if (paymentProvider === 'mollie') {
-    const account = await prisma.partnerAccount.findUnique({
-      where: { userId: session.user.id },
-      select: { mollieAccessToken: true },
-    })
-    if (!account?.mollieAccessToken) {
-      return {
-        status: 'error',
-        errors: ['Connect your Mollie account first (Account → Mollie Payments)'],
-      }
-    }
-  }
-
-  await prisma.site.update({
-    where: { id: siteId },
-    data: { paymentProvider },
-  })
-
-  revalidatePath('/sites')
-  return { status: 'ok' }
+  return { status: 'error', errors: ['Choose the payment provider in Account → Payments'] }
 }
 
 // ─── Get Brand Settings ─────────────────────────────────────────────────────

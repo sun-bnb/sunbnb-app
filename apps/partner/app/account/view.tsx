@@ -131,6 +131,42 @@ function SubmitButton() {
   )
 }
 
+/* ── Payment provider card ─────────────────────────────────── */
+
+export interface ProviderStatus {
+  selected: 'mollie' | 'viva' | 'stripe'
+  effective: 'mollie' | 'viva' | 'stripe' | null
+}
+
+const PROVIDER_NAMES = { mollie: 'Mollie', viva: 'Viva', stripe: 'Stripe' } as const
+
+function PaymentProviderCard({ providerStatus }: { providerStatus: ProviderStatus }) {
+  const t = useTranslations('Payments')
+  const { selected, effective } = providerStatus
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold text-gray-900">{t('cardTitle')}</h2>
+        <Link
+          href="/account/payments"
+          className="text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+        >
+          {t('managePayments')} &rarr;
+        </Link>
+      </div>
+      <p className="text-sm text-gray-700">
+        {effective ? t('guestsPayWith', { provider: PROVIDER_NAMES[effective] }) : t('noEffective')}
+      </p>
+      {effective && effective !== selected && (
+        <p className="mt-2 text-xs text-amber-700 bg-amber-50 rounded-lg p-2.5">
+          {t('selectedFinishing', { selected: PROVIDER_NAMES[selected] })}
+        </p>
+      )}
+    </div>
+  )
+}
+
 /* ── Mollie status card ────────────────────────────────────── */
 
 function MollieStatusCard({ mollieStatus }: { mollieStatus: MollieStatus }) {
@@ -249,7 +285,7 @@ function VivaStatusCard({ vivaStatus }: { vivaStatus: VivaStatus }) {
 
 /* ── Main view ─────────────────────────────────────────────── */
 
-export default function AccountView({ account, mollieStatus, vivaStatus }: { account: AccountProps; mollieStatus: MollieStatus; vivaStatus: VivaStatus }) {
+export default function AccountView({ account, mollieStatus, vivaStatus, providerStatus }: { account: AccountProps; mollieStatus: MollieStatus; vivaStatus: VivaStatus; providerStatus: ProviderStatus }) {
   const t = useTranslations('Account')
   const [formState, formAction] = useFormState(submitForm, { status: '' })
 
@@ -287,6 +323,8 @@ export default function AccountView({ account, mollieStatus, vivaStatus }: { acc
           </ul>
         </div>
       )}
+
+      <PaymentProviderCard providerStatus={providerStatus} />
 
       {/* Mollie payment status */}
       <MollieStatusCard mollieStatus={mollieStatus} />

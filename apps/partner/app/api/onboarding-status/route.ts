@@ -3,6 +3,15 @@ import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { fetchMollieProfile } from '@/app/api/_lib/mollie'
 import { getVivaAccountsClient } from '@repo/data/viva'
+import { retrieveAccountSnapshot, snapshotToColumns } from '@repo/data/stripe'
+import {
+  READINESS_SELECT,
+  isSelectableProvider,
+  providerReadiness,
+  selectedProvider,
+  toReadinessAccount,
+} from '@repo/data/payment-providers/readiness'
+import { syncEffectiveProviderSafe } from '@/app/api/_lib/sync-effective-provider'
 
 export async function GET() {
   const session = await auth()
@@ -15,10 +24,7 @@ export async function GET() {
       where: { userId: session.user.id },
       select: {
         company: true,
-        mollieAccessToken: true,
-        mollieOnboardingStatus: true,
-        vivaAccountId: true,
-        vivaVerificationStatus: true,
+        ...READINESS_SELECT,
       },
     }),
     prisma.site.findMany({
@@ -40,6 +46,7 @@ export async function GET() {
   // stale until the partner manually visits /account/mollie. Once the partner
   // is 'completed', we stop querying Mollie on every page transition.
   let mollieOnboardingStatus = account?.mollieOnboardingStatus ?? null
+  let liveSyncedChange = false
   if (account?.mollieAccessToken && mollieOnboardingStatus !== 'completed') {
     try {
       const profile = await fetchMollieProfile(account.mollieAccessToken)
@@ -49,6 +56,7 @@ export async function GET() {
             where: { userId: session.user.id },
             data: { mollieOnboardingStatus: profile.onboardingStatus },
           })
+          liveSyncedChange = true
         }
         mollieOnboardingStatus = profile.onboardingStatus
       }
@@ -71,12 +79,51 @@ export async function GET() {
             vivaMerchantId: connected.merchantId ?? null,
           },
         })
+        liveSyncedChange = true
       }
       vivaVerificationStatus = connected.verificationStatus
     } catch (err: any) {
       console.error('[OnboardingStatus] Viva live sync failed, using cached value:', err?.message)
     }
   }
+
+  // Stripe Connect: webhooks are the primary path, but poll best-effort while onboarding
+  // is incomplete so the UI never depends on webhook delivery alone.
+  let stripeLive: Record<string, unknown> = {}
+  if (account?.stripeConnectAccountId && account.stripeConnectOnboardingStatus !== 'complete') {
+    try {
+      const snapshot = await retrieveAccountSnapshot(account.stripeConnectAccountId)
+      const columns = snapshotToColumns(snapshot)
+      await prisma.partnerAccount.update({ where: { userId: session.user.id }, data: columns })
+      stripeLive = columns
+      liveSyncedChange = true
+    } catch (err: any) {
+      console.error('[OnboardingStatus] Stripe live sync failed, using cached value:', err?.message)
+    }
+  }
+
+  // A live-sync just changed connection state: let the sites' EFFECTIVE provider follow
+  // before we read it back below (best-effort, never fails the poll).
+  if (liveSyncedChange) await syncEffectiveProviderSafe(session.user.id)
+
+  // Readiness is computed from the live-synced values, not the stale cached row.
+  const readinessAccount = account
+    ? toReadinessAccount({
+        ...account,
+        mollieOnboardingStatus,
+        vivaVerificationStatus,
+        ...stripeLive,
+      })
+    : toReadinessAccount({})
+  const selected = selectedProvider(readinessAccount)
+  const firstSite = account
+    ? await prisma.site.findFirst({
+        where: { userId: session.user.id },
+        orderBy: { createdAt: 'asc' },
+        select: { paymentProvider: true },
+      })
+    : null
+  const provider = isSelectableProvider(firstSite?.paymentProvider) ? firstSite.paymentProvider : selected
 
   return NextResponse.json({
     hasAccount: !!account?.company,
@@ -85,5 +132,11 @@ export async function GET() {
     hasViva: !!account?.vivaAccountId,
     vivaVerificationStatus,
     hasIntegratedPayments: integratedPaymentsSites.length > 0,
+    // Track 028: provider-neutral contract. The fields above are legacy (kept one release).
+    provider,
+    selected,
+    readiness: providerReadiness(readinessAccount, provider),
+    selectedReadiness: providerReadiness(readinessAccount, selected),
+    selectedDiffersFromEffective: selected !== provider,
   })
 }

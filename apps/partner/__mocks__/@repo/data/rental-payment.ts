@@ -26,3 +26,7 @@ export const reverifyAndFinalizeRentalBooking = vi.fn().mockResolvedValue({
   settled: 'complete' as const,
   providerStatus: 'paid',
 })
+
+// Track 028 P1: sanctioned writers used by @repo/data/checkout for non-Mollie online checkouts.
+export const markRentalCheckoutStarted = vi.fn().mockResolvedValue(undefined)
+export const markRentalCheckoutFailed = vi.fn().mockResolvedValue(undefined)

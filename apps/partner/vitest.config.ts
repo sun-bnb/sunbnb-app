@@ -35,6 +35,11 @@ export default defineConfig({
       '@repo/data/rate-limit': path.resolve(__dirname, '__mocks__/@repo/data/rate-limit'),
       '@repo/data/reservation-status': path.resolve(__dirname, '../../packages/data/src/reservation-status'),
       // Pure model — real source (no prisma, like reservation-status); DB interpreter — mocked.
+      // Pure ref-prefix vocabulary — real source (no prisma).
+      '@repo/data/payment-refs': path.resolve(__dirname, '../../packages/data/src/payment-refs'),
+      '@repo/data/payment-providers/availability': path.resolve(__dirname, '../../packages/data/src/payment-providers/availability'),
+      '@repo/data/payment-providers/readiness': path.resolve(__dirname, '../../packages/data/src/payment-providers/readiness'),
+      '@repo/data/payment-providers/selection': path.resolve(__dirname, '__mocks__/@repo/data/payment-providers-selection'),
       '@repo/data/reservation-machine': path.resolve(__dirname, '../../packages/data/src/reservation-machine'),
       '@repo/data/reservation-machine-apply': path.resolve(__dirname, '__mocks__/@repo/data/reservation-machine-apply'),
       '@repo/data/reservation-emails': path.resolve(__dirname, '__mocks__/@repo/data/reservation-emails'),
@@ -51,6 +56,7 @@ export default defineConfig({
       '@repo/data/analytics': path.resolve(__dirname, '__mocks__/@repo/data/analytics'),
       '@repo/data/till': path.resolve(__dirname, '__mocks__/@repo/data/till'),
       '@repo/data/fiscal': path.resolve(__dirname, '__mocks__/@repo/data/fiscal'),
+      '@repo/data/stripe': path.resolve(__dirname, '__mocks__/@repo/data/stripe'),
       '@repo/data/tab-payment': path.resolve(__dirname, '__mocks__/@repo/data/tab-payment'),
     },
   },

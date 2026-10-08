@@ -1,5 +1,6 @@
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { isSelectableProvider, selectedProvider } from '@repo/data/payment-providers/readiness'
 import { AccountProps } from './view'
 import AccountView from './view'
   
@@ -29,7 +30,13 @@ export default async function Account() {
       mollieOnboardingStatus: true,
       vivaAccountId: true,
       vivaVerificationStatus: true,
+      paymentProvider: true,
     },
+  })
+  const firstSite = await prisma.site.findFirst({
+    where: { userId: user.id },
+    orderBy: { createdAt: 'asc' },
+    select: { paymentProvider: true },
   })
 
   let account: AccountProps
@@ -76,6 +83,11 @@ export default async function Account() {
     verificationStatus: dbAccount?.vivaVerificationStatus ?? null,
   }
 
-  return <AccountView account={account} mollieStatus={mollieStatus} vivaStatus={vivaStatus} />
+  const providerStatus = {
+    selected: selectedProvider({ paymentProvider: dbAccount?.paymentProvider ?? null }),
+    effective: isSelectableProvider(firstSite?.paymentProvider) ? firstSite.paymentProvider : null,
+  }
+
+  return <AccountView account={account} mollieStatus={mollieStatus} vivaStatus={vivaStatus} providerStatus={providerStatus} />
 
 }

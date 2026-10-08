@@ -13,6 +13,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import createMollieClient from '@mollie/api-client'
+import { syncEffectiveProviderSafe } from '@/app/api/_lib/sync-effective-provider'
 
 export interface ReadinessReport {
   tokenValid: boolean
@@ -90,6 +91,7 @@ export async function GET() {
         where: { userId: session.user.id },
         data: { mollieOnboardingStatus: report.onboardingStatus },
       })
+      await syncEffectiveProviderSafe(session.user.id)
     }
   } catch (err: any) {
     console.error('[Mollie Readiness] Onboarding check failed:', err?.message)

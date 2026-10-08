@@ -21,6 +21,7 @@ import {
   bootstrapMollieAccount,
   sanitizeReturnTo,
 } from '@/app/api/_lib/mollie'
+import { syncEffectiveProviderSafe } from '@/app/api/_lib/sync-effective-provider'
 
 export async function GET(request: NextRequest) {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
@@ -106,6 +107,9 @@ export async function GET(request: NextRequest) {
     } catch (err) {
       console.error('[Mollie OAuth] Auto-bootstrap error (non-fatal):', err)
     }
+
+    // Connection state changed — let the sites' effective provider follow.
+    await syncEffectiveProviderSafe(session.user.id)
 
     // Redirect back to where the flow started if a (same-origin) returnTo was
     // captured at authorize time — e.g. the manage page that launched the

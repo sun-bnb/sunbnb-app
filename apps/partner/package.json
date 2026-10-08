@@ -27,6 +27,8 @@
     "@repo/floor-core": "*",
     "@repo/schematic": "*",
     "@repo/ui": "*",
+    "@stripe/connect-js": "^3.4.6",
+    "@stripe/react-connect-js": "^3.4.4",
     "@types/bcryptjs": "^2.4.6",
     "@vercel/blob": "^2.3.1",
     "@vis.gl/react-google-maps": "^1.1.0",

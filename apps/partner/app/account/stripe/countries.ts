@@ -1,0 +1,17 @@
+/** Countries offered in the Stripe onboarding wizard (mirrors the Account page list). */
+export const COUNTRY_OPTIONS = [
+  { code: 'AT', label: 'Austria' }, { code: 'BE', label: 'Belgium' },
+  { code: 'HR', label: 'Croatia' }, { code: 'CY', label: 'Cyprus' },
+  { code: 'CZ', label: 'Czech Republic' }, { code: 'DK', label: 'Denmark' },
+  { code: 'EE', label: 'Estonia' }, { code: 'FI', label: 'Finland' },
+  { code: 'FR', label: 'France' }, { code: 'DE', label: 'Germany' },
+  { code: 'GR', label: 'Greece' }, { code: 'HU', label: 'Hungary' },
+  { code: 'IT', label: 'Italy' }, { code: 'LV', label: 'Latvia' },
+  { code: 'LT', label: 'Lithuania' }, { code: 'LU', label: 'Luxembourg' },
+  { code: 'MT', label: 'Malta' }, { code: 'NL', label: 'Netherlands' },
+  { code: 'NO', label: 'Norway' }, { code: 'PL', label: 'Poland' },
+  { code: 'PT', label: 'Portugal' }, { code: 'RO', label: 'Romania' },
+  { code: 'SK', label: 'Slovakia' }, { code: 'SI', label: 'Slovenia' },
+  { code: 'ES', label: 'Spain' }, { code: 'SE', label: 'Sweden' },
+  { code: 'CH', label: 'Switzerland' }, { code: 'GB', label: 'United Kingdom' },
+]

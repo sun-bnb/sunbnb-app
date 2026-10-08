@@ -60,6 +60,7 @@ import {
   removeGroupSeat,
   removeFailedReservation,
   collectReservationPayment,
+  getStripeConnectionToken,
   getCollectStatus,
   cancelCollection,
   splitWalkInSeat,
@@ -82,6 +83,7 @@ import {
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { ensureTerminalLocation, createConnectionToken } from '@repo/data/stripe'
 import { issueReservationRefund } from '@repo/data/refund'
 import {
   getRevenueByChannelByDay,
@@ -3548,6 +3550,109 @@ describe('collectReservationPayment (machine-delegating)', () => {
     const res = await collectReservationPayment(SITE_ID, RES_ID, undefined, { method: 'card', terminalId: 'term-1' })
     expect(res.status).toBe('error')
     expect(res.errors).toContain('terminal offline')
+  })
+})
+
+describe('collectReservationPayment — tap-to-pay (Stripe Terminal)', () => {
+  const INTENT = {
+    paymentIntentId: 'pi_1', clientSecret: 'pi_1_secret', stripeAccount: 'acct_1',
+    locationId: 'tml_1', currency: 'eur',
+  }
+  function asStripeVenue(provider: string | null = 'stripe', country: string | null = 'FI') {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID, paymentProvider: provider } as any)
+    vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue({ country } as any)
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID } as any)
+  }
+
+  it('happy path: passes method tap-to-pay to the machine and returns the tapToPay intent', async () => {
+    asStripeVenue()
+    mockApply.mockResolvedValueOnce({
+      outcome: 'applied', transition: {} as any, state: {} as any,
+      data: { amount: 17, tapToPay: INTENT },
+    } as any)
+
+    const res: any = await collectReservationPayment(SITE_ID, RES_ID, undefined, { method: 'tap-to-pay' })
+    expect(res).toEqual({ status: 'ok', amount: 17, tapToPay: INTENT })
+    const [id, event, opts] = mockApply.mock.calls[0]!
+    expect(id).toBe(RES_ID)
+    expect(event).toBe('collect.start')
+    expect((opts as any).collect).toEqual({ method: 'tap-to-pay', demo: false })
+  })
+
+  it('demo outcome maps to the existing demo shape', async () => {
+    asStripeVenue()
+    mockApply.mockResolvedValueOnce({
+      outcome: 'applied', transition: {} as any, state: {} as any, data: { amount: 17, demo: true },
+    } as any)
+    const res: any = await collectReservationPayment(SITE_ID, RES_ID, undefined, { method: 'tap-to-pay' })
+    expect(res).toEqual({ status: 'ok', amount: 17, demo: true })
+  })
+
+  it('rejects when the effective provider is not stripe, without touching the machine', async () => {
+    asStripeVenue('mollie')
+    const res: any = await collectReservationPayment(SITE_ID, RES_ID, undefined, { method: 'tap-to-pay' })
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Tap to Pay is not available for this venue')
+    expect(mockApply).not.toHaveBeenCalled()
+  })
+
+  it('rejects when the venue country has no Stripe Tap to Pay', async () => {
+    asStripeVenue('stripe', 'ZZ')
+    const res: any = await collectReservationPayment(SITE_ID, RES_ID, undefined, { method: 'tap-to-pay' })
+    expect(res.errors).toContain('Tap to Pay is not available for this venue')
+    expect(mockApply).not.toHaveBeenCalled()
+  })
+
+  it('effect-failed maps to a generic error (no provider detail leaked)', async () => {
+    asStripeVenue()
+    mockApply.mockResolvedValueOnce({
+      outcome: 'effect-failed', effect: 'stripeTerminalIntent', event: 'collect.start', error: 'acct_1 secret detail',
+    } as any)
+    const res: any = await collectReservationPayment(SITE_ID, RES_ID, undefined, { method: 'tap-to-pay' })
+    expect(res.status).toBe('error')
+    expect(JSON.stringify(res)).not.toContain('acct_1')
+  })
+})
+
+describe('getStripeConnectionToken', () => {
+  function asOwnerWithAccount(account: Record<string, any> | null) {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      userId: OWNER_ID, id: SITE_ID, name: 'Beach', stripeTerminalLocationId: null,
+    } as any)
+    vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue(account as any)
+  }
+
+  it('returns secret + locationId for a connected venue, using the partner address for the location', async () => {
+    asOwnerWithAccount({
+      stripeConnectAccountId: 'acct_1', stripeConnectChargesEnabled: true,
+      address: '1 Beach Rd', city: 'Helsinki', postalCode: '00100', country: 'fi',
+    })
+    vi.mocked(ensureTerminalLocation).mockResolvedValue('tml_1')
+    vi.mocked(createConnectionToken).mockResolvedValue('pst_secret')
+
+    const res = await getStripeConnectionToken(SITE_ID)
+    expect(res).toEqual({ status: 'ok', secret: 'pst_secret', locationId: 'tml_1' })
+    expect(vi.mocked(ensureTerminalLocation)).toHaveBeenCalledWith(
+      expect.objectContaining({ id: SITE_ID, address: '1 Beach Rd', country: 'FI' }), 'acct_1',
+    )
+    expect(vi.mocked(createConnectionToken)).toHaveBeenCalledWith('acct_1', 'tml_1')
+  })
+
+  it('errors when Stripe is not connected / charges not enabled', async () => {
+    asOwnerWithAccount({ stripeConnectAccountId: 'acct_1', stripeConnectChargesEnabled: false })
+    const res: any = await getStripeConnectionToken(SITE_ID)
+    expect(res.status).toBe('error')
+    expect(vi.mocked(createConnectionToken)).not.toHaveBeenCalled()
+  })
+
+  it('maps a Stripe failure to a generic error', async () => {
+    asOwnerWithAccount({ stripeConnectAccountId: 'acct_1', stripeConnectChargesEnabled: true, country: 'FI' })
+    vi.mocked(ensureTerminalLocation).mockRejectedValue(new Error('stripe down acct_1'))
+    const res: any = await getStripeConnectionToken(SITE_ID)
+    expect(res.status).toBe('error')
+    expect(JSON.stringify(res)).not.toContain('acct_1')
   })
 })
 

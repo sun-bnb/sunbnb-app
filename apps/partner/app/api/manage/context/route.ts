@@ -6,7 +6,10 @@
  */
 
 import { NextRequest } from 'next/server'
+import prisma from '@repo/data/PrismaCient'
 import { validateManageToken } from '@/app/sites/[id]/manage/token'
+import { availabilityFor } from '@repo/data/payment-providers/availability'
+import { isSelectableProvider } from '@repo/data/payment-providers/readiness'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -28,11 +31,28 @@ export async function GET(request: NextRequest) {
     )
   }
 
+  // Effective provider (Site.paymentProvider; legacy null → mollie) + how this
+  // venue's staff can take a card in person — the floor app gates Tap to Pay on it.
+  const siteRow = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { paymentProvider: true, userId: true },
+  })
+  const account = siteRow
+    ? await prisma.partnerAccount.findUnique({
+        where: { userId: siteRow.userId },
+        select: { country: true },
+      })
+    : null
+  const paymentProvider = isSelectableProvider(siteRow?.paymentProvider) ? siteRow.paymentProvider : 'mollie'
+  const cardPresent = availabilityFor(paymentProvider, account?.country).cardPresent
+
   return Response.json(
     {
       status: 'ok',
       site: result.site,
       isAdmin: result.isAdmin,
+      paymentProvider,
+      cardPresent,
     },
     { status: 200 },
   )
