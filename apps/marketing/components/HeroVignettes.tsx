@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl'
 import { useEffect, useLayoutEffect, useRef, useState, type FC, type ReactNode } from 'react'
 import QRCodeLib from 'react-qr-code'
 import { STATUS_FILL } from '@/lib/app-sprites'
+import { DeviceModel, deviceStatus } from './DeviceShowcase'
 import type { HeroMode } from './HeroBeach'
 
 /**
@@ -14,7 +15,7 @@ import type { HeroMode } from './HeroBeach'
  * empty. Only shipped features; illustrative, no figures. Decorative: aria-hidden (the headline
  * says it in text).
  */
-const ORDER: HeroMode[] = ['book', 'order', 'rent', 'checkin', 'invoice']
+const ORDER: HeroMode[] = ['book', 'device', 'order', 'rent', 'checkin', 'invoice']
 /** Every scene is designed at this height and scaled to the band it gets. */
 const DESIGN_H = 250
 
@@ -53,6 +54,7 @@ export default function HeroVignettes({
             {(m !== 'book' || withBook) && (
               <FitScale max={maxScale}>
                 {m === 'book' && <BookScene active={mode === m && !reduced} />}
+                {m === 'device' && <DeviceScene active={mode === m && !reduced} />}
                 {m === 'order' && <OrderScene active={mode === m && !reduced} />}
                 {m === 'rent' && <RentScene active={mode === m && !reduced} />}
                 {m === 'checkin' && <CheckinScene active={mode === m && !reduced} />}
@@ -125,6 +127,54 @@ function Sparkling({ size = 22 }: { size?: number }) {
       <circle cx="12" cy="14" r="1" fill="#fff" />
       <circle cx="10" cy="33" r="1.2" fill="#fff" />
     </svg>
+  )
+}
+
+const CHIP = {
+  reserved: 'border-red-200 bg-red-50 text-red-700',
+  occupied: 'border-blue-200 bg-blue-50 text-blue-700',
+  free: 'border-green-200 bg-green-50 text-green-700',
+} as const
+
+/** The parasol's status indicator through a seat's day: reserved (red), the guest arrives (blue), free again (green). */
+export function DeviceScene({ active }: { active: boolean }) {
+  const t = useTranslations('Hero.v')
+  const [step, setStep] = useState(0)
+  const [animate, setAnimate] = useState(true)
+  useEffect(() => {
+    if (!active) {
+      // Back to red once the strip has carried it away, without turning the wheel on screen.
+      const timer = setTimeout(() => {
+        setAnimate(false)
+        setStep(0)
+      }, 1000)
+      return () => clearTimeout(timer)
+    }
+    setAnimate(true)
+    const timers = [setTimeout(() => setStep(1), 1300), setTimeout(() => setStep(2), 3300)]
+    return () => timers.forEach(clearTimeout)
+  }, [active])
+  const status = deviceStatus(step)
+  return (
+    <div className="flex items-center gap-10">
+      <div className="grid h-[230px] w-[230px] place-items-center">
+        <DeviceModel step={step} animate={animate} className="scale-[0.78]" />
+      </div>
+      <div className={`${paper} px-3 py-2.5`}>
+        <p className="text-[11px] font-semibold text-gray-900">{t('sunbed')}</p>
+        {/* Every label in one cell, only the current one shown: the card is as wide as the widest
+            label, so the row (centred) never shifts the device when the status changes. */}
+        <p
+          className={`mt-1.5 grid rounded-full border px-2.5 py-0.5 text-center text-[11px] font-semibold transition-colors duration-500 ${CHIP[status]}`}
+        >
+          {(['reserved', 'occupied', 'free'] as const).map((k) => (
+            <span key={k} className={`col-start-1 row-start-1 ${k === status ? '' : 'invisible'}`}>
+              {t(`dv_${k}`)}
+            </span>
+          ))}
+        </p>
+      </div>
+    </div>
   )
 }
 

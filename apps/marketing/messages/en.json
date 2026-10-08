@@ -29,6 +29,11 @@
     },
     "sceneTag": "Booked · paid by card",
     "slides": {
+      "device": {
+        "title": "Every sunbed’s status, seen from across the beach",
+        "subtitle": "A wire-free indicator on the parasol shows green for free, red for reserved and blue for occupied, powered by the sun for its whole lifetime. In testing now.",
+        "tag": "Free"
+      },
       "order": {
         "title": "Drinks ordered from the sunbed, paid in the app",
         "subtitle": "Guests order from their phone. Your bar sees every order live, with a sound alert.",
@@ -82,7 +87,10 @@
       "rc_qr": "Receipt online",
       "bk_choose": "Choose your sunbed",
       "bk_reserve": "Reserve",
-      "bk_pass": "Your pass"
+      "bk_pass": "Your pass",
+      "dv_free": "Free",
+      "dv_reserved": "Reserved",
+      "dv_occupied": "Occupied"
     }
   },
   "Footer": {
@@ -322,6 +330,17 @@
       "body": "Every sale gets its receipt or invoice in your name, with your own numbering and VAT rate, and an export for your accountant.",
       "spain": "In Spain, Veri*factu is coming before the 2027 deadline."
     }
+  },
+  "Device": {
+    "place": "On the parasol",
+    "title": "Free, reserved or occupied, at a glance",
+    "body": "A small indicator sits on the parasol and turns its colour wheel whenever the seat’s status changes: green when the sunbed is free, red when it’s reserved, blue once the guest is on it. Walk-in guests scan the QR code under the window to book that very seat.",
+    "free": "Green: free to book",
+    "reserved": "Red: reserved",
+    "occupied": "Blue: occupied",
+    "qr": "QR code to book this seat",
+    "solar": "No wires: solar panels and smart energy management keep it running for its whole lifetime",
+    "testing": "In testing now. Sunbnb works fully without it."
   },
   "Start": {
     "title": "How it starts",

@@ -15,9 +15,10 @@ const TAG_MS = 1500
 
 /**
  * What the scene is showing — one per hero slide (track 027: the first screen showcases the
- * platform, one feature at a time). Every mode is a SHIPPED feature (lib/agent/knowledge.ts).
+ * platform, one feature at a time). Every mode is a SHIPPED feature (lib/agent/knowledge.ts), except
+ * `device` (the parasol status indicator), whose copy labels it as in testing.
  */
-export type HeroMode = 'book' | 'order' | 'rent' | 'checkin' | 'invoice'
+export type HeroMode = 'book' | 'device' | 'order' | 'rent' | 'checkin' | 'invoice'
 
 interface Bed {
   x: number

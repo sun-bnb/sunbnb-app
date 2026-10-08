@@ -60,3 +60,9 @@
   from { transform: translateX(0); }
   to { transform: translateX(-25%); }
 }
+
+/* The status indicator model sways to show its sides and solar panels (components/DeviceShowcase). */
+@keyframes device-sway {
+  from { transform: rotateX(-13deg) rotateY(-36deg); }
+  to { transform: rotateX(-8deg) rotateY(28deg); }
+}

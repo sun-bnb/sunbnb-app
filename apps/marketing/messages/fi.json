@@ -29,6 +29,11 @@
     },
     "sceneTag": "Varattu · maksettu kortilla",
     "slides": {
+      "device": {
+        "title": "Jokaisen aurinkotuolin tila näkyy koko rannalle",
+        "subtitle": "Johdoton ilmaisin aurinkovarjossa näyttää vihreää, kun paikka on vapaa, punaista, kun se on varattu, ja sinistä, kun se on käytössä – aurinkovoimalla koko käyttöikänsä ajan. Testauksessa.",
+        "tag": "Vapaa"
+      },
       "order": {
         "title": "Juomat tilataan aurinkotuolista ja maksetaan sovelluksessa",
         "subtitle": "Asiakkaat tilaavat puhelimellaan. Baarisi näkee jokaisen tilauksen heti, äänimerkin kera.",
@@ -82,7 +87,10 @@
       "rc_qr": "Kuitti verkossa",
       "bk_choose": "Valitse aurinkotuoli",
       "bk_reserve": "Varaa",
-      "bk_pass": "Pääsylippusi"
+      "bk_pass": "Pääsylippusi",
+      "dv_free": "Vapaa",
+      "dv_reserved": "Varattu",
+      "dv_occupied": "Käytössä"
     }
   },
   "Footer": {
@@ -322,6 +330,17 @@
       "body": "Jokaisesta myynnistä tulee kuitti tai lasku nimissäsi, omalla numeroinnillasi ja ALV-kannallasi, ja vienti kirjanpitäjällesi.",
       "spain": "Espanjassa Veri*factu tulee ennen vuoden 2027 määräaikaa."
     }
+  },
+  "Device": {
+    "place": "Aurinkovarjossa",
+    "title": "Vapaa, varattu vai käytössä yhdellä silmäyksellä",
+    "body": "Pieni ilmaisin kiinnitetään aurinkovarjoon, ja se kääntää värikiekkoaan aina, kun paikan tila muuttuu: vihreä, kun aurinkotuoli on vapaa, punainen, kun se on varattu, ja sininen, kun asiakas on paikalla. Paikan päälle tulevat asiakkaat skannaavat ikkunan alla olevan QR-koodin ja varaavat juuri sen paikan.",
+    "free": "Vihreä: vapaana varattavaksi",
+    "reserved": "Punainen: varattu",
+    "occupied": "Sininen: käytössä",
+    "qr": "QR-koodi tämän paikan varaamiseen",
+    "solar": "Ei johtoja: aurinkopaneelit ja älykäs energianhallinta pitävät sen käynnissä koko sen käyttöiän",
+    "testing": "Testauksessa. Sunbnb toimii täysin ilman sitä."
   },
   "Start": {
     "title": "Näin alat",

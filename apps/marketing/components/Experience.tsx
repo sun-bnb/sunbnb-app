@@ -35,8 +35,9 @@ const PAY_MS = 900
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
 const shortestTurn = (from: number, to: number) => ((((to - from) % 360) + 540) % 360) - 180
 const GUIDE_STEPS: readonly Step[] = ['beach', 'flying', 'count', 'building']
-/** One feature per slide on the first screen — only SHIPPED features (lib/agent/knowledge.ts). */
-const SLIDE_MODES: HeroMode[] = ['book', 'order', 'rent', 'checkin', 'invoice']
+/** One feature per slide on the first screen — only SHIPPED features (lib/agent/knowledge.ts), except
+ * `device`, the parasol status indicator, whose slide says it is in testing. */
+const SLIDE_MODES: HeroMode[] = ['book', 'device', 'order', 'rent', 'checkin', 'invoice']
 const SLIDE_MS = 5500
 
 export interface ResumeProps {

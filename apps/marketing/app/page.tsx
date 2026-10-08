@@ -2,6 +2,7 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { parseAngle } from '@repo/data/lead-model'
 import { PRICING_TIERS } from '@repo/data/pricing-tiers'
 import BeachTour from '@/components/BeachTour'
+import DeviceShowcase from '@/components/DeviceShowcase'
 import Experience from '@/components/Experience'
 import { SiteFooter, SiteHeader } from '@/components/SiteChrome'
 import TrackOnMount from '@/components/TrackOnMount'
@@ -22,6 +23,7 @@ export default async function LandingPage({ searchParams }: { searchParams: Reco
   const offer = offerFor(localeOrDefault(await getLocale()))
   const tourTags = {
     book: t('Hero.sceneTag'),
+    device: t('Hero.slides.device.tag'),
     order: t('Hero.slides.order.tag'),
     rent: t('Hero.slides.rent.tag'),
     checkin: t('Hero.slides.checkin.tag'),
@@ -51,6 +53,8 @@ export default async function LandingPage({ searchParams }: { searchParams: Reco
         />
 
         <BeachTour tags={tourTags} />
+
+        <DeviceShowcase />
 
         <section className="mx-auto max-w-3xl px-4 py-16">
           <h2 className="text-3xl font-semibold tracking-tight text-[#0e3a4a]">{t('Start.title')}</h2>

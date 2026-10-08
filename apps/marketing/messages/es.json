@@ -29,6 +29,11 @@
     },
     "sceneTag": "Reservada · pagada con tarjeta",
     "slides": {
+      "device": {
+        "title": "El estado de cada hamaca, visible desde toda la playa",
+        "subtitle": "Un indicador sin cables en la sombrilla muestra verde si está libre, rojo si está reservada y azul si está ocupada, con energía solar durante toda su vida útil. En pruebas.",
+        "tag": "Libre"
+      },
       "order": {
         "title": "Bebidas pedidas desde la hamaca, pagadas en la app",
         "subtitle": "Tus clientes piden desde el móvil. Tu barra ve cada pedido al momento, con aviso sonoro.",
@@ -82,7 +87,10 @@
       "rc_qr": "Recibo online",
       "bk_choose": "Elige tu hamaca",
       "bk_reserve": "Reservar",
-      "bk_pass": "Tu pase"
+      "bk_pass": "Tu pase",
+      "dv_free": "Libre",
+      "dv_reserved": "Reservada",
+      "dv_occupied": "Ocupada"
     }
   },
   "Footer": {
@@ -322,6 +330,17 @@
       "body": "Cada venta tiene su recibo o factura a tu nombre, con tu propia numeración y tu tipo de IVA, y una exportación para tu gestor.",
       "spain": "En España, Veri*factu llega antes del plazo de 2027."
     }
+  },
+  "Device": {
+    "place": "En la sombrilla",
+    "title": "Libre, reservada u ocupada, de un vistazo",
+    "body": "Un pequeño indicador va en la sombrilla y gira su rueda de color cada vez que cambia el estado de la plaza: verde cuando la hamaca está libre, rojo cuando está reservada y azul en cuanto el cliente la ocupa. Los clientes sin reserva escanean el código QR bajo la ventana para reservar esa misma hamaca.",
+    "free": "Verde: libre para reservar",
+    "reserved": "Rojo: reservada",
+    "occupied": "Azul: ocupada",
+    "qr": "Código QR para reservar esta hamaca",
+    "solar": "Sin cables: paneles solares y una gestión inteligente de la energía lo mantienen en marcha durante toda su vida útil",
+    "testing": "En pruebas. Sunbnb funciona por completo sin él."
   },
   "Start": {
     "title": "Cómo se empieza",
