@@ -40,11 +40,13 @@ Native — **Spain availability unverified**.
   Location, card_present PI) and simulated reader connect were verified in the iOS Simulator
   2026-10-08, but the iOS SDK cancels `collectPaymentMethod` there (log entry below) — needs a real
   iPhone (Apple entitlement) or an NFC Android phone.
-- **Next action, in order:** (1) founder decides the commission rounding fix (per-item vs total —
-  log 2026-10-07); (2) ~~commit~~ done 2026-10-08
-  (one logical change per commit — split by phase/surface); (3) **`npm run migrate:test` before any
-  `main` push** — migration `20261007162101_add_payment_provider_selection` (additive) is on local +
-  `sunbnb_test` only, NOT the Neon test DB; the pre-push hook blocks otherwise.
+- **Next action, in order:** (1) deployed-env config: Vercel env vars per app (see list below) and
+  the two Stripe Connect webhook endpoints; (2) founder decisions still open: PLATFORM credit note
+  on refunded online payments, Verifactu treatment of the 0%-VAT `payment-processing` line;
+  (3) physical-device Tap to Pay tap; (4) Viva http mode once KYC clears (edit only
+  `vivaOnlineHttp`). Commission rounding: DONE 2026-10-08 (`serviceFeeForUnits`). Commit + push +
+  `migrate:test`: DONE 2026-10-08. Production gets the migration via `./deploy-to-production.sh`
+  (founder runs it).
 - **Env vars per environment** (local `.env.local` + Vercel test/preview + production, per app):
   - user: `STRIPE_CONNECT_SECRET_KEY`, `STRIPE_CONNECT_WEBHOOK_SECRET`, `VIVA_MODE`,
     `VIVA_CHECKOUT_SOURCE_CODE`, `VIVA_CHECKOUT_COLOR`, `VIVA_WEBHOOK_VERIFICATION_KEY`
