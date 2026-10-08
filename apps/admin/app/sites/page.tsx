@@ -1,8 +1,23 @@
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { redirect } from 'next/navigation'
+import {
+  READINESS_SELECT,
+  providerReadiness,
+  toReadinessAccount,
+} from '@repo/data/payment-providers/readiness'
+import type { SelectableProvider } from '@repo/data/payment-refs'
 import SitesView from './view'
 import { resolveBrandRender } from '@repo/data/brand-manifest'
+
+function readinessFor(
+  account: Parameters<typeof toReadinessAccount>[0] | null | undefined,
+): Record<SelectableProvider, boolean> {
+  // Booleans only — toReadinessAccount drops the Mollie token before anything reaches the client.
+  const a = account ? toReadinessAccount(account) : null
+  const ok = (p: SelectableProvider) => (a ? providerReadiness(a, p).ready : false)
+  return { mollie: ok('mollie'), viva: ok('viva'), stripe: ok('stripe') }
+}
 
 export default async function SitesPage() {
   const session = await auth()
@@ -29,7 +44,7 @@ export default async function SitesPage() {
           partnerAccount: {
             select: {
               company: true,
-              mollieAccessToken: true,
+              ...READINESS_SELECT,
             },
           },
         },
@@ -49,7 +64,7 @@ export default async function SitesPage() {
     // things, and only this side knows which modules exist.
     brandReason: resolveBrandRender(s).reason,
     ownerName: s.user.partnerAccount?.company ?? s.user.name ?? s.user.email,
-    hasMollie: !!s.user.partnerAccount?.mollieAccessToken,
+    readiness: readinessFor(s.user.partnerAccount),
   }))
 
   return (

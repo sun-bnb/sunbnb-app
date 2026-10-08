@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { setCustomBrand, setCustomBrandKey, updatePaymentProvider } from './actions'
+import { PROVIDER_LABELS } from '@repo/data/payment-providers/availability'
+import type { SelectableProvider } from '@repo/data/payment-refs'
 import { BRAND_KEYS, type BrandRenderReason } from '@repo/data/brand-manifest'
 
 interface SiteRow {
@@ -13,7 +15,7 @@ interface SiteRow {
   customBrandKey: string | null
   brandReason: BrandRenderReason
   ownerName: string
-  hasMollie: boolean
+  readiness: Record<SelectableProvider, boolean>
 }
 
 /** Human wording for what a guest actually gets, resolved from BOTH gates. */
@@ -141,10 +143,12 @@ function ProviderSelect({ site }: { site: SiteRow }) {
         onChange={(e) => handleChange(e.target.value)}
         className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none focus:border-gray-500 disabled:opacity-40"
       >
-        <option value="stripe">Stripe</option>
-        <option value="mollie" disabled={!site.hasMollie}>
-          Mollie{!site.hasMollie ? ' (not connected)' : ''}
-        </option>
+        {(['mollie', 'viva', 'stripe'] as const).map((p) => (
+          <option key={p} value={p} disabled={!site.readiness[p]}>
+            {PROVIDER_LABELS[p]}
+            {!site.readiness[p] ? ' (not ready)' : ''}
+          </option>
+        ))}
       </select>
       {saving && <span className="text-[10px] text-gray-500">saving…</span>}
       {error && <span className="text-[10px] text-red-400" title={error}>⚠</span>}

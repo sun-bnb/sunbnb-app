@@ -38,49 +38,78 @@ describe('updatePaymentProvider', () => {
     expect(res.errors![0]).toBe('Invalid payment provider')
   })
 
-  it('updates to stripe without checking Mollie token', async () => {
-    authenticateAsSudo()
-    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+  const owner = (account: Record<string, unknown> | null) =>
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ user: { partnerAccount: account } } as any)
 
+  it('rejects a non-sudo user', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'u1' } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
+    await expect(updatePaymentProvider('site-1', 'stripe')).rejects.toThrow('Unauthorized')
+    expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
+  })
+
+  it('rejects stripe when charges are not enabled', async () => {
+    authenticateAsSudo()
+    owner({ stripeConnectAccountId: 'acct_1', stripeConnectChargesEnabled: false, stripeConnectOnboardingStatus: 'pending' })
+    const res = await updatePaymentProvider('site-1', 'stripe')
+    expect(res.status).toBe('error')
+    expect(res.errors![0]).toBe('Stripe is not ready for this partner (in_progress)')
+    expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
+  })
+
+  it('accepts stripe when charges are enabled, without touching PartnerAccount selection', async () => {
+    authenticateAsSudo()
+    owner({ stripeConnectAccountId: 'acct_1', stripeConnectChargesEnabled: true })
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
     const res = await updatePaymentProvider('site-1', 'stripe')
     expect(res.status).toBe('ok')
-    // site.findUnique should NOT be called — Mollie check only applies to Mollie
-    expect(vi.mocked(prisma.site.findUnique)).not.toHaveBeenCalled()
+    expect(vi.mocked(prisma.site.update)).toHaveBeenCalledWith({
+      where: { id: 'site-1' },
+      data: { paymentProvider: 'stripe' },
+    })
+    expect(vi.mocked(prisma.partnerAccount.update)).not.toHaveBeenCalled()
   })
 
-  it('checks Mollie token when switching to mollie', async () => {
+  it('accepts viva with merchant id and verified status', async () => {
     authenticateAsSudo()
-    // requireSudo uses user.findUnique (handled by authenticateAsSudo)
-    // Mollie check uses site.findUnique
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({
-      user: { partnerAccount: { mollieAccessToken: 'tok-123' } },
-    } as any)
+    owner({ vivaAccountId: 'v1', vivaMerchantId: 'm1', vivaVerificationStatus: 'verified' })
     vi.mocked(prisma.site.update).mockResolvedValue({} as any)
-
-    const res = await updatePaymentProvider('site-1', 'mollie')
-    expect(res.status).toBe('ok')
+    expect((await updatePaymentProvider('site-1', 'viva')).status).toBe('ok')
   })
 
-  it('rejects Mollie when partner has no token', async () => {
+  it('rejects viva when verification is pending', async () => {
     authenticateAsSudo()
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({
-      user: { partnerAccount: { mollieAccessToken: null } },
-    } as any)
-
-    const res = await updatePaymentProvider('site-1', 'mollie')
-    expect(res.status).toBe('error')
-    expect(res.errors![0]).toBe('Partner has not connected Mollie')
+    owner({ vivaAccountId: 'v1', vivaMerchantId: 'm1', vivaVerificationStatus: 'pending' })
+    const res = await updatePaymentProvider('site-1', 'viva')
+    expect(res.errors![0]).toBe('Viva is not ready for this partner (in_review)')
   })
 
-  it('rejects Mollie when partner has no account at all', async () => {
+  it('accepts mollie with token and completed onboarding', async () => {
     authenticateAsSudo()
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({
-      user: { partnerAccount: null },
-    } as any)
+    owner({ mollieAccessToken: 'tok-123', mollieOnboardingStatus: 'completed' })
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+    expect((await updatePaymentProvider('site-1', 'mollie')).status).toBe('ok')
+  })
 
+  it('rejects mollie when partner has no token', async () => {
+    authenticateAsSudo()
+    owner({ mollieAccessToken: null })
     const res = await updatePaymentProvider('site-1', 'mollie')
-    expect(res.status).toBe('error')
-    expect(res.errors![0]).toBe('Partner has not connected Mollie')
+    expect(res.errors![0]).toBe('Mollie is not ready for this partner (not_connected)')
+  })
+
+  it('rejects mollie when token present but onboarding incomplete', async () => {
+    authenticateAsSudo()
+    owner({ mollieAccessToken: 'tok', mollieOnboardingStatus: 'needs-data' })
+    const res = await updatePaymentProvider('site-1', 'mollie')
+    expect(res.errors![0]).toBe('Mollie is not ready for this partner (needs_data)')
+  })
+
+  it('rejects when the owner has no partner account at all', async () => {
+    authenticateAsSudo()
+    owner(null)
+    const res = await updatePaymentProvider('site-1', 'stripe')
+    expect(res.errors![0]).toBe('Stripe is not ready for this partner (not_connected)')
   })
 
   // BUG: uses { error: string } (singular) — should use { errors: string[] } (plural) for consistency

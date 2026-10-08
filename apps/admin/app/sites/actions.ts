@@ -3,6 +3,13 @@
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { isKnownBrandKey } from '@repo/data/brand-manifest'
+import {
+  READINESS_SELECT,
+  isSelectableProvider,
+  providerReadiness,
+  toReadinessAccount,
+} from '@repo/data/payment-providers/readiness'
+import { PROVIDER_LABELS } from '@repo/data/payment-providers/availability'
 import { revalidatePath } from 'next/cache'
 
 async function requireSudo() {
@@ -27,26 +34,23 @@ export async function updatePaymentProvider(
     return { status: 'error', errors: ['Site ID is required'] }
   }
 
-  if (!['stripe', 'mollie'].includes(paymentProvider)) {
+  if (!isSelectableProvider(paymentProvider)) {
     return { status: 'error', errors: ['Invalid payment provider'] }
   }
 
-  // If switching to Mollie, verify the site owner has connected Mollie
-  if (paymentProvider === 'mollie') {
-    const site = await prisma.site.findUnique({
-      where: { id: siteId },
-      select: {
-        user: {
-          select: {
-            partnerAccount: {
-              select: { mollieAccessToken: true },
-            },
-          },
-        },
-      },
-    })
-    if (!site?.user?.partnerAccount?.mollieAccessToken) {
-      return { status: 'error', errors: ['Partner has not connected Mollie'] }
+  // Admin OVERRIDE of the EFFECTIVE site provider (Site.paymentProvider) only.
+  // PartnerAccount.paymentProvider (the partner's own selection) is left untouched.
+  // The provider must still be ready for the owner's account.
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { user: { select: { partnerAccount: { select: READINESS_SELECT } } } },
+  })
+  const account = site?.user?.partnerAccount
+  const readiness = account ? providerReadiness(toReadinessAccount(account), paymentProvider) : null
+  if (!readiness?.ready) {
+    return {
+      status: 'error',
+      errors: [`${PROVIDER_LABELS[paymentProvider]} is not ready for this partner (${readiness?.status ?? 'not_connected'})`],
     }
   }
 
