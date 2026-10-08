@@ -36,10 +36,10 @@ interface MapBounds {
 const serviceIcons: {
   [key: string]: React.ReactElement
 } = {
-  'wc': <WcIcon />,
-  'food': <RestaurantIcon />,
-  'drinks': <LocalBarIcon />,
-  'rental': <SurfingIcon />
+  'wc': <WcIcon fontSize="small" />,
+  'food': <RestaurantIcon fontSize="small" />,
+  'drinks': <LocalBarIcon fontSize="small" />,
+  'rental': <SurfingIcon fontSize="small" />
 }
 
 function Site({ site }: { site: SiteProps }) {
@@ -65,11 +65,13 @@ function Site({ site }: { site: SiteProps }) {
         </div>
       </div>
       <div className="py-3 px-3">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-3 text-sm">
+        {/* Wraps by whole items: each stat stays on one line, and the service icons drop to
+            the next line on a narrow card instead of being pushed past its edge. */}
+        <div className="flex flex-wrap justify-between items-center gap-x-3 gap-y-2">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm min-w-0">
             {hasSunbeds && (
-            <div>
-              <span className="mr-1">&#x26F1;</span>
+            <div className="whitespace-nowrap">
+              <span className="mr-1" aria-hidden="true">&#x26F1;</span>
               <span className={(site.availableCount || 0) > 0 ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>{site.availableCount}</span>
               <span className="text-gray-300 mx-px">/</span>
               <span className="text-gray-400">{site.itemCount}</span>
@@ -77,34 +79,33 @@ function Site({ site }: { site: SiteProps }) {
             </div>
             )}
             {
-              site.distance &&
-                <div className="text-gray-600">
+              site.distance != null &&
+                <div className="text-gray-600 whitespace-nowrap">
                   <span className="mr-px">{Math.round(site.distance)}</span>
                   <span className="text-xs text-gray-400">KM</span>
                 </div>
             }
             {
               site.price &&
-                <div className="text-gray-700 font-medium">
+                <div className="text-gray-700 font-medium whitespace-nowrap">
                   <span>&#8364;</span>
                   <span>{site.price}</span>
                 </div>
             }
-            
           </div>
-          <div className="flex gap-1">
-            {
-              (site.services || []).map(service => {
-                return (
-                  <div key={`service-${service}`} className="border border-gray-200 rounded-md px-1 py-px text-gray-500">
-                    <div className="-mt-px">
+          {(site.services || []).length > 0 && (
+            <div className="flex shrink-0 gap-1">
+              {
+                (site.services || []).map(service => {
+                  return (
+                    <div key={`service-${service}`} className="border border-gray-200 rounded-md p-1 text-gray-500 flex items-center justify-center">
                       { serviceIcons[service] }
                     </div>
-                  </div>
-                )
-              })
-            }
-          </div>
+                  )
+                })
+              }
+            </div>
+          )}
         </div>
         {
           site.description && (
