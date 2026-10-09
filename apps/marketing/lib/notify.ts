@@ -66,9 +66,10 @@ export async function notifyDemoRequest(input: {
 
 /**
  * The prospect's own link back to their beach, sent when they request a demo with an email (they
- * asked to be contacted; this is the reply, not marketing). In their page language. Never throws.
+ * asked to be contacted; this is the reply, not marketing). In their page language. Never throws;
+ * true when the email was handed to the provider (the `link_emailed` funnel event).
  */
-export async function emailProspectTheirBeach(input: { to: string; host: string; token: string; locale: string; beachName: string; name?: string | null }): Promise<void> {
+export async function emailProspectTheirBeach(input: { to: string; host: string; token: string; locale: string; beachName: string; name?: string | null }): Promise<boolean> {
   try {
     const t = await getTranslations({ locale: input.locale, namespace: 'Email' })
     const link = `https://${input.host}/m/${input.token}`
@@ -81,8 +82,10 @@ export async function emailProspectTheirBeach(input: { to: string; host: string;
         `<p><a href="${esc(link)}">${esc(t('cta', { beach: input.beachName }))}</a></p>` +
         `<p>${esc(t('signoff'))}</p>`,
     })
+    return true
   } catch (err) {
     console.error('[marketing] prospect email failed', err)
+    return false
   }
 }
 

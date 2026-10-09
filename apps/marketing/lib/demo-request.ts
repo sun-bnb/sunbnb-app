@@ -7,7 +7,7 @@
  */
 
 /** Version of the privacy notice the consent checkbox refers to; stored on the lead. Bump with the notice. */
-export const CONSENT_VERSION = '2026-10-05.2' // .2: the AI assistant answers before a mockup exists (D11). '2026-10-05': cookies, Meta/Google tags, click ids, funnel events, A/B (P8)
+export const CONSENT_VERSION = '2026-10-09' // '2026-10-09': GA4 + PostHog session recordings named as consent-based processors. '2026-10-05.2': the AI assistant answers before a mockup exists (D11). '2026-10-05': cookies, Meta/Google tags, click ids, funnel events, A/B (P8)
 
 /** Faster than this from render to submit is a script, not a person typing a name and an email. */
 export const MIN_FILL_MS = 3000

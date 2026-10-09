@@ -77,7 +77,8 @@ export async function POST(request: NextRequest) {
       contact: saved.lead,
     })
     if (saved.lead.email && (await allow('prospectEmail', saved.lead.email.toLowerCase()))) {
-      await emailProspectTheirBeach({ to: saved.lead.email, host: request.headers.get('host') ?? 'try.sunbnb.app', token: req.token, locale: saved.lead.locale, beachName: saved.lead.beachName, name: saved.lead.contactName })
+      const sent = await emailProspectTheirBeach({ to: saved.lead.email, host: request.headers.get('host') ?? 'try.sunbnb.app', token: req.token, locale: saved.lead.locale, beachName: saved.lead.beachName, name: saved.lead.contactName })
+      if (sent) await recordLeadEvent({ name: 'link_emailed', token: req.token, props: { via: 'chat' } })
     }
   }
 

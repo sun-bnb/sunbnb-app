@@ -140,7 +140,7 @@
   },
   "Consent": {
     "title": "Cookies",
-    "body": "Usamos cookies necesarias para que este sitio funcione. Con tu permiso, también usamos cookies publicitarias de Meta y Google para medir nuestros anuncios. <link>Aviso de privacidad</link>",
+    "body": "Usamos cookies necesarias para que este sitio funcione. Con tu permiso, también usamos cookies publicitarias de Meta y Google para medir nuestros anuncios, y Google Analytics y PostHog (que graba las visitas, con el texto escrito oculto) para mejorar el sitio. <link>Aviso de privacidad</link>",
     "accept": "Aceptar todas",
     "necessary": "Solo necesarias",
     "settings": "Configurar cookies"

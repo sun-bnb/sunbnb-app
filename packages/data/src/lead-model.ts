@@ -100,6 +100,8 @@ export const LEAD_EVENT_NAMES = [
   'projection_view', 'projection_finetune', 'projection_formula_open', 'brief_view', 'cta_view', 'cta_click',
   'link_emailed', 'demo_requested', 'signup_click', 'signup_done', 'claim_done', 'chat_open',
   'consent_marketing', 'consent_necessary',
+  // Landing-page reading (cookieless counts too): how far down, which sections came into view.
+  'scroll_depth', 'section_view',
 ] as const
 export type LeadEventName = (typeof LEAD_EVENT_NAMES)[number]
 

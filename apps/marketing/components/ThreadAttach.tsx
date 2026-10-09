@@ -10,6 +10,7 @@ import { exampleBookings, staffWindow } from '@/lib/missions.ts'
 import { MAX_SUNBEDS } from '@/lib/places.ts'
 import { project } from '@/lib/projection.ts'
 import { DEMO_PRICES, drinksTotal, formatEur } from '@/lib/demo-prices.ts'
+import { track } from '@/lib/track.ts'
 
 // react-qr-code types against the hoisted @types/react 19 (same cast as apps/user PassView).
 const QRCode = QRCodeLib as unknown as FC<{ value: string; size?: number; style?: React.CSSProperties }>
@@ -554,6 +555,14 @@ export function ProjectionCard({
   const [online, setOnline] = useState<number | null>(null)
   const [why, setWhy] = useState(false)
   const proj = useMemo(() => project({ price: p, sunbeds, onlinePerDay: online }), [p, sunbeds, online])
+  // Funnel: each way of fine-tuning the numbers, and opening the formula — once each.
+  const noted = useRef(new Set<string>())
+  const note = (what: 'price' | 'online' | 'formula') => {
+    if (noted.current.has(what)) return
+    noted.current.add(what)
+    if (what === 'formula') track('projection_formula_open')
+    else track('projection_finetune', { what })
+  }
   useEffect(() => {
     const timer = setTimeout(() => onChange({ price: p, sunbeds, onlinePerDay: online }), 600)
     return () => clearTimeout(timer)
@@ -562,6 +571,7 @@ export function ProjectionCard({
   const setPrice = (v: number) => {
     haptic(5)
     setConfirmed(true)
+    note('price')
     setP(Math.max(1, Math.min(500, v)))
   }
 
@@ -601,7 +611,14 @@ export function ProjectionCard({
         </ul>
 
         {online === null ? (
-          <button type="button" onClick={() => setOnline(Math.max(1, Math.round(sunbeds / 4)))} className={`${chipCls} mt-3`}>
+          <button
+            type="button"
+            onClick={() => {
+              note('online')
+              setOnline(Math.max(1, Math.round(sunbeds / 4)))
+            }}
+            className={`${chipCls} mt-3`}
+          >
             {t('pj_addEstimate')}
           </button>
         ) : (
@@ -623,7 +640,13 @@ export function ProjectionCard({
           </div>
         )}
 
-        <button type="button" onClick={() => setWhy((w) => !w)} aria-expanded={why} className="mt-3 text-xs font-medium text-[#0083a0] underline-offset-2 hover:underline">
+        <button
+          type="button"
+          onClick={() => {
+            if (!why) note('formula')
+            setWhy((w) => !w)
+          }}
+          aria-expanded={why} className="mt-3 text-xs font-medium text-[#0083a0] underline-offset-2 hover:underline">
           {t('pj_how')}
         </button>
         {why && (

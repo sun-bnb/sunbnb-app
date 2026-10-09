@@ -3,6 +3,7 @@ import localFont from 'next/font/local'
 import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages, getTranslations } from 'next-intl/server'
 import ConsentManager from '@/components/ConsentManager'
+import WebVitals from '@/components/WebVitals'
 import './globals.css'
 
 const geistSans = localFont({ src: './fonts/GeistVF.woff', variable: '--font-geist-sans' })
@@ -26,6 +27,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <NextIntlClientProvider messages={messages}>
           {children}
           <ConsentManager />
+          <WebVitals />
         </NextIntlClientProvider>
       </body>
     </html>

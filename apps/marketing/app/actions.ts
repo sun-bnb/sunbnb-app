@@ -126,7 +126,8 @@ export async function requestDemo(token: string, form: FormData): Promise<Action
       contact: parsed.value,
     })
     if (parsed.value.email && (await allow('prospectEmail', parsed.value.email.toLowerCase()))) {
-      await emailProspectTheirBeach({ to: parsed.value.email, host: h.get('host') ?? 'try.sunbnb.app', token: token, locale: result.lead.locale, beachName: result.lead.beachName, name: parsed.value.contactName })
+      const sent = await emailProspectTheirBeach({ to: parsed.value.email, host: h.get('host') ?? 'try.sunbnb.app', token: token, locale: result.lead.locale, beachName: result.lead.beachName, name: parsed.value.contactName })
+      if (sent) await recordLeadEvent({ name: 'link_emailed', token, props: { via: 'form' } })
     }
   }
   return { status: 'ok' }

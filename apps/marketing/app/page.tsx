@@ -5,6 +5,7 @@ import BeachTour from '@/components/BeachTour'
 import DeviceShowcase from '@/components/DeviceShowcase'
 import Experience from '@/components/Experience'
 import { SiteFooter, SiteHeader } from '@/components/SiteChrome'
+import ReadingTracker from '@/components/ReadingTracker'
 import TrackOnMount from '@/components/TrackOnMount'
 import { offerFor } from '@/lib/offer.ts'
 import { localeOrDefault } from '@/lib/places.ts'
@@ -41,6 +42,7 @@ export default async function LandingPage({ searchParams }: { searchParams: Reco
   return (
     <>
       <TrackOnMount name="landing_view" context={{ angle }} />
+      <ReadingTracker />
       <main className="relative bg-[#fff5e1]">
         <SiteHeader overlay />
         <Experience
@@ -56,7 +58,7 @@ export default async function LandingPage({ searchParams }: { searchParams: Reco
 
         <DeviceShowcase />
 
-        <section className="mx-auto max-w-3xl px-4 py-16">
+        <section data-track-section="start" className="mx-auto max-w-3xl px-4 py-16">
           <h2 className="text-3xl font-semibold tracking-tight text-[#0e3a4a]">{t('Start.title')}</h2>
           <ol className="mt-6 space-y-4">
             {(['s1', 's2', 's3'] as const).map((k, i) => (
@@ -71,7 +73,7 @@ export default async function LandingPage({ searchParams }: { searchParams: Reco
           </ol>
         </section>
 
-        <section className="mx-auto max-w-3xl px-4 pb-20">
+        <section data-track-section="faq" className="mx-auto max-w-3xl px-4 pb-20">
           <h2 className="text-3xl font-semibold tracking-tight text-[#0e3a4a]">{t('Faq.title')}</h2>
           <div className="mt-6 divide-y divide-[#0e3a4a]/10 rounded-3xl border-2 border-[#0e3a4a] bg-white">
             {faq.map(([k, params]) => (

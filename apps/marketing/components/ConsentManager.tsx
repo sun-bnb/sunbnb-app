@@ -4,18 +4,16 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useEffect, useState } from 'react'
 import { CONSENT_COOKIE, CONSENT_MAX_AGE_S, readConsentCookie, serializeConsent } from '@/lib/consent.ts'
+import { loadMarketingTags, revokeMarketingTags } from '@/lib/marketing-tags.ts'
 import { track } from '@/lib/track.ts'
-
-const META_PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID
-const GOOGLE_ADS_ID = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID
 
 /** Fired by the footer's "Cookie settings" link to reopen the banner. */
 export const OPEN_CONSENT_EVENT = 'sb:open-consent'
 
 /**
- * Cookie banner + ad-tag loader (track 027 P8, D8). Meta Pixel and Google Ads tags are injected
- * ONLY after the visitor accepts marketing cookies, and only when their IDs are configured —
- * before that, `window.fbq` / `window.gtag` don't exist and no request reaches Meta or Google.
+ * Cookie banner (track 027 P8, D8). The marketing tags (Meta Pixel, Google GA4/Ads, PostHog —
+ * `lib/marketing-tags.ts`) load ONLY after the visitor accepts, and only when their IDs are
+ * configured; before that no request reaches Meta, Google or PostHog.
  */
 export default function ConsentManager() {
   const t = useTranslations('Consent')
@@ -35,8 +33,9 @@ export default function ConsentManager() {
     setOpen(false)
     track(marketing ? 'consent_marketing' : 'consent_necessary')
     if (marketing) loadMarketingTags()
-    // Withdrawing consent after tags loaded: they stay in memory until the next page load, which
-    // is the norm; nothing new is installed and the cookie now says no.
+    // Withdrawing after the tags loaded: each is told to stop now (Consent Mode denied, Pixel
+    // revoked, PostHog opted out); from the next page load nothing loads at all.
+    else revokeMarketingTags()
   }
 
   if (!open) return null
@@ -65,49 +64,4 @@ export default function ConsentManager() {
       </div>
     </div>
   )
-}
-
-let tagsLoaded = false
-
-function loadMarketingTags() {
-  if (tagsLoaded) return
-  tagsLoaded = true
-  if (META_PIXEL_ID) {
-    // Meta's standard base code, inlined so nothing is fetched before this point.
-    const w = window as unknown as Record<string, unknown> & Window
-    if (!w.fbq) {
-      const fbq = function (...args: unknown[]) {
-        const self = fbq as unknown as { callMethod?: (...a: unknown[]) => void; queue: unknown[] }
-        if (self.callMethod) self.callMethod(...args)
-        else self.queue.push(args)
-      } as unknown as Window['fbq'] & { queue: unknown[]; loaded: boolean; version: string; push: unknown }
-      fbq!.queue = []
-      fbq!.loaded = true
-      fbq!.version = '2.0'
-      fbq!.push = fbq
-      w.fbq = fbq
-      w._fbq = fbq
-      const s = document.createElement('script')
-      s.async = true
-      s.src = 'https://connect.facebook.net/en_US/fbevents.js'
-      document.head.appendChild(s)
-    }
-    window.fbq?.('init', META_PIXEL_ID)
-    window.fbq?.('track', 'PageView')
-  }
-  if (GOOGLE_ADS_ID) {
-    const w = window as unknown as { dataLayer: unknown[] } & Window
-    w.dataLayer = w.dataLayer || []
-    w.gtag = function () {
-      // gtag requires the arguments object itself, not an array.
-      // eslint-disable-next-line prefer-rest-params
-      w.dataLayer.push(arguments)
-    }
-    window.gtag?.('js', new Date())
-    window.gtag?.('config', GOOGLE_ADS_ID)
-    const s = document.createElement('script')
-    s.async = true
-    s.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(GOOGLE_ADS_ID)}`
-    document.head.appendChild(s)
-  }
 }

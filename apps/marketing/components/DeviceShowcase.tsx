@@ -83,7 +83,7 @@ export default function DeviceShowcase() {
   const status = deviceStatus(step)
 
   return (
-    <section ref={ref} aria-labelledby="device-title" className="mx-auto grid max-w-5xl items-center gap-8 px-4 py-16 md:grid-cols-[1.1fr_1fr] md:gap-12">
+    <section ref={ref} data-track-section="device" aria-labelledby="device-title" className="mx-auto grid max-w-5xl items-center gap-8 px-4 py-16 md:grid-cols-[1.1fr_1fr] md:gap-12">
       <div
         className="relative flex h-[330px] cursor-grab touch-pan-y select-none items-center justify-center active:cursor-grabbing sm:h-[400px]"
         aria-hidden

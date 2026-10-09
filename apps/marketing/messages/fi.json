@@ -140,7 +140,7 @@
   },
   "Consent": {
     "title": "Evästeet",
-    "body": "Käytämme sivuston toimintaan välttämättömiä evästeitä. Luvallasi käytämme myös Metan ja Googlen mainosevästeitä mainostemme mittaamiseen. <link>Tietosuojailmoitus</link>",
+    "body": "Käytämme sivuston toimintaan välttämättömiä evästeitä. Luvallasi käytämme myös Metan ja Googlen mainosevästeitä mainostemme mittaamiseen sekä Google Analyticsia ja PostHogia (joka tallentaa käynnit, kirjoitettu teksti piilotettuna) sivuston parantamiseen. <link>Tietosuojailmoitus</link>",
     "accept": "Hyväksy kaikki",
     "necessary": "Vain välttämättömät",
     "settings": "Evästeasetukset"

@@ -140,7 +140,7 @@
   },
   "Consent": {
     "title": "Cookies",
-    "body": "We use necessary cookies to run this site. With your permission we also use Meta and Google advertising cookies to measure our ads. <link>Privacy notice</link>",
+    "body": "We use necessary cookies to run this site. With your permission we also use Meta and Google advertising cookies to measure our ads, and Google Analytics and PostHog (which records visits, with typed text hidden) to improve the site. <link>Privacy notice</link>",
     "accept": "Accept all",
     "necessary": "Only necessary",
     "settings": "Cookie settings"

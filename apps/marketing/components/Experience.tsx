@@ -223,6 +223,7 @@ export default function Experience({
         whenLanded(() => {
           if (cancelled) return
           const done = (snapped: boolean) => {
+            track('flown', { snapped })
             dispatch({ type: 'shoreRead', snapped })
             setFitKey((k) => k + 1)
           }
@@ -284,10 +285,19 @@ export default function Experience({
 
   /** Manual turn when the shoreline couldn't be read (or the visitor knows better). */
   const adjusted = useRef(false)
+  // One funnel event per kind of adjustment per beach, not one per tap.
+  const adjustedKinds = useRef(new Set<string>())
+  function noteAdjusted(how: 'rotate' | 'move') {
+    const key = `${sRef.current.beach?.placeId}:${how}`
+    if (adjustedKinds.current.has(key)) return
+    adjustedKinds.current.add(key)
+    track('layout_adjusted', { how })
+  }
   const rotateTimer = useRef<number>()
   function rotate(delta: number) {
     haptic(6)
     adjusted.current = true
+    noteAdjusted('rotate')
     setFrame((f) => (f ? { ...f, seaBearingDeg: (((f.seaBearingDeg + delta) % 360) + 360) % 360 } : f))
     // Re-frame once the turning stops: a turned parcel can swing under the conversation.
     window.clearTimeout(rotateTimer.current)
@@ -296,6 +306,7 @@ export default function Experience({
   function moveTo(ll: { lat: number; lng: number }) {
     haptic(10)
     adjusted.current = true
+    noteAdjusted('move')
     setMoving(false)
     setFrame((f) => (f ? { ...f, anchor: ll, placement: 'center' } : f))
     setFitKey((k) => k + 1)
@@ -390,6 +401,15 @@ export default function Experience({
     }, PAY_MS)
   }
 
+  // The beds first stand on the beach (once per beach): the mockup became theirs to see.
+  const placedFor = useRef<string | null>(null)
+  useEffect(() => {
+    const id = s.beach?.placeId
+    if (!id || !layout || s.step !== 'count' || placedFor.current === id) return
+    placedFor.current = id
+    track('beds_placed', { count: s.count, rows: layout.rows })
+  }, [s.beach?.placeId, s.step, layout])
+
   // ── The bar: rules first, the agent for everything else ──────────────────
   function onSubmit(text: string) {
     const step = s.step
@@ -412,8 +432,14 @@ export default function Experience({
     void askAgent(text)
   }
 
+  const chatOpened = useRef(false)
   async function askAgent(text: string) {
     dispatch({ type: 'say', from: 'me', text })
+    // The first free-text question of the visit: the visitor turned to the assistant.
+    if (!chatOpened.current) {
+      chatOpened.current = true
+      track('chat_open', { phase: s.token ? 'chat' : 'guide', available: chatEnabled })
+    }
     if (!chatEnabled) return say('agentOff')
     setTyping(true)
     try {

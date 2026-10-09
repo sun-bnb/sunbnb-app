@@ -70,7 +70,7 @@ export default function BeachTour({ tags }: { tags: Record<HeroMode, string> }) 
   }
 
   return (
-    <section ref={ref} aria-label={t('label')} className="relative" style={{ height: `${STOPS.length * 85}svh` }}>
+    <section ref={ref} data-track-section="tour" aria-label={t('label')} className="relative" style={{ height: `${STOPS.length * 85}svh` }}>
       {/* dvh, not svh: when the mobile address bar hides on scroll-down the stage grows to the full
           screen and the stop cards (bottom-anchored) move down into the freed space. */}
       <div className="sticky top-0 h-[100svh] overflow-hidden bg-[#f7ebd1] supports-[height:100dvh]:h-[100dvh]">

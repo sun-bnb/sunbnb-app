@@ -1,63 +1,57 @@
 'use client'
 
 /**
- * Client funnel tracking (track 027 P8). One call site per funnel moment:
+ * Client tracking (track 027 P8). One call site per funnel moment:
  *   track('cta_click', { step: 7 })
- * Always records a first-party event (sendBeacon → /api/events). The ad platforms only hear about
- * the few CONVERSION events, and only when marketing consent is on (MarketingTags installs
- * window.fbq / window.gtag after consent; before that they don't exist and nothing is sent).
+ * Always records a first-party event (sendBeacon → /api/events). The tags — Meta, Google
+ * (GA4 + Ads), PostHog — hear about it too, but they only exist after marketing consent
+ * (`lib/marketing-tags.ts`); before that the calls go nowhere. Routing rules: `lib/tracking-plan.ts`.
  */
 import type { LeadEventName } from '@repo/data/lead-model'
+import { capturePosthog } from './marketing-tags.ts'
+import { planEvent, type AnalyticsEventName, type Props, type TagConfig, type TrackingContext } from './tracking-plan.ts'
 
-type Props = Record<string, string | number | boolean>
-
-let context: { token?: string; angle?: string | null; variant?: string | null } = {}
+let context: TrackingContext = {}
 
 /** Set once per page: the lead token (mockup page) or the ad angle/arm (landing). */
-export function setTrackingContext(c: typeof context) {
+export function setTrackingContext(c: TrackingContext) {
   context = { ...context, ...c }
 }
 
-/**
- * Funnel events that are ad-platform conversions: Meta standard events, and Google Ads conversion
- * actions (an Ads conversion only counts when sent to its `AW-…/label`, configured per action).
- */
-const GOOGLE_ADS_ID = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID
-const GOOGLE_LABELS = {
-  mockup: process.env.NEXT_PUBLIC_GOOGLE_ADS_LABEL_MOCKUP,
-  lead: process.env.NEXT_PUBLIC_GOOGLE_ADS_LABEL_LEAD,
-  signup: process.env.NEXT_PUBLIC_GOOGLE_ADS_LABEL_SIGNUP,
-}
-const CONVERSIONS: Partial<Record<LeadEventName, { meta: string; google: keyof typeof GOOGLE_LABELS }>> = {
-  mockup_created: { meta: 'ViewContent', google: 'mockup' },
-  demo_requested: { meta: 'Lead', google: 'lead' },
-  signup_done: { meta: 'CompleteRegistration', google: 'signup' },
-  claim_done: { meta: 'CompleteRegistration', google: 'signup' },
+const CONFIG: TagConfig = {
+  googleAdsId: process.env.NEXT_PUBLIC_GOOGLE_ADS_ID,
+  ga4Id: process.env.NEXT_PUBLIC_GA4_ID,
+  adsLabels: {
+    mockup: process.env.NEXT_PUBLIC_GOOGLE_ADS_LABEL_MOCKUP,
+    lead: process.env.NEXT_PUBLIC_GOOGLE_ADS_LABEL_LEAD,
+    signup: process.env.NEXT_PUBLIC_GOOGLE_ADS_LABEL_SIGNUP,
+  },
 }
 
-declare global {
-  interface Window {
-    fbq?: (...args: unknown[]) => void
-    gtag?: (...args: unknown[]) => void
-  }
-}
-
+/** A funnel event. `beacon: false` skips the first-party record (the server already wrote it). */
 export function track(name: LeadEventName, props?: Props, opts: { beacon?: boolean } = {}) {
+  send(name, props, opts)
+}
+
+/** A measurement for the analytics tools only (GA4 / PostHog) — not a funnel step. */
+export function trackAnalytics(name: AnalyticsEventName, props?: Props) {
+  send(name, props)
+}
+
+function send(name: LeadEventName | AnalyticsEventName, props: Props | undefined, opts: { beacon?: boolean } = {}) {
   if (typeof window === 'undefined') return
-  const body = JSON.stringify({ name, props, token: context.token, angle: context.angle, variant: context.variant })
   try {
-    if (opts.beacon !== false && !navigator.sendBeacon?.('/api/events', body)) {
-      void fetch('/api/events', { method: 'POST', body, keepalive: true }).catch(() => {})
+    const plan = planEvent(name, props, context, CONFIG, opts)
+    if (plan.beacon) {
+      const body = JSON.stringify({ name, props, token: context.token, angle: context.angle, variant: context.variant })
+      if (!navigator.sendBeacon?.('/api/events', body)) {
+        void fetch('/api/events', { method: 'POST', body, keepalive: true }).catch(() => {})
+      }
     }
+    for (const call of plan.fbq) window.fbq?.(...call)
+    for (const call of plan.gtag) window.gtag?.(...call)
+    capturePosthog(plan.posthog.event, plan.posthog.properties)
   } catch {
     /* tracking must never break the page */
-  }
-  const conv = CONVERSIONS[name]
-  if (conv) {
-    // event_id lets server-side conversions (P14) de-duplicate against these.
-    const eventId = `${context.token ?? 'anon'}:${name}`
-    window.fbq?.('track', conv.meta, {}, { eventID: eventId })
-    const label = GOOGLE_LABELS[conv.google]
-    if (GOOGLE_ADS_ID && label) window.gtag?.('event', 'conversion', { send_to: `${GOOGLE_ADS_ID}/${label}`, transaction_id: eventId })
   }
 }
