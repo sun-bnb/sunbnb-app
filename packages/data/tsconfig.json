@@ -1,7 +1,15 @@
 {
   "extends": "@repo/typescript-config/react-library.json",
   "compilerOptions": {
-    "outDir": "dist"
+    "outDir": "dist",
+    // Without an explicit root, tsc stops at TS2209 ("project root is ambiguous") before
+    // checking ANY file, so `tsc --noEmit` here silently type-checked nothing.
+    "rootDir": ".",
+    // Consumed as TS source by bundlers (Next transpilePackages, vitest, tsx), never as
+    // Node ESM: NodeNext would demand `.js` on dynamic import() specifiers that no
+    // consumer needs.
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
   },
   "include": ["index.ts", "src", "prisma"],
   "exclude": ["node_modules", "dist"]

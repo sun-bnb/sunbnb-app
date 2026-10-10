@@ -19,13 +19,13 @@
     "import:coastline": "npx --yes tsx scripts/import-coastline.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.131.0",
+    "@anthropic-ai/sdk": "^0.133.0",
     "@repo/data": "*",
     "@repo/schematic": "*",
     "@vis.gl/react-google-maps": "^1.1.0",
     "next": "^16.4.0",
     "next-intl": "^4.14.9",
-    "posthog-js": "1.434.14",
+    "posthog-js": "1.438.7",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-qr-code": "^2.2.0",

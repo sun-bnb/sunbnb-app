@@ -23,7 +23,7 @@
  * ever tell us the chain is wrong.
  */
 
-import { DOMParser } from '@xmldom/xmldom'
+import { DOMParser, type Element } from '@xmldom/xmldom'
 
 export const SOAP_ENV_NS = 'http://schemas.xmlsoap.org/soap/envelope/'
 export const NS_RESPUESTA =
@@ -127,10 +127,15 @@ const ESTADO_REGISTRO: EstadoRegistro[] = ['Correcto', 'AceptadoConErrores', 'In
  * whole-envío rejections arrive, before any per-record line exists.
  */
 export function parseSubmissionReply(xml: string): SubmissionReply {
-  const doc = new DOMParser({
-    // Silence the default console noise; we raise our own error below.
-    errorHandler: { warning: () => {}, error: () => {}, fatalError: () => {} },
-  }).parseFromString(xml, 'text/xml')
+  let doc: ReturnType<DOMParser['parseFromString']>
+  try {
+    // Silence the default console noise; we raise our own error below. xmldom 0.9 THROWS
+    // on a fatal parse error (0.8 returned a document without a root), so that path is
+    // converted here: callers rely on MalformedReplyError, never on xmldom's ParseError.
+    doc = new DOMParser({ onError: () => {} }).parseFromString(xml, 'text/xml')
+  } catch (err) {
+    throw new MalformedReplyError(`Reply is not XML: ${err instanceof Error ? err.message : String(err)}`)
+  }
 
   const root = doc.documentElement
   if (!root) throw new MalformedReplyError('Reply is not XML')

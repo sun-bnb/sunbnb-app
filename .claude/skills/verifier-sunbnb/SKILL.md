@@ -21,7 +21,7 @@ the two — run the app, observe, screenshot, confirm.
 ## One-time machine setup
 
 ```bash
-npx -y playwright@1.61.0 install chromium   # ~90MB headless shell → ~/Library/Caches/ms-playwright
+npx -y playwright@1.64.0 install chromium   # ~90MB headless shell → ~/Library/Caches/ms-playwright
 ```
 
 `handle.mjs` resolves the npx-cached `playwright/index.js` itself (ESM ignores NODE_PATH; it's
