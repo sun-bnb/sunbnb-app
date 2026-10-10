@@ -324,7 +324,7 @@
     "lint": "eslint . --max-warnings 0",
     "generate:component": "turbo gen react-component",
     "postinstall": "npx prisma generate",
-    "migrate:local": "cp .env.local .env && npx prisma migrate dev && npx prisma generate && (npm run migrate:integration || echo '\u26a0 sunbnb_test not migrated \u2014 create the DB if you run integration tests')",
+    "migrate:local": "cp .env.local .env && npx prisma migrate dev && npx prisma generate && (npm run migrate:integration || echo '⚠ sunbnb_test not migrated — create the DB if you run integration tests')",
     "coastline:schema": "node scripts/coastline-schema.mjs",
     "migrate:integration": "POSTGRES_URL=postgres://postgres:sunbnb@localhost:5432/sunbnb_test npx prisma migrate deploy",
     "migrate:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx prisma migrate deploy && npx prisma generate",
@@ -415,12 +415,12 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
     "@xmldom/xmldom": "0.9.12",
-    "dotenv": "^17.3.1",
+    "dotenv": "^18.0.7",
     "node-forge": "1.4.0",
     "pg": "^8.19.0",
     "prisma": "^7",
     "resend": "^6.9.3",
-    "stripe": "^20.4.0",
+    "stripe": "^23.0.0",
     "tz-lookup": "^6.1.25"
   },
   "peerDependencies": {

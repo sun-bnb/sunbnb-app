@@ -50,12 +50,12 @@ export async function POST(request: NextRequest) {
     // Validate with Zod
     const parsed = clientLinkSchema.safeParse(raw)
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0]
+      const firstError = parsed.error.issues[0]
       return NextResponse.json(
         {
           error: `Validation error: ${firstError?.path.join('.')} — ${firstError?.message}`,
           code: 'validation_error',
-          details: parsed.error.errors.map((e) => ({
+          details: parsed.error.issues.map((e) => ({
             field: e.path.join('.'),
             message: e.message,
           })),

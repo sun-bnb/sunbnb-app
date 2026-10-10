@@ -57,7 +57,7 @@ describe('createTerminalPaymentIntent', () => {
     expect(await createTerminalPaymentIntent(input)).toEqual({ paymentIntentId: 'pi_1', clientSecret: 'pi_1_secret' })
     expect(stripe.paymentIntents.create).toHaveBeenCalledWith(
       {
-        amount: 4010, currency: 'eur', payment_method_types: ['card_present'], capture_method: 'automatic',
+        amount: 4010, currency: 'eur', allowed_payment_method_types: ['card_present'], capture_method: 'automatic',
         application_fee_amount: 235, description: 'Beach Club',
         metadata: { type: 'reservation', entityId: 'r1', siteId: 's1', collect: '1' },
       },

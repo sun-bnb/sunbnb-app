@@ -75,7 +75,11 @@ export async function createTerminalPaymentIntent(i: {
     {
       amount: toCents(i.amount),
       currency: 'eur',
-      payment_method_types: ['card_present'],
+      // API 2026-09-30.endive (stripe-node 23) removed `payment_method_types` on create
+      // (400 payment_method_types_no_longer_supported). `allowed_payment_method_types`
+      // replaces it; unlike the old field it filters incompatible methods silently, so a
+      // misconfigured reader now fails at collect time rather than here.
+      allowed_payment_method_types: ['card_present'],
       capture_method: 'automatic',
       ...(feeCents > 0 ? { application_fee_amount: feeCents } : {}),
       description: i.description,
