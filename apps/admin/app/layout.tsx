@@ -3,6 +3,7 @@ import localFont from 'next/font/local'
 import App from './app'
 import NextAuthProvider from './nextauth'
 import MuiThemeProvider from './mui-theme'
+import { AppRouterCacheProvider } from '@mui/material-nextjs/v16-appRouter'
 import { CookieConsent } from '@repo/ui/cookie-consent'
 import { FlagsProvider } from '@repo/ui/flags'
 import { getClientFlags } from './flags'
@@ -35,16 +36,20 @@ export default async function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
-        <FlagsProvider value={flags}>
-          <MuiThemeProvider>
-            <NextAuthProvider>
-              <App>
-                {children}
-              </App>
-              <CookieConsent privacyHref="#" />
-            </NextAuthProvider>
-          </MuiThemeProvider>
-        </FlagsProvider>
+        {/* Collects Emotion's styles into <head> via useServerInsertedHTML; without
+            it MUI's SSR <style> tags render inline and every page fails hydration. */}
+        <AppRouterCacheProvider>
+          <FlagsProvider value={flags}>
+            <MuiThemeProvider>
+              <NextAuthProvider>
+                <App>
+                  {children}
+                </App>
+                <CookieConsent privacyHref="#" />
+              </NextAuthProvider>
+            </MuiThemeProvider>
+          </FlagsProvider>
+        </AppRouterCacheProvider>
       </body>
     </html>
   )

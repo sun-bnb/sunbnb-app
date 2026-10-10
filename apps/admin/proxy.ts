@@ -2,16 +2,16 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 /**
- * Admin app middleware — defence-in-depth auth gate.
+ * Admin app proxy (Next 16 name for middleware) — defence-in-depth auth gate.
  *
  * All pages and server-side routes already check auth + sudo individually,
- * but this middleware acts as a first-line guard to redirect unauthenticated
+ * but this proxy acts as a first-line guard to redirect unauthenticated
  * requests before they hit any page component.
  *
  * Checks for a NextAuth session token cookie. If absent, redirects to /sign-in.
  * Public routes (sign-in, password reset, auth API, health check) are excluded.
  */
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl
 
   // Allow public routes through without auth check
