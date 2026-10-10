@@ -126,7 +126,7 @@ export default function BeachStage({
     <div ref={outer} style={{ height: `${heightVh}vh` }} className="relative">
       <div
         ref={stage}
-        className="lp-stage sticky top-0 h-svh w-full overflow-hidden bg-[#f8efdc]"
+        className="lp-stage sticky top-0 h-lvh w-full overflow-hidden bg-[#f8efdc]"
         style={{ ['--p' as string]: 0 }}
         data-beat={beat}
       >
@@ -136,8 +136,8 @@ export default function BeachStage({
             <BeachScene progress={progress} active={active} yoursLabel={yoursLabel} label={label} />
           </div>
         )}
-        {/* copy panels sit above the canvas */}
-        <div className="absolute inset-0">{children}</div>
+        {/* copy panels sit above the canvas, inside the small viewport so mobile toolbars never cover them */}
+        <div className="absolute inset-x-0 top-0 h-svh">{children}</div>
       </div>
       <style>{`
         .sb-scene-fade { animation: sbSceneFade 700ms ease-out both; }
