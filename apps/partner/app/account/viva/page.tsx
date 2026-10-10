@@ -2,7 +2,8 @@ import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import VivaView from './view'
 
-export default async function VivaPage({ searchParams }: { searchParams: { [key: string]: string } }) {
+export default async function VivaPage({ searchParams }: { searchParams: Promise<{ [key: string]: string }> }) {
+  const { connected } = await searchParams
   const session = await auth()
   if (!session?.user) return null
 
@@ -24,7 +25,7 @@ export default async function VivaPage({ searchParams }: { searchParams: { [key:
       merchantId={account?.vivaMerchantId ?? null}
       connectedAt={account?.vivaConnectedAt ? account.vivaConnectedAt.toISOString() : null}
       email={account?.email ?? null}
-      connected={searchParams.connected === '1'}
+      connected={connected === '1'}
     />
   )
 }

@@ -17,10 +17,11 @@ import {
 // auth boundary, same as the site orders page.
 
 export default async function RestaurantOrdersPage(
-  { params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string } }
+  { params, searchParams }: { params: Promise<{ id: string }>, searchParams: Promise<{ [key: string]: string }> }
 ) {
+  const { id } = await params
 
-  const { key: accessKey } = searchParams
+  const { key: accessKey } = await searchParams
 
   // Resolve the restaurant owner via either a SecurityToken access key or the
   // signed-in session, then verify ownership.
@@ -49,7 +50,7 @@ export default async function RestaurantOrdersPage(
   }
 
   const restaurant = await prisma.restaurant.findUnique({
-    where: { id: params.id }
+    where: { id }
   })
 
   if (!restaurant) return <ErrorCard title="Restaurant not found" message="This restaurant does not exist or has been removed." showBackLink={!accessKey} />

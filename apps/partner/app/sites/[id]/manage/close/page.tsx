@@ -8,12 +8,13 @@ export default async function ManageClosePage({
   params,
   searchParams,
 }: {
-  params: { id: string }
-  searchParams: { [key: string]: string }
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ [key: string]: string }>
 }) {
-  const { key } = searchParams
+  const { id } = await params
+  const { key } = await searchParams
 
-  const result = await validateManageToken(params.id, key)
+  const result = await validateManageToken(id, key)
   if (!result.ok) {
     return (
       <ErrorCard
@@ -36,7 +37,7 @@ export default async function ManageClosePage({
 
   // Resolve venue-local today as YYYY-MM-DD (same approach as sunbeds/page.tsx).
   const siteMeta = await prisma.site.findFirst({
-    where: { id: params.id },
+    where: { id },
     select: { timeZone: true, locationLat: true, locationLng: true },
   })
 
@@ -46,7 +47,7 @@ export default async function ManageClosePage({
     longitude: siteMeta?.locationLng ? parseFloat(siteMeta.locationLng) : undefined,
   })
 
-  const backHref = `/sites/${params.id}/manage?key=${key}`
+  const backHref = `/sites/${id}/manage?key=${key}`
 
   return (
     <DayCloseView

@@ -3,7 +3,7 @@ import { SiteProps } from '@/types/shared'
 import CreateSiteView from './create-site'
 
 
-export default async function Site({ params }: { params: { id: string } }) {
+export default async function Site() {
 
   const session = await auth()
   if (!session?.user) return null

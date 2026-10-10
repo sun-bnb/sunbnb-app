@@ -3,13 +3,14 @@ import { auth } from '@/app/auth'
 import ReservationView from './view'
 import Link from 'next/link'
 
-export default async function ReservationPage({ params }: { params: { id: string } }) {
+export default async function ReservationPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
 
   const session = await auth()
   if (!session?.user) return null
 
   const reservation = await prisma.reservation.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: {
       user: { select: { id: true, email: true, name: true } },
       site: { select: { id: true, name: true, userId: true, type: true, vat: true } },
@@ -24,7 +25,7 @@ export default async function ReservationPage({ params }: { params: { id: string
     return (
       <div className="max-w-3xl mx-auto px-4 py-16 text-center">
         <h1 className="text-lg font-semibold text-gray-700 mb-2">Reservation not found</h1>
-        <p className="text-sm text-gray-500 mb-4">The reservation <span className="font-mono">{params.id}</span> does not exist.</p>
+        <p className="text-sm text-gray-500 mb-4">The reservation <span className="font-mono">{id}</span> does not exist.</p>
         <Link href="/frontdesk" className="text-sm text-blue-600 hover:underline">Back to Frontdesk</Link>
       </div>
     )

@@ -5,14 +5,15 @@ import dayjs from 'dayjs'
 import { NextRequest } from 'next/server'
 import { auth } from '@/app/auth'
 
-export async function GET(request: NextRequest, { params } : { params: { siteId: string } }) {
+export async function GET(request: NextRequest, { params } : { params: Promise<{ siteId: string }> }) {
+  const { siteId } = await params
 
   const session = await auth()
   if (!session?.user) return Response.json({ status: 'error', errors: [ 'Not authenticated' ] }, { status: 401 })
 
   // Verify the partner owns this site
   const site = await prisma.site.findUnique({
-    where: { id: params.siteId },
+    where: { id: siteId },
     select: { userId: true },
   })
   if (!site || site.userId !== session.user.id) {
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest, { params } : { params: { siteId:
 
     const reservations = await prisma.reservation.findMany({ 
       where: { 
-        siteId: params.siteId,
+        siteId,
         status: { not: RESERVATION_CANCELED },
         AND: [
           { from: { lte: dayEnd } },
@@ -75,7 +76,7 @@ export async function GET(request: NextRequest, { params } : { params: { siteId:
           '1 day'
         ) AS day
       WHERE 
-        "site_id" = ${params.siteId} AND
+        "site_id" = ${siteId} AND
         "status" != ${RESERVATION_CANCELED} AND
         "from" >= ${monthStart} AND
         "to" <= ${monthEnd}

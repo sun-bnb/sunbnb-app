@@ -30,15 +30,16 @@ import CommissionInvoicesView from './view'
 export default async function CommissionInvoicesPage({
   searchParams,
 }: {
-  searchParams: { year?: string; month?: string }
+  searchParams: Promise<{ year?: string; month?: string }>
 }) {
+  const { year: yearParam, month: monthParam } = await searchParams
   const session = await auth()
   if (!session?.user) redirect('/api/auth/signin')
 
   const months = await commissionInvoiceMonths(session.user.id)
 
-  const requestedYear = Number.parseInt(searchParams.year ?? '', 10)
-  const requestedMonth = Number.parseInt(searchParams.month ?? '', 10)
+  const requestedYear = Number.parseInt(yearParam ?? '', 10)
+  const requestedMonth = Number.parseInt(monthParam ?? '', 10)
   const valid =
     Number.isInteger(requestedYear) &&
     Number.isInteger(requestedMonth) &&

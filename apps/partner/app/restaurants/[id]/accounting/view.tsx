@@ -106,7 +106,7 @@ export default function AccountingView({ restaurantId }: { restaurantId: string 
             <ChevronLeftIcon />
           </IconButton>
           <h3 className="text-base font-semibold text-gray-800">
-            {ts(MONTH_KEYS[selectedMonth - 1])} {selectedYear}
+            {ts(MONTH_KEYS[selectedMonth - 1]!)} {selectedYear}
           </h3>
           <IconButton size="small" onClick={goToNextMonth} disabled={isCurrentMonth}>
             <ChevronRightIcon />

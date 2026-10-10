@@ -1,7 +1,7 @@
 'use client'
 
-import { useFormState, useFormStatus } from 'react-dom'
-import React, { useEffect, useState } from 'react'
+import { useFormStatus } from 'react-dom'
+import React, { useActionState, useEffect, useState } from 'react'
 import { APIProvider, ControlPosition, Map, AdvancedMarker } from '@vis.gl/react-google-maps'
 import Button from '@mui/material/Button'
 import TextField from '@mui/material/TextField'
@@ -23,7 +23,7 @@ export default function CreateSite({ site, apiKey }: { site: SiteProps, apiKey: 
 
   const [ siteLocation, setSiteLocation ] = useState<{ lat: number, lng: number } | null>(null)
 
-  const [ formState, formAction ] = useFormState(submitForm, { status: '' })
+  const [ formState, formAction ] = useActionState(submitForm, { status: '' })
 
   let locationLat = siteLocation?.lat.toString() || site.locationLat
   let locationLng = siteLocation?.lng.toString() || site.locationLng

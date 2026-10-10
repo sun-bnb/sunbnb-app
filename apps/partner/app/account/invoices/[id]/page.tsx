@@ -22,12 +22,13 @@ import CommissionInvoiceDocument from './view'
 export default async function CommissionInvoicePage({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
+  const { id } = await params
   const session = await auth()
   if (!session?.user) redirect('/api/auth/signin')
 
-  const invoice = await buildCommissionInvoice(params.id, session.user.id)
+  const invoice = await buildCommissionInvoice(id, session.user.id)
   if (!invoice) notFound()
 
   return <CommissionInvoiceDocument invoice={invoice} />

@@ -7,12 +7,13 @@ export default async function ManageSunbedsPage({
   params,
   searchParams,
 }: {
-  params: { id: string }
-  searchParams: { [key: string]: string }
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ [key: string]: string }>
 }) {
-  const { key } = searchParams
+  const { id } = await params
+  const { key } = await searchParams
 
-  const result = await loadManageGrid(params.id, key)
+  const result = await loadManageGrid(id, key)
   if (!result.ok) {
     return (
       <ErrorCard
@@ -23,7 +24,7 @@ export default async function ManageSunbedsPage({
     )
   }
 
-  const backHref = `/sites/${params.id}/manage?key=${key}`
+  const backHref = `/sites/${id}/manage?key=${key}`
 
   return (
     <div className="w-screen">

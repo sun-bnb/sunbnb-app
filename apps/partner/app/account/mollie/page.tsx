@@ -2,7 +2,8 @@ import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import MollieView from './view'
 
-export default async function MolliePage({ searchParams }: { searchParams: { [key: string]: string } }) {
+export default async function MolliePage({ searchParams }: { searchParams: Promise<{ [key: string]: string }> }) {
+  const { success, error } = await searchParams
   const session = await auth()
   if (!session?.user) return null
 
@@ -28,8 +29,8 @@ export default async function MolliePage({ searchParams }: { searchParams: { [ke
       isConnected={!!account?.mollieAccessToken}
       profileId={account?.mollieProfileId ?? null}
       onboardingStatus={account?.mollieOnboardingStatus ?? null}
-      success={searchParams.success === 'true'}
-      error={searchParams.error ?? null}
+      success={success === 'true'}
+      error={error ?? null}
       partnerData={account ? {
         firstName: account.firstName,
         lastName: account.lastName,

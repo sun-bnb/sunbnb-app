@@ -906,7 +906,7 @@ export default function AccountingView() {
           <ChevronLeftIcon />
         </IconButton>
         <h3 className="text-base font-semibold text-gray-800">
-          {t(MONTH_KEYS[selectedMonth - 1])} {selectedYear}
+          {t(MONTH_KEYS[selectedMonth - 1]!)} {selectedYear}
         </h3>
         <IconButton
           size="small"
@@ -1096,7 +1096,7 @@ export default function AccountingView() {
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold text-gray-800">{t('accountingExportTitle')}</h3>
               <span className="text-xs text-gray-400 font-medium">
-                {t(MONTH_KEYS[selectedMonth - 1])} {selectedYear}
+                {t(MONTH_KEYS[selectedMonth - 1]!)} {selectedYear}
               </span>
             </div>
             <p className="text-xs text-gray-400 mt-0.5">{t('accountingExportSubtitle')}</p>

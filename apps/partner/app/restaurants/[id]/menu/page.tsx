@@ -3,11 +3,12 @@ import MenuView from './view'
 export default async function MenuPage({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
+  const { id } = await params
   return (
     <div className="container mx-auto max-w-[768px]">
-      <MenuView restaurantId={params.id} />
+      <MenuView restaurantId={id} />
     </div>
   )
 }

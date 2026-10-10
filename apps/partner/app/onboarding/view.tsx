@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useActionState, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { useFormState, useFormStatus } from 'react-dom'
+import { useFormStatus } from 'react-dom'
 import { submitForm } from '@/app/account/actions'
 
 /* ── Types ───────────────────────────────────────────────────────────────── */
@@ -207,7 +207,7 @@ function AccountStep({
   onComplete: () => void
 }) {
   const t = useTranslations('Onboarding')
-  const [formState, formAction] = useFormState(
+  const [formState, formAction] = useActionState(
     async (prev: { status: string; errors?: string[] }, formData: FormData) => {
       const result = await submitForm(prev, formData)
       if (result.status === 'ok') {

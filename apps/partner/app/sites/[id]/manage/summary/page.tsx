@@ -9,12 +9,13 @@ export default async function ManageSummaryPage({
   params,
   searchParams,
 }: {
-  params: { id: string }
-  searchParams: { [key: string]: string }
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ [key: string]: string }>
 }) {
-  const { key } = searchParams
+  const { id } = await params
+  const { key } = await searchParams
 
-  const result = await validateManageToken(params.id, key)
+  const result = await validateManageToken(id, key)
   if (!result.ok) {
     return (
       <ErrorCard
@@ -39,7 +40,7 @@ export default async function ManageSummaryPage({
   // manage/close/page.tsx — the daily summary's day-report window must anchor to
   // the venue's civil day, not the browser/server clock.
   const siteMeta = await prisma.site.findFirst({
-    where: { id: params.id },
+    where: { id },
     select: { timeZone: true, locationLat: true, locationLng: true },
   })
 
@@ -49,7 +50,7 @@ export default async function ManageSummaryPage({
     longitude: siteMeta?.locationLng ? parseFloat(siteMeta.locationLng) : undefined,
   })
 
-  const backHref = `/sites/${params.id}/manage?key=${key}`
+  const backHref = `/sites/${id}/manage?key=${key}`
 
   return (
     <DailySummaryView

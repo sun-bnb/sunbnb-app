@@ -229,7 +229,7 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <div className="flex items-center gap-3">
               <h2 className="text-base font-semibold text-gray-900">
-                {t(MONTH_KEYS[month])} {year}
+                {t(MONTH_KEYS[month]!)} {year}
               </h2>
               {loadingMonth && (
                 <div className="w-4 h-4 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin" />

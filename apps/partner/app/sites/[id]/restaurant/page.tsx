@@ -6,10 +6,11 @@ import prisma from '@repo/data/PrismaCient'
 export default async function LegacyRestaurantRedirect({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
+  const { id } = await params
   const site = await prisma.site.findUnique({
-    where: { id: params.id },
+    where: { id },
     select: { restaurantId: true },
   })
   redirect(site?.restaurantId ? `/restaurants/${site.restaurantId}` : '/restaurants')

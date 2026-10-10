@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { submitForm } from './actions'
-import { useFormState, useFormStatus } from 'react-dom'
+import { useActionState } from 'react'
+import { useFormStatus } from 'react-dom'
 
 export interface AccountProps {
   firstName: string
@@ -287,7 +288,7 @@ function VivaStatusCard({ vivaStatus }: { vivaStatus: VivaStatus }) {
 
 export default function AccountView({ account, mollieStatus, vivaStatus, providerStatus }: { account: AccountProps; mollieStatus: MollieStatus; vivaStatus: VivaStatus; providerStatus: ProviderStatus }) {
   const t = useTranslations('Account')
-  const [formState, formAction] = useFormState(submitForm, { status: '' })
+  const [formState, formAction] = useActionState(submitForm, { status: '' })
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-3xl">

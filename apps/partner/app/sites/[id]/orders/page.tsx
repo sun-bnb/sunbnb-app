@@ -12,10 +12,11 @@ import {
 
 
 export default async function OrdersPage(
-  { params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string } }
+  { params, searchParams }: { params: Promise<{ id: string }>, searchParams: Promise<{ [key: string]: string }> }
 ) {
+  const { id } = await params
 
-  const { key: accessKey } = searchParams
+  const { key: accessKey } = await searchParams
 
   // Resolve the site owner via either a SecurityToken access key or the
   // signed-in session, then verify ownership.
@@ -44,7 +45,7 @@ export default async function OrdersPage(
   }
 
   const site = await prisma.site.findUnique({
-    where: { id: params.id }
+    where: { id }
   })
 
   if (!site) return <ErrorCard title="Site not found" message="This site does not exist or has been removed." showBackLink={!accessKey} />
