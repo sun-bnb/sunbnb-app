@@ -187,3 +187,10 @@ Operations:
 - reason: gate criterion 3 (contract changed: new `@repo/schematic` exports + an opt-in `ItemVisual` field a partner-side agent could otherwise misread as affecting the editor). Art conventions themselves live in `apps/user/UI.md` (surface-local), not the wiki.
 - by: claude
 
+
+## 2026-10-10 — design-system pitfall: AppRouterCacheProvider
+
+- mode: patch (subsystems/design-system.md § Common pitfalls, last_verified)
+- changed: one pitfall — any MUI-rendering App Router app must wrap its root layout in `AppRouterCacheProvider` (`@mui/material-nextjs/v16-appRouter`), or Emotion's SSR styles render inline and every page fails hydration under Next 16.
+- reason: gate criterion 4 (hard-earned gotcha — admin, partner and user each broke on it during the Next 16 upgrade, track 029). The rest of that upgrade (dep bumps, async request APIs, proxy rename) is a dep bump per the NO list; the conventions an agent must follow went into the root CLAUDE.md Cross-Cutting Patterns instead.
+- by: claude

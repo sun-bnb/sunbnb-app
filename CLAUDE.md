@@ -159,7 +159,7 @@ Vercel-managed via git branches: `main` → preview, `test` → test.sunbnb.app,
 | Layer | Technology |
 |---|---|
 | Monorepo | Turborepo + npm workspaces |
-| Framework | Next.js 14 (App Router) |
+| Framework | Next.js 16 (App Router, Turbopack) · React 19 |
 | Language | TypeScript 5 |
 | Database | PostgreSQL + PostGIS (spatial queries, GiST index on geometry) |
 | ORM | Prisma 7 with `@prisma/adapter-pg` driver adapter |
@@ -231,6 +231,7 @@ commission invoice; they do not sum to the consumer total. The rule is canonical
 
 ## Cross-Cutting Patterns
 
+- **Next 16 conventions** (track 029): `params` / `searchParams` and `cookies()` / `headers()` are Promises — always `await` them (`({ params }: { params: Promise<{ id: string }> })` + `const { id } = await params`); request interception lives in `proxy.ts` (exported `proxy`), not `middleware.ts`; `useActionState` comes from `react` (not `useFormState` from `react-dom`). Dev runs over mkcert HTTPS, so each `next.config.mjs` lists `allowedDevOrigins: ['local.sunbnb.app']`. Turbopack's CSS parser rejects an `@import` placed after other rules — keep imports at the top of a stylesheet
 - **Auto-save**: Debounced (1.5–2s) field changes trigger server actions → refresh site context
 - **Image upload**: Vercel Blob `put()` in server actions; remote patterns whitelisted in `next.config.mjs`
 - **Error handling**: Server actions return `{ status: 'ok' | 'error', errors?: string[] }`; UI shows auto-dismissing banners

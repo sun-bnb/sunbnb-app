@@ -11,8 +11,9 @@ mockups (see the track).
 
 Expo SDK 57 · React Native 0.86 · React 19 · TypeScript · Expo Router (file routes under
 `src/app/`) · StyleSheet + `src/theme.ts` design tokens today (NativeWind planned with the
-full screen build). Lives in this monorepo as workspace `mobile`; React 19 / RN deps nest
-under `apps/mobile/node_modules` while the Next apps stay on React 18 at the root.
+full screen build). Lives in this monorepo as workspace `mobile`; its React (pinned to the
+version RN 0.86 expects, 19.2.x) and RN deps nest under `apps/mobile/node_modules`, while the
+Next apps share the root React 19 (track 029).
 
 Lint uses the repo's eslint 8 stack (`@repo/eslint-config`), **not** `eslint-config-expo` —
 the Expo config hoists to the root where it collides with the workspace's eslint 8. Don't

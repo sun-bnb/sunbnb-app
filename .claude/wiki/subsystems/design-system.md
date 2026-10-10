@@ -12,7 +12,7 @@ sources:
   - packages/schematic-editor/src/chrome/SaveStatusBanner.tsx
 related:
   - subsystem:schematic-editor
-last_verified: 2026-05-22
+last_verified: 2026-10-10
 ---
 
 # Subsystem: Design System
@@ -126,6 +126,7 @@ The restaurant **General** tab is canonical — **mirror it**: `apps/partner/app
 - A new utility in a shared component renders unstyled — package not in the app's Tailwind `content`,
   or you used `accent`/`.btn-primary` (which the package can't see).
 - MUI renders unthemed (no `ThemeProvider`) — defaults fight the flat look; migrate, don't theme.
+- **Any app that renders MUI needs `AppRouterCacheProvider`** (`@mui/material-nextjs/v16-appRouter`) wrapping the root layout's body. Without it Emotion emits its SSR `<style>` tags inline instead of into `<head>`, and under Next 16 EVERY page fails hydration (admin, partner and user all hit this in track 029). A new app or a new root layout must keep it.
 - **Designing blind** — no screenshot/preview loop wired up; visually verify on the running app before
   declaring a UI change done.
 
