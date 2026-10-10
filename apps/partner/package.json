@@ -62,7 +62,7 @@
     "cross-env": "^7.0.3",
     "eslint": "^9.39.5",
     "glob": "^10.5.0",
-    "postcss": "^8.4.40",
+    "postcss": "^8.5.29",
     "prisma": "^7",
     "tailwindcss": "^4.3.3",
     "typescript": "^5",

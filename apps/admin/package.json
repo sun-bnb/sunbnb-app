@@ -42,7 +42,7 @@
     "@vitest/coverage-istanbul": "^4.1.11",
     "@tailwindcss/postcss": "^4.3.3",
     "eslint": "^9.39.5",
-    "postcss": "^8.4.40",
+    "postcss": "^8.5.29",
     "prisma": "^7",
     "tailwindcss": "^4.3.3",
     "typescript": "^5",
