@@ -31,10 +31,7 @@ export default async function SitePage(
 
   const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
 
-  let site: SiteProps | null = {
-    name: '',
-    services: []
-  }
+  let site: SiteProps | null
 
   // Track 020 C2: only the two EDITOR tabs need seat rows. Every other tab
   // read at most a count, yet all eight paid for the full array — 4 436 items

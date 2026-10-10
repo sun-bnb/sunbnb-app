@@ -34,7 +34,7 @@ const statusToChipLabel: {
 export default function ReservationListItem({ reservation }: { reservation: Reservation }) {
  
   
-  let reservationElem = null
+  let reservationElem: React.ReactNode
 
   const reservationControls = (
     <div className="flex justify-between">

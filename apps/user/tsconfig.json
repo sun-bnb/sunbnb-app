@@ -1,7 +1,9 @@
 {
   "extends": "@repo/typescript-config/nextjs.json",
   "compilerOptions": {
-    "baseUrl": ".",
+    // TypeScript 6 no longer auto-includes global @types packages (types defaults to []);
+    // the ambient `google` namespace (Maps JS API) must be listed explicitly.
+    "types": ["google.maps"],
     "paths": {
       "@/*": [
         "./*"

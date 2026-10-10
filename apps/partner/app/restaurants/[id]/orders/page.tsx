@@ -25,7 +25,7 @@ export default async function RestaurantOrdersPage(
 
   // Resolve the restaurant owner via either a SecurityToken access key or the
   // signed-in session, then verify ownership.
-  let ownerUserId: string | null = null
+  let ownerUserId: string | null
 
   if (accessKey) {
     const token = await prisma.securityToken.findUnique({

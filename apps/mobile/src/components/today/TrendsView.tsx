@@ -76,7 +76,7 @@ export default function TrendsView({ siteId, accessKey }: { siteId: string; acce
   const seatsByDate = new Map(data.operations.rows.map(r => [r.date, r.rentedSeats]))
 
   // KPI tiles
-  let kpi1 = { label: '', value: '' }
+  let kpi1: { label: string; value: string }
   let kpi2 = { label: 'Best day', value: '—', date: '' }
   if (metric === 'revenue') {
     kpi1 = { label: 'Revenue', value: `€${data.revenue.summary.total.toFixed(2)}` }

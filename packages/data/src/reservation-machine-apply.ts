@@ -963,7 +963,7 @@ async function runCollectAbandonTapToPay(
 
   const pollMs = opts.collect?.abortPollMs ?? DEFAULT_ABORT_POLL_MS
   const deadline = (opts.now ?? new Date()).getTime() + pollMs
-  let pi: Awaited<ReturnType<typeof fetchPaymentIntentState>> | null = null
+  let pi: Awaited<ReturnType<typeof fetchPaymentIntentState>> | null
   for (;;) {
     try { pi = await fetchPaymentIntentState(piId, stripeAccount) } catch { pi = null }
     if ((pi && pi.state !== 'pending') || Date.now() >= deadline) break

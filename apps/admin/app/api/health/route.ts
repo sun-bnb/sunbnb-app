@@ -20,7 +20,7 @@ export async function GET() {
 
   const start = Date.now()
   let dbStatus = 'unreachable'
-  let dbLatency = 0
+  let dbLatency: number
 
   try {
     await prisma.$queryRaw`SELECT 1`

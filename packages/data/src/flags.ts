@@ -274,7 +274,7 @@ export interface FlagAdminRow {
 
 export async function getFlagAdminRows(): Promise<FlagAdminRow[]> {
   const env = currentFlagEnvironment()
-  let rows: { name: string; enabled: boolean; updatedAt: Date; updatedBy: string | null }[] = []
+  let rows: { name: string; enabled: boolean; updatedAt: Date; updatedBy: string | null }[]
   try {
     rows = await prisma.featureFlag.findMany({
       select: { name: true, enabled: true, updatedAt: true, updatedBy: true },

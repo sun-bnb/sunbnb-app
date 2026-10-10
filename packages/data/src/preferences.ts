@@ -324,7 +324,7 @@ export async function getPreference<K extends PreferenceKey>(
   key: K,
 ): Promise<PreferenceValue<K>> {
   const def = PREFERENCE_REGISTRY[key] as PreferenceDefinition
-  let row: { value: string } | null = null
+  let row: { value: string } | null
   try {
     row = await prisma.platformPreference.findUnique({
       where: { key },
@@ -731,7 +731,7 @@ export interface PreferenceAdminRow {
 }
 
 export async function getPreferenceAdminRows(): Promise<PreferenceAdminRow[]> {
-  let rows: { key: string; value: string; updatedAt: Date; updatedBy: string | null }[] = []
+  let rows: { key: string; value: string; updatedAt: Date; updatedBy: string | null }[]
   try {
     rows = await prisma.platformPreference.findMany({
       select: { key: true, value: true, updatedAt: true, updatedBy: true },

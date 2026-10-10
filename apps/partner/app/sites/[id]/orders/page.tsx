@@ -20,7 +20,7 @@ export default async function OrdersPage(
 
   // Resolve the site owner via either a SecurityToken access key or the
   // signed-in session, then verify ownership.
-  let ownerUserId: string | null = null
+  let ownerUserId: string | null
 
   if (accessKey) {
     const token = await prisma.securityToken.findUnique({

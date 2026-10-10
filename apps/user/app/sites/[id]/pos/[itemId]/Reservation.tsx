@@ -71,7 +71,6 @@ function ReservationButton({
             dispatch(setValue({ reservationState: 'saving' }))
             logger.debug('Reserve ITEM', selectedItems, dateRange)
 
-            let saveResult = null
 
             let anonId = undefined
             if (!(session?.user?.id)) {
@@ -82,7 +81,7 @@ function ReservationButton({
               }
             }
             
-            saveResult = await saveReservationForMultipleItems({
+            const saveResult = await saveReservationForMultipleItems({
               from: dateRange.from,
               to: dateRange.to,
               type: 'days',
