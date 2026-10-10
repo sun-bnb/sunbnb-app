@@ -16,7 +16,8 @@ export const dynamic = 'force-dynamic'
  * D11). The token is the only key and the page is public to whoever holds the link, so it
  * renders the beach and layout only: `getLeadMockup` never selects contact data.
  */
-export default async function MockupPage({ params }: { params: { token: string } }) {
+export default async function MockupPage({ params: paramsPromise }: { params: Promise<{ token: string }> }) {
+  const params = await paramsPromise
   if (!LEAD_TOKEN_RE.test(params.token)) notFound()
   const lead = await getLeadMockup(params.token)
   if (!lead) notFound()

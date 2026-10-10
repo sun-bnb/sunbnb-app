@@ -14,7 +14,12 @@ import { localeOrDefault } from '@/lib/places.ts'
  * try.sunbnb.app — the ad landing page (track 027). Every claim here must be TRUE TODAY:
  * features are shipped ones, and the price line reads the same catalog billing is seeded from.
  */
-export default async function LandingPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
+export default async function LandingPage({
+  searchParams: searchParamsPromise,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const searchParams = await searchParamsPromise
   const t = await getTranslations()
   // Ad scent: the headline repeats the promise of the ad that brought them (`?a=` angle key).
   // Only fixed copy keys are ever rendered — never text from the query string.

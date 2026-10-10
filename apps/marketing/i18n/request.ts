@@ -20,10 +20,10 @@ function fromAcceptLanguage(header: string | null): Locale | null {
 }
 
 export default getRequestConfig(async () => {
-  const cookieLocale = cookies().get('NEXT_LOCALE')?.value as Locale | undefined
+  const cookieLocale = (await cookies()).get('NEXT_LOCALE')?.value as Locale | undefined
   const locale: Locale =
     (cookieLocale && SUPPORTED_LOCALES.includes(cookieLocale) ? cookieLocale : null) ??
-    fromAcceptLanguage(headers().get('accept-language')) ??
+    fromAcceptLanguage((await headers()).get('accept-language')) ??
     'en'
   return { locale, messages: (await import(`../messages/${locale}.json`)).default }
 })

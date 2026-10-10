@@ -28,7 +28,7 @@ const UTM_KEYS = ['source', 'medium', 'campaign', 'term', 'content'] as const
 export async function createMockup(
   form: FormData,
 ): Promise<{ status: 'ok'; token: string; variant: string } | { status: 'error'; errors: ('beach' | 'sunbeds' | 'rateLimited' | 'place')[] }> {
-  const h = headers()
+  const h = await headers()
   const ip = clientIp(h)
   if (!(await allow('mockup', ip))) {
     return { status: 'error', errors: ['rateLimited'] }
@@ -91,7 +91,7 @@ export async function createMockup(
 
 /** Persist the prospect's layout (rotation, position, shore snap) so the shared link matches. */
 export async function saveLayout(token: string, layout: unknown): Promise<ActionResult<'invalid' | 'rateLimited'>> {
-  if (!(await allow('layout', clientIp(headers())))) {
+  if (!(await allow('layout', clientIp(await headers())))) {
     return { status: 'error', errors: ['rateLimited'] }
   }
   const parsed = parseLeadLayout(layout)
@@ -101,7 +101,7 @@ export async function saveLayout(token: string, layout: unknown): Promise<Action
 
 /** "Book a demo" → contact + consent on the lead, and an email to the team on the first request. */
 export async function requestDemo(token: string, form: FormData): Promise<ActionResult<DemoRequestError | 'rateLimited' | 'notFound'>> {
-  const h = headers()
+  const h = await headers()
   if (!(await allow('demo', clientIp(h)))) {
     return { status: 'error', errors: ['rateLimited'] }
   }
@@ -138,7 +138,7 @@ export async function requestDemo(token: string, form: FormData): Promise<Action
  * trusting a client-computed figure), stored on the lead for the team email and the chat.
  */
 export async function saveProjection(token: string, input: unknown): Promise<ActionResult<'invalid' | 'rateLimited'>> {
-  if (!(await allow('projection', clientIp(headers())))) {
+  if (!(await allow('projection', clientIp(await headers())))) {
     return { status: 'error', errors: ['rateLimited'] }
   }
   const parsed = parseProjectionInput(input)
