@@ -391,12 +391,13 @@ describe('setDevicePolicy — the mode and its cadence written as one', () => {
   })
 
   it('refuses an unknown mode and an unusable interval, writing nothing', async () => {
-    for (const [mode, interval] of [
+    const cases: [string, string][] = [
       ['hibernate', '20'],
       ['light_sleep', 'soon'],
       ['light_sleep', ''],
       ['light_sleep', '900'],
-    ]) {
+    ]
+    for (const [mode, interval] of cases) {
       const result = await setDevicePolicy(mode, interval, 'admin-1')
       expect(result.status).toBe('error')
     }

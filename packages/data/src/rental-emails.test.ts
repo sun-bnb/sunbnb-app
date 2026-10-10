@@ -15,6 +15,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { RentalBooking } from '@prisma/client'
 
 // Mock prisma before importing the module under test
 vi.mock('../index', () => ({
@@ -42,12 +43,12 @@ import prisma from '../index'
 
 // Typed references after imports (after vi.mock hoisting)
 const mockSendEmail = vi.mocked(sendEmail)
-const mockPrisma = vi.mocked(prisma)
+const mockPrisma = vi.mocked(prisma, true)
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
 
-function makeBooking(overrides: Record<string, any> = {}) {
-  return {
+function makeBooking(overrides: Record<string, any> = {}): RentalBooking {
+  const booking = {
     id: 'booking-1',
     paymentRef: 'pi_demo_123',
     siteId: 'site-1',
@@ -72,6 +73,9 @@ function makeBooking(overrides: Record<string, any> = {}) {
     rentalItem: { name: 'Surfboard' },
     ...overrides,
   }
+  // The mailer reads user/site/rentalItem relations the code under test loads via
+  // `include`; the bare RentalBooking row type doesn't carry them, so cast once here.
+  return booking as unknown as RentalBooking
 }
 
 // ─── sendRentalConfirmationEmail ────────────────────────────────────────────
@@ -293,7 +297,7 @@ describe('sendRentalDueReminders', () => {
 
     expect(mockPrisma.rentalBooking.findMany).toHaveBeenCalledOnce()
     const callArg = mockPrisma.rentalBooking.findMany.mock.calls[0]![0]
-    expect(callArg.where).toMatchObject({ reminderSentAt: null })
+    expect(callArg?.where).toMatchObject({ reminderSentAt: null })
   })
 
   it('calls rentalBooking.update with reminderSentAt after a successful send', async () => {

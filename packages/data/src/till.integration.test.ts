@@ -166,7 +166,7 @@ describe('voidSettlementsForReservation', () => {
 
     const entries = await prisma.tillEntry.findMany({ where: { reservationId: res.id } })
     expect(entries).toHaveLength(1)
-    expect(entries[0].voidedAt).not.toBeNull()
+    expect(entries[0]!.voidedAt).not.toBeNull()
   })
 
   it('is idempotent — voiding a second time returns 0', async () => {
@@ -199,7 +199,7 @@ describe('voidSettlementsForRentalBooking', () => {
 
     const entries = await prisma.tillEntry.findMany({ where: { rentalBookingId: rb.id } })
     expect(entries).toHaveLength(1)
-    expect(entries[0].voidedAt).not.toBeNull()
+    expect(entries[0]!.voidedAt).not.toBeNull()
   })
 
   it('voided rental entry is excluded from the open till', async () => {
@@ -477,10 +477,10 @@ describe('backfill — rental booking backfill reproduces the prior rental-till 
 
     const entries = await prisma.tillEntry.findMany({ where: { rentalBookingId: rb.id } })
     expect(entries).toHaveLength(1)
-    expect(entries[0].amount).toBe(42)
-    expect(entries[0].employeeId).toBe(alice.id)
-    expect(entries[0].voidedAt).toBeNull()
-    expect(entries[0].id).toBe(`te_rb_${rb.id}`)
+    expect(entries[0]!.amount).toBe(42)
+    expect(entries[0]!.employeeId).toBe(alice.id)
+    expect(entries[0]!.voidedAt).toBeNull()
+    expect(entries[0]!.id).toBe(`te_rb_${rb.id}`)
   })
 
   it('backfill is idempotent — running again inserts 0 rows', async () => {
@@ -618,8 +618,8 @@ describe('backfill — rental booking backfill reproduces the prior rental-till 
 
     const entries = await prisma.tillEntry.findMany({ where: { reservationId: res.id } })
     expect(entries).toHaveLength(1)
-    expect(entries[0].amount).toBe(42)
-    expect(entries[0].rentalBookingId).toBeNull()
+    expect(entries[0]!.amount).toBe(42)
+    expect(entries[0]!.rentalBookingId).toBeNull()
   })
 })
 
@@ -673,14 +673,14 @@ describe('getEmployeeShiftItems', () => {
       channel: 'cash',
       at: new Date('2026-07-01T09:00:00Z'),
     })
-    expect(aliceShift.items[0].seats).toEqual([String(item.number)])
+    expect(aliceShift.items[0]!.seats).toEqual([String(item.number)])
     expect(aliceShift.items[1]).toMatchObject({
       reservationId: res2.id,
       amount: 30,
       channel: 'card',
       at: new Date('2026-07-01T11:00:00Z'),
     })
-    expect(aliceShift.items[1].seats).toEqual(['B2'])
+    expect(aliceShift.items[1]!.seats).toEqual(['B2'])
 
     const bobShift = result.find((s) => s.employeeId === bob.id)!
     expect(bobShift.count).toBe(1)
@@ -730,10 +730,10 @@ describe('getEmployeeShiftItems', () => {
 
     const result = await getEmployeeShiftItems(site.id, dayRange.from, dayRange.to)
     expect(result).toHaveLength(1)
-    expect(result[0].name).toBe('Alice')
-    expect(result[0].count).toBe(0)
-    expect(result[0].total).toBe(0)
-    expect(result[0].items).toHaveLength(0)
+    expect(result[0]!.name).toBe('Alice')
+    expect(result[0]!.count).toBe(0)
+    expect(result[0]!.total).toBe(0)
+    expect(result[0]!.items).toHaveLength(0)
   })
 
   it('total spans both cash and card channels (not cash-only like getTillByEmployee)', async () => {
@@ -779,8 +779,8 @@ describe('getEmployeeShiftItems', () => {
     })
 
     const result = await getEmployeeShiftItems(site.id, dayRange.from, dayRange.to)
-    expect(result[0].name).toBe('Anna')
-    expect(result[1].name).toBe('Zara')
+    expect(result[0]!.name).toBe('Anna')
+    expect(result[1]!.name).toBe('Zara')
   })
 
   it('returns empty array for unknown siteId', async () => {
@@ -1090,18 +1090,18 @@ describe('getOpenTillItemsByEmployee', () => {
     const result = await getOpenTillItemsByEmployee(site.id, farPastDayStart())
     expect(result).toHaveLength(1)
     const aliceRow = result[0]
-    expect(aliceRow.employeeId).toBe(alice.id)
-    expect(aliceRow.name).toBe('Alice')
-    expect(aliceRow.count).toBe(1)
-    expect(aliceRow.total).toBe(25)
-    expect(aliceRow.items).toHaveLength(1)
+    expect(aliceRow!.employeeId).toBe(alice.id)
+    expect(aliceRow!.name).toBe('Alice')
+    expect(aliceRow!.count).toBe(1)
+    expect(aliceRow!.total).toBe(25)
+    expect(aliceRow!.items).toHaveLength(1)
 
-    const it0 = aliceRow.items[0]
-    expect(it0.kind).toBe('sunbed')
-    expect(it0.label).toBe('A1')
-    expect(it0.amount).toBe(25)
-    expect(it0.at).toEqual(settledAt)
-    expect(it0.carryOver).toBe(false)
+    const it0 = aliceRow!.items[0]
+    expect(it0!.kind).toBe('sunbed')
+    expect(it0!.label).toBe('A1')
+    expect(it0!.amount).toBe(25)
+    expect(it0!.at).toEqual(settledAt)
+    expect(it0!.carryOver).toBe(false)
   })
 
   it('sunbed entry: label falls back to String(number) when seatLabel is null', async () => {
@@ -1116,7 +1116,7 @@ describe('getOpenTillItemsByEmployee', () => {
     await recordSettlement({ siteId: site.id, reservationId: res.id, employeeId: alice.id, amount: 15 })
 
     const result = await getOpenTillItemsByEmployee(site.id, farPastDayStart())
-    expect(result[0].items[0].label).toBe('7')
+    expect(result[0]!.items[0]!.label).toBe('7')
   })
 
   it('sunbed entry: multiple seats joined by ", " in label', async () => {
@@ -1132,7 +1132,7 @@ describe('getOpenTillItemsByEmployee', () => {
     await recordSettlement({ siteId: site.id, reservationId: res.id, employeeId: alice.id, amount: 40 })
 
     const result = await getOpenTillItemsByEmployee(site.id, farPastDayStart())
-    const label = result[0].items[0].label
+    const label = result[0]!.items[0]!.label
     expect(label).toContain('A1')
     expect(label).toContain('B3')
     expect(label).toContain(', ')
@@ -1152,15 +1152,15 @@ describe('getOpenTillItemsByEmployee', () => {
     const result = await getOpenTillItemsByEmployee(site.id, farPastDayStart())
     expect(result).toHaveLength(1)
     const aliceRow = result[0]
-    expect(aliceRow.count).toBe(1)
-    expect(aliceRow.total).toBe(30)
-    expect(aliceRow.items).toHaveLength(1)
+    expect(aliceRow!.count).toBe(1)
+    expect(aliceRow!.total).toBe(30)
+    expect(aliceRow!.items).toHaveLength(1)
 
-    const it0 = aliceRow.items[0]
-    expect(it0.kind).toBe('rental')
-    expect(it0.label).toBe('Test Surfboard')
-    expect(it0.amount).toBe(30)
-    expect(it0.at).toEqual(settledAt)
+    const it0 = aliceRow!.items[0]
+    expect(it0!.kind).toBe('rental')
+    expect(it0!.label).toBe('Test Surfboard')
+    expect(it0!.amount).toBe(30)
+    expect(it0!.at).toEqual(settledAt)
   })
 
   it('items sum to total, total equals getOpenTill(siteId, employeeId, dayStart), count equals items.length', async () => {
@@ -1222,8 +1222,8 @@ describe('getOpenTillItemsByEmployee', () => {
     expect(aliceRow.count).toBe(1)
     expect(aliceRow.total).toBe(30)
     expect(aliceRow.items).toHaveLength(1)
-    expect(aliceRow.items[0].label).toBe('B2')
-    expect(aliceRow.items[0].amount).toBe(30)
+    expect(aliceRow.items[0]!.label).toBe('B2')
+    expect(aliceRow.items[0]!.amount).toBe(30)
   })
 
   it('voided TillEntry rows are excluded from items', async () => {
@@ -1284,9 +1284,9 @@ describe('getOpenTillItemsByEmployee', () => {
     const result = await getOpenTillItemsByEmployee(site.id, farPastDayStart())
     const aliceRow = result.find((r) => r.employeeId === alice.id)!
     expect(aliceRow.items).toHaveLength(2)
-    expect(aliceRow.items[0].label).toBe('Second')
-    expect(aliceRow.items[1].label).toBe('First')
-    expect(aliceRow.items[0].at.getTime()).toBeLessThan(aliceRow.items[1].at.getTime())
+    expect(aliceRow.items[0]!.label).toBe('Second')
+    expect(aliceRow.items[1]!.label).toBe('First')
+    expect(aliceRow.items[0]!.at.getTime()).toBeLessThan(aliceRow.items[1]!.at.getTime())
   })
 
   it('roster employee with no entries appears with items=[], total=0, count=0; results sorted by name', async () => {
@@ -1302,8 +1302,8 @@ describe('getOpenTillItemsByEmployee', () => {
 
     const result = await getOpenTillItemsByEmployee(site.id, farPastDayStart())
     expect(result).toHaveLength(2)
-    expect(result[0].name).toBe('Alice')
-    expect(result[1].name).toBe('Zara')
+    expect(result[0]!.name).toBe('Alice')
+    expect(result[1]!.name).toBe('Zara')
 
     const zaraRow = result.find((r) => r.name === 'Zara')!
     expect(zaraRow.items).toEqual([])
@@ -1346,11 +1346,11 @@ describe('getOpenTillItemsByEmployee', () => {
     const resultA = await getOpenTillItemsByEmployee(siteA.id, farPastDayStart())
     expect(resultA).toHaveLength(1)
     const empRow = resultA[0]
-    expect(empRow.total).toBe(25)
-    expect(empRow.count).toBe(1)
-    expect(empRow.items).toHaveLength(1)
-    expect(empRow.items[0].label).toBe('SiteA-Seat')
-    expect(empRow.items.some((i) => i.label === 'SiteB-Seat')).toBe(false)
+    expect(empRow!.total).toBe(25)
+    expect(empRow!.count).toBe(1)
+    expect(empRow!.items).toHaveLength(1)
+    expect(empRow!.items[0]!.label).toBe('SiteA-Seat')
+    expect(empRow!.items.some((i) => i.label === 'SiteB-Seat')).toBe(false)
   })
 
   // ── carryOver flag (track 016) ────────────────────────────────────────────
@@ -1393,7 +1393,7 @@ describe('getOpenTillItemsByEmployee', () => {
     const result = await getOpenTillItemsByEmployee(site.id, dayStart)
     const aliceRow = result.find((r) => r.employeeId === alice.id)!
     expect(aliceRow.items).toHaveLength(1)
-    expect(aliceRow.items[0].carryOver).toBe(true)
+    expect(aliceRow.items[0]!.carryOver).toBe(true)
   })
 })
 
@@ -1502,15 +1502,15 @@ describe('closeAllOpenTills', () => {
 
     const aliceClose = await prisma.tillClose.findMany({ where: { siteId: site.id, employeeId: alice.id } })
     expect(aliceClose).toHaveLength(1)
-    expect(aliceClose[0].totalAmount).toBe(30)
-    expect(aliceClose[0].txnCount).toBe(2)
-    expect(aliceClose[0].carryOverAmount).toBe(0)
-    expect(aliceClose[0].carryOverCount).toBe(0)
+    expect(aliceClose[0]!.totalAmount).toBe(30)
+    expect(aliceClose[0]!.txnCount).toBe(2)
+    expect(aliceClose[0]!.carryOverAmount).toBe(0)
+    expect(aliceClose[0]!.carryOverCount).toBe(0)
 
     const bobClose = await prisma.tillClose.findMany({ where: { siteId: site.id, employeeId: bob.id } })
     expect(bobClose).toHaveLength(1)
-    expect(bobClose[0].totalAmount).toBe(45)
-    expect(bobClose[0].txnCount).toBe(1)
+    expect(bobClose[0]!.totalAmount).toBe(45)
+    expect(bobClose[0]!.txnCount).toBe(1)
   })
 
   it('skips employees whose open balance is zero — no TillClose row created, they are excluded from return counts', async () => {
@@ -1597,8 +1597,8 @@ describe('closeAllOpenTills', () => {
       orderBy: { closedAt: 'asc' },
     })
     expect(closes).toHaveLength(2) // prior manual close + new manager close
-    expect(closes[1].totalAmount).toBe(35)
-    expect(closes[1].txnCount).toBe(1)
+    expect(closes[1]!.totalAmount).toBe(35)
+    expect(closes[1]!.txnCount).toBe(1)
 
     expect((await getOpenTill(site.id, alice.id, dayStart)).total).toBe(0)
   })
@@ -1666,7 +1666,7 @@ describe('closeAllOpenTills', () => {
 
     const siteACloses = await prisma.tillClose.findMany({ where: { siteId: siteA.id } })
     expect(siteACloses).toHaveLength(1)
-    expect(siteACloses[0].totalAmount).toBe(20)
+    expect(siteACloses[0]!.totalAmount).toBe(20)
   })
 
   // ── carry-over sweep (track 016) ──────────────────────────────────────────

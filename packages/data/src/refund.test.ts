@@ -100,12 +100,12 @@ describe('issueReservationRefund — Mollie path', () => {
     expect(res).toEqual({ status: 'ok', provider: 'mollie' })
     expect(fetchSpy).toHaveBeenCalledTimes(2)
     // GET payment with bearer token
-    expect(fetchSpy.mock.calls[0][0]).toContain('/payments/tr_abc')
-    expect(fetchSpy.mock.calls[0][1].headers.Authorization).toBe('Bearer test-token')
+    expect(fetchSpy.mock.calls[0]![0]).toContain('/payments/tr_abc')
+    expect(fetchSpy.mock.calls[0]![1].headers.Authorization).toBe('Bearer test-token')
     // POST refund echoes the payment amount
-    expect(fetchSpy.mock.calls[1][0]).toContain('/payments/tr_abc/refunds')
-    expect(fetchSpy.mock.calls[1][1].method).toBe('POST')
-    expect(JSON.parse(fetchSpy.mock.calls[1][1].body)).toEqual({
+    expect(fetchSpy.mock.calls[1]![0]).toContain('/payments/tr_abc/refunds')
+    expect(fetchSpy.mock.calls[1]![1].method).toBe('POST')
+    expect(JSON.parse(fetchSpy.mock.calls[1]![1].body)).toEqual({
       amount: { value: '25.00', currency: 'EUR' },
     })
   })

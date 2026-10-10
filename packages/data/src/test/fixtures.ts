@@ -3,6 +3,7 @@
  * Each function creates a minimal valid record with sensible defaults.
  */
 
+import type { Prisma } from '@prisma/client'
 import { prisma } from './setup'
 
 let counter = 0
@@ -390,16 +391,17 @@ export async function createTestTableTab(
   siteId: string | null,
   overrides: Record<string, any> = {}
 ) {
-  return prisma.tableTab.create({
-    data: {
-      tableId,
-      siteId,
-      status: 'open',
-      openTableId: tableId,
-      openedAt: new Date(),
-      ...overrides,
-    },
-  })
+  // restaurantId is a required column the caller supplies via overrides; the
+  // Record<string, any> spread can't satisfy Prisma's checked/unchecked create union.
+  const data = {
+    tableId,
+    siteId,
+    status: 'open',
+    openTableId: tableId,
+    openedAt: new Date(),
+    ...overrides,
+  } as Prisma.TableTabUncheckedCreateInput
+  return prisma.tableTab.create({ data })
 }
 
 // ─── Subscription Plan + Subscription ───────────────────────────────────────

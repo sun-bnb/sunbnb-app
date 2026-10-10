@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import type { ServiceFee } from '@prisma/client'
 import {
   round,
   computeVatAndBaseAmounts,
@@ -91,17 +92,7 @@ describe('computeVatAndBaseAmounts', () => {
 // ─── resolveServiceFee() ────────────────────────────────────────────────────
 
 describe('resolveServiceFee', () => {
-  const makeFee = (overrides: Partial<{
-    id: string
-    serviceCode: string
-    chargeType: string
-    feeAmount: number | null
-    percentage: number | null
-    subscriptionTier: string | null
-    siteId: string | null
-    accountId: string | null
-    settingsId: string | null
-  }> = {}) => ({
+  const makeFee = (overrides: Partial<ServiceFee> = {}): ServiceFee => ({
     id: 'fee-1',
     serviceCode: 'sunbed-rental',
     chargeType: 'fixed',
@@ -110,9 +101,10 @@ describe('resolveServiceFee', () => {
     subscriptionTier: null,
     siteId: null,
     accountId: null,
-    settingsId: null,
+    settingsId: 'settings-1',
     createdAt: new Date(),
     updatedAt: new Date(),
+    product: null,
     ...overrides,
   })
 
@@ -202,11 +194,7 @@ describe('resolveServiceFee', () => {
 // ─── calculateServiceFeeAmount() ────────────────────────────────────────────
 
 describe('calculateServiceFeeAmount', () => {
-  const makeFee = (overrides: Partial<{
-    chargeType: string
-    feeAmount: number | null
-    percentage: number | null
-  }> = {}) => ({
+  const makeFee = (overrides: Partial<ServiceFee> = {}): ServiceFee => ({
     id: 'fee-1',
     serviceCode: 'sunbed-rental',
     chargeType: 'fixed',
@@ -215,9 +203,10 @@ describe('calculateServiceFeeAmount', () => {
     subscriptionTier: null,
     siteId: null,
     accountId: null,
-    settingsId: null,
+    settingsId: 'settings-1',
     createdAt: new Date(),
     updatedAt: new Date(),
+    product: null,
     ...overrides,
   })
 
