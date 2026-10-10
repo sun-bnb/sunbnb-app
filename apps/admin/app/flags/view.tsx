@@ -21,7 +21,7 @@ function SourceBadge({ source }: { source: FlagAdminRow['source'] }) {
   }
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${styles[source]}`}
+      className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium ${styles[source]}`}
     >
       {label[source]}
     </span>
@@ -92,7 +92,7 @@ export default function FlagsView({
       </div>
 
       {error && (
-        <div className="rounded border border-red-700 bg-red-950/40 px-3 py-2 text-sm text-red-300">
+        <div className="rounded-sm border border-red-700 bg-red-950/40 px-3 py-2 text-sm text-red-300">
           {error}
         </div>
       )}
@@ -156,12 +156,12 @@ export default function FlagsView({
               )}
             </div>
 
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
                 disabled={pending || row.dbOverride === true}
                 onClick={() => handleToggle(row, true)}
-                className="px-3 py-1.5 rounded text-sm font-medium border border-green-700 text-green-300 hover:bg-green-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 rounded-sm text-sm font-medium border border-green-700 text-green-300 hover:bg-green-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 On
               </button>
@@ -169,7 +169,7 @@ export default function FlagsView({
                 type="button"
                 disabled={pending || row.dbOverride === false}
                 onClick={() => handleToggle(row, false)}
-                className="px-3 py-1.5 rounded text-sm font-medium border border-red-700 text-red-300 hover:bg-red-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 rounded-sm text-sm font-medium border border-red-700 text-red-300 hover:bg-red-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Off
               </button>
@@ -177,7 +177,7 @@ export default function FlagsView({
                 type="button"
                 disabled={pending || row.dbOverride === null}
                 onClick={() => handleClear(row)}
-                className="px-3 py-1.5 rounded text-sm font-medium border border-gray-700 text-gray-300 hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 rounded-sm text-sm font-medium border border-gray-700 text-gray-300 hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Clear
               </button>

@@ -79,7 +79,7 @@ export default function RentalBookingItem({ booking }: { booking: RentalBookingL
               <span>{timeFrom} – {timeTo}</span>
             </div>
           </div>
-          <div className="ml-3 flex-shrink-0">
+          <div className="ml-3 shrink-0">
             <Chip
               color={chipColor(booking)}
               label={t(chipLabel(booking))}
@@ -114,7 +114,7 @@ export default function RentalBookingItem({ booking }: { booking: RentalBookingL
             <span>{dateFrom} – {dateTo}</span>
           </div>
         </div>
-        <div className="ml-3 flex-shrink-0">
+        <div className="ml-3 shrink-0">
           <Chip
             color={chipColor(booking)}
             label={t(chipLabel(booking))}

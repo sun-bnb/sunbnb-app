@@ -4,7 +4,7 @@ slug: design-system
 status: draft
 sources:
   - .claude/rules/ui.md
-  - apps/partner/tailwind.config.js
+  - apps/partner/app/globals.css
   - apps/partner/app/globals.css
   - apps/partner/app/restaurants/[id]/RestaurantHeader.tsx
   - packages/table-reservations-ui/src/partner/RestaurantSettingsForm.tsx
@@ -30,7 +30,7 @@ reference; `user`/`admin` follow the language without a token layer yet. Prime w
 | Non-negotiables (auto-loaded) | `.claude/rules/ui.md` | the short always-applied rule + pointer here |
 | Full conventions (this page) | `.claude/wiki/subsystems/design-system.md` | color/type/spacing/shape, components, page patterns |
 | Per-app layer (pulled) | `apps/<app>/UI.md` | token values, class location, reference impl, MUI-migration state |
-| Color token (partner) | `apps/partner/tailwind.config.js` | `accent` (DEFAULT gray-900, `accent-hover` gray-700) — rebrand here |
+| Color token (partner) | `apps/partner/app/globals.css` (`@theme`) | `accent` (DEFAULT gray-900, `accent-hover` gray-700) — rebrand here |
 | Component classes (partner) | `apps/partner/app/globals.css` (`@layer components`) | `.btn-*`, `.input`, `.label`, `.card`, `.card-add`, `.badge` |
 | Shared UI components | `@repo/ui`, `@repo/table-reservations-ui`, `@repo/schematic-editor` | reusable React; no owning agent (orchestrator-handled) |
 
@@ -46,7 +46,7 @@ accessible, no MUI in new work.
   faint `text-gray-400`. Surfaces: page `bg-white`, subtle `bg-gray-50`, chip `bg-gray-100`. Borders:
   default `border-gray-200`, inputs `border-gray-300`, hairlines `border-gray-100`.
 - **Action / primary = the app's `accent` token** (dark neutral; `bg-accent`/`hover:bg-accent-hover`/
-  `focus:ring-accent`). Defined per app in `tailwind.config.js`; rebrand in one place.
+  `focus:ring-accent`). Defined per app in the `@theme` block of `app/globals.css`; rebrand in one place.
 - **Status triad** `{ bg-X-50, border-X-200, text-X-600/700 }`: success **green** · error **red** ·
   warning **amber** · info/in-progress **blue**.
 
@@ -85,7 +85,7 @@ Shared, not class-ified (in `@repo/*`, usable by any app):
 
 > **Shared-package rule:** `@repo/*` components can't see an app's `.classes`/`accent` — they style
 > with raw utilities (`bg-gray-900`, not `bg-accent`), aligned by hand. New utilities only generate
-> if the package's glob is in the **consuming app's** `tailwind.config.js` `content`.
+> if the package is an **`@source`** in the **consuming app's** `globals.css` (Tailwind 4 auto-detects only files inside the app).
 
 ## Page structure patterns
 
@@ -118,7 +118,7 @@ The restaurant **General** tab is canonical — **mirror it**: `apps/partner/app
    replacement exists (toggles done → `Toggle`).
 2. **One accent token** per app; rebrand in one place; don't hardcode the neutral for a primary action.
 3. **Shared-package components use raw utilities** (no `accent`/`.btn-*`), aligned by hand.
-4. **Tailwind must scan shared packages** (consuming app's `content` globs) or their unique classes purge.
+4. **Tailwind must scan shared packages** (consuming app's `@source` directives) or their unique classes purge.
 5. **Success = green**, not emerald.
 
 ## Common pitfalls
@@ -126,6 +126,7 @@ The restaurant **General** tab is canonical — **mirror it**: `apps/partner/app
 - A new utility in a shared component renders unstyled — package not in the app's Tailwind `content`,
   or you used `accent`/`.btn-primary` (which the package can't see).
 - MUI renders unthemed (no `ThemeProvider`) — defaults fight the flat look; migrate, don't theme.
+- **Tailwind 4 + MUI cascade layers.** Tailwind 4 emits utilities in `@layer utilities`; unlayered CSS beats every layer. MUI apps therefore run `AppRouterCacheProvider options={{ enableCssLayer: true }}` (Emotion output wrapped in `@layer mui`) AND emit `<GlobalStyles styles="@layer theme, base, mui, components, utilities;" />` as the first child, so the order holds even when Emotion's `<style>` lands before `globals.css` (it did in the user app: `mui` was declared first, ranked lowest, and preflight stripped every MUI component). Never import pre-compiled Tailwind CSS from a package: its unlayered preflight overrides all v4 utilities (a v3 `output.css` imported by `TextField` did exactly that). A `@theme` value that references a `next/font` variable (set on `<body>`) must be in `@theme inline`, or it resolves at `:root` to nothing and text falls back to the system font.
 - **Any app that renders MUI needs `AppRouterCacheProvider`** (`@mui/material-nextjs/v16-appRouter`) wrapping the root layout's body. Without it Emotion emits its SSR `<style>` tags inline instead of into `<head>`, and under Next 16 EVERY page fails hydration (admin, partner and user all hit this in track 029). A new app or a new root layout must keep it.
 - **Designing blind** — no screenshot/preview loop wired up; visually verify on the running app before
   declaring a UI change done.

@@ -118,7 +118,7 @@ function PriceBreakdown({
         <div className="flex justify-between mb-1">
           <span className="text-gray-500">
             {t('serviceFee')}
-            <span className="ml-1.5 inline-block rounded bg-indigo-50 px-1 text-[10px] font-medium text-indigo-600 align-middle">
+            <span className="ml-1.5 inline-block rounded-sm bg-indigo-50 px-1 text-[10px] font-medium text-indigo-600 align-middle">
               {t('customRate')}
             </span>
           </span>
@@ -226,7 +226,7 @@ function MolliePaymentExample({
         <div className="flex justify-between mb-1">
           <span className="text-gray-500">
             {t('serviceFee')}
-            <span className="ml-1.5 inline-block rounded bg-indigo-50 px-1 text-[10px] font-medium text-indigo-600 align-middle">
+            <span className="ml-1.5 inline-block rounded-sm bg-indigo-50 px-1 text-[10px] font-medium text-indigo-600 align-middle">
               {t('customRate')}
             </span>
           </span>
@@ -301,7 +301,7 @@ function WorkingHoursSlot({
   }
 
   const inputCls =
-    'text-sm text-gray-700 bg-transparent border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none focus:border-blue-400'
+    'text-sm text-gray-700 bg-transparent border border-gray-200 rounded-sm px-1.5 py-0.5 focus:outline-hidden focus:border-blue-400'
 
   return (
     <div className="flex items-center gap-2">
@@ -703,12 +703,12 @@ export default function GeneralView() {
           {t('locationDesc')}
         </p>
 
-        <div className="flex items-center gap-2 px-3 py-2 rounded mb-3 text-sm bg-green-50 border border-green-200 text-green-700">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-sm mb-3 text-sm bg-green-50 border border-green-200 text-green-700">
           <CheckCircleIcon fontSize="small" />
           <span>{t('locationCoords', { lat: Number(mapCoords.lat).toFixed(5), lng: Number(mapCoords.lng).toFixed(5) })}</span>
         </div>
 
-        <div className="h-[400px] rounded overflow-hidden border-2 border-green-300">
+        <div className="h-[400px] rounded-sm overflow-hidden border-2 border-green-300">
           <SafeAPIProvider apiKey={apiKey}>
             <SafeMap
               mapId="site-map"
@@ -801,7 +801,7 @@ export default function GeneralView() {
                 </p>
               )}
             </div>
-            <Link href="/account/payments" className="flex-shrink-0 text-xs font-medium text-gray-700 hover:text-gray-900 hover:underline">
+            <Link href="/account/payments" className="shrink-0 text-xs font-medium text-gray-700 hover:text-gray-900 hover:underline">
               {t('changePaymentProvider')}
             </Link>
           </div>

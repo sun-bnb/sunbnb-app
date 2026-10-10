@@ -7,9 +7,9 @@ Prime UI work with `/ui partner` (loads both). This file is *not* auto-loaded â€
 Partner is the **reference implementation** of the design language.
 
 - **Token layer:** `accent` color (DEFAULT `#111827`/gray-900, `accent-hover` gray-700) in
-  `tailwind.config.js`; the `@layer components` classes (`.btn-primary`, `.btn-ghost`, `.btn-danger`,
+  the `@theme` block of `app/globals.css`; the `@utility` classes (`.btn-primary`, `.btn-ghost`, `.btn-danger`,
   `.input`, `.label`, `.card`, `.card-add`, `.badge`) in `app/globals.css`. Rebrand the primary
-  action by changing `accent`. Tailwind `content` scans `@repo/table-reservations-ui`,
+  action by changing `accent`. `@source` directives in `globals.css` scan `@repo/table-reservations-ui`,
   `@repo/schematic-editor` **and `@repo/floor-core`** so their utilities aren't purged.
   **The floor-core glob was missing until 2026-09-12 and the manage grid was visibly wrong
   for it** â€” `getCellAppearance` (`packages/floor-core/src/bed-state.ts`) owns the seat-tile

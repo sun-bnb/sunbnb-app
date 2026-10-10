@@ -40,28 +40,28 @@ export default async function VerifactuNoticePage() {
           </p>
           <div className="mt-3 space-y-3">
             <div className="flex items-start gap-3 bg-gray-50 rounded-lg p-3 border border-gray-100">
-              <span className="mt-0.5 w-6 h-6 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">✓</span>
+              <span className="mt-0.5 w-6 h-6 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-xs font-bold shrink-0">✓</span>
               <div>
                 <p className="font-medium text-gray-900">Mandatory QR Codes</p>
                 <p className="text-gray-500">Every receipt includes a QR code formatted per AEAT specifications, enabling customers and tax inspectors to verify the receipt against the tax agency&rsquo;s records.</p>
               </div>
             </div>
             <div className="flex items-start gap-3 bg-gray-50 rounded-lg p-3 border border-gray-100">
-              <span className="mt-0.5 w-6 h-6 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">✓</span>
+              <span className="mt-0.5 w-6 h-6 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-xs font-bold shrink-0">✓</span>
               <div>
                 <p className="font-medium text-gray-900">Cryptographic Chaining</p>
                 <p className="text-gray-500">Each receipt includes a hash of the preceding receipt, forming an immutable chain. This satisfies the anti-tampering requirements of RD 1007/2023 and prevents undetected modification or deletion of records.</p>
               </div>
             </div>
             <div className="flex items-start gap-3 bg-gray-50 rounded-lg p-3 border border-gray-100">
-              <span className="mt-0.5 w-6 h-6 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">✓</span>
+              <span className="mt-0.5 w-6 h-6 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-xs font-bold shrink-0">✓</span>
               <div>
                 <p className="font-medium text-gray-900">Mandatory Receipt Fields</p>
                 <p className="text-gray-500">All receipts include: issuer NIF/CIF, recipient details (where required), itemised services with applicable IVA rates, receipt number, date/time, and the Veri*factu-compliant QR code.</p>
               </div>
             </div>
             <div className="flex items-start gap-3 bg-gray-50 rounded-lg p-3 border border-gray-100">
-              <span className="mt-0.5 w-6 h-6 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">✓</span>
+              <span className="mt-0.5 w-6 h-6 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-xs font-bold shrink-0">✓</span>
               <div>
                 <p className="font-medium text-gray-900">Record Retention</p>
                 <p className="text-gray-500">Transaction records are retained for the legally required period and are exportable at any time from your partner dashboard for your own accounting and tax filing purposes.</p>

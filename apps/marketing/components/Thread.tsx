@@ -50,21 +50,21 @@ export default function Thread({
 
   return (
     // No backdrop-filter on this scrolling box: iOS Safari stops painting the children of a
-    // scrolled element with backdrop-blur — the expanded history rendered as an empty blur.
+    // scrolled element with backdrop-blur-sm — the expanded history rendered as an empty blur.
     <div
       ref={boxRef}
-      className={`flex flex-col gap-2 overflow-y-auto overscroll-contain pt-6 ${expanded ? 'max-h-[60svh] rounded-2xl bg-[#fff5e1]/95 px-2' : 'max-h-[46svh]'}`}
+      className={`flex flex-col gap-2 overflow-y-auto overscroll-contain pt-6 ${expanded ? 'max-h-[60svh] rounded-2xl bg-sand/95 px-2' : 'max-h-[46svh]'}`}
       // Older lines dissolve into the scene instead of stacking up like a chat log.
       style={expanded ? undefined : { maskImage: 'linear-gradient(to bottom, transparent 0, black 2.5rem)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, black 2.5rem)' }}
       aria-live="polite"
     >
       {hidden > 0 && (
-        <button type="button" onClick={() => setExpanded(true)} className="self-center rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-[#0e3a4a]/70 shadow-sm backdrop-blur">
+        <button type="button" onClick={() => setExpanded(true)} className="self-center rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-[#0e3a4a]/70 shadow-xs backdrop-blur-sm">
           {t('showConversation', { count: hidden })}
         </button>
       )}
       {expanded && (
-        <button type="button" onClick={() => setExpanded(false)} className="sticky top-0 z-10 self-center rounded-full bg-white px-3 py-1 text-xs font-medium text-[#0e3a4a]/70 shadow-sm">
+        <button type="button" onClick={() => setExpanded(false)} className="sticky top-0 z-10 self-center rounded-full bg-white px-3 py-1 text-xs font-medium text-[#0e3a4a]/70 shadow-xs">
           {t('hideConversation')}
         </button>
       )}
@@ -82,7 +82,7 @@ export default function Thread({
               S
             </span>
             <div className="min-w-0 flex-1">
-              <p className="inline-block rounded-2xl rounded-bl-md bg-white/95 px-3.5 py-2 text-[15px] leading-snug text-[#0e3a4a] [@media(max-width:400px)]:text-sm shadow-md backdrop-blur">{text(m)}</p>
+              <p className="inline-block rounded-2xl rounded-bl-md bg-white/95 px-3.5 py-2 text-[15px] leading-snug text-[#0e3a4a] [@media(max-width:400px)]:text-sm shadow-md backdrop-blur-sm">{text(m)}</p>
               {live?.id === m.id && <div className="mt-2">{renderAttach(live.attach)}</div>}
             </div>
           </div>

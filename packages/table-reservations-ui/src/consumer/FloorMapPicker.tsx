@@ -216,7 +216,7 @@ function LegendSwatch({
   return (
     <span className="inline-flex items-center gap-1.5">
       <span
-        className="relative inline-block h-3 w-3 rounded-sm border"
+        className="relative inline-block h-3 w-3 rounded-xs border"
         style={{ backgroundColor: fill, borderColor: stroke }}
       >
         {crossed ? (

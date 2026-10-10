@@ -60,7 +60,7 @@ export default function LaunchOfferCard({ accountId, initial }: { accountId: str
           type="button"
           disabled={busy}
           onClick={() => run(active ? "revoke" : "grant")}
-          className="shrink-0 rounded border border-gray-700 px-3 py-1.5 text-xs font-medium text-gray-200 hover:bg-gray-800 disabled:opacity-50"
+          className="shrink-0 rounded-sm border border-gray-700 px-3 py-1.5 text-xs font-medium text-gray-200 hover:bg-gray-800 disabled:opacity-50"
         >
           {active ? "Revoke" : "Grant"}
         </button>

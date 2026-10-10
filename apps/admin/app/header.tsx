@@ -52,7 +52,7 @@ export default function Header() {
 
         {/* Left: Logo + Nav */}
         <div className="flex items-center gap-8">
-          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
+          <Link href="/" className="flex items-center gap-2 shrink-0">
             <Image alt="Sunbnb" src={sunbnbLogo} className="w-7 h-7 brightness-200" />
             <span className="text-sm font-bold text-gray-300 hidden md:inline">
               sunbnb <span className="text-purple-400 font-semibold">admin</span>

@@ -80,7 +80,7 @@ export default function RentalBookingCard({
                 <span className="text-base font-bold text-gray-500 ml-1">×{booking.quantity}</span>
               )}
             </span>
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
               {/* Online-payment indicator — only when a paymentRef exists */}
               {isOnlinePaid && (
                 <span
@@ -109,7 +109,7 @@ export default function RentalBookingCard({
                 : t('allDay')}
             </span>
             {isOut && booking.durationType === 'hours' && (
-              <span className={`text-xs font-bold flex-shrink-0 ${dayjs().isAfter(dayjs(booking.to)) ? 'text-red-500' : 'text-gray-400'}`}>
+              <span className={`text-xs font-bold shrink-0 ${dayjs().isAfter(dayjs(booking.to)) ? 'text-red-500' : 'text-gray-400'}`}>
                 {dayjs().isAfter(dayjs(booking.to)) ? t('overdue') : `${t('due')} ${formatTime(booking.to)}`}
               </span>
             )}

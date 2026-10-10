@@ -207,7 +207,7 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
             <select
               value={siteId}
               onChange={(e) => { setSiteId(e.target.value); setSelectedDay(null) }}
-              className="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-8 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 transition-colors cursor-pointer"
+              className="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-8 py-2 text-sm text-gray-900 focus:outline-hidden focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 transition-colors cursor-pointer"
             >
               {sites.map(s => (
                 <option key={s.id} value={s.id}>{s.name}</option>
@@ -292,7 +292,7 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
                   onClick={() => setSelectedDay(isSelected ? null : dateStr)}
                   className={`min-h-[80px] p-1.5 border-b border-r border-gray-50 text-left transition-colors relative group
                     ${isWeekend ? 'bg-gray-50/30' : ''}
-                    ${isSelected ? 'bg-gray-900/[0.03] ring-1 ring-inset ring-gray-900/10' : 'hover:bg-gray-50'}
+                    ${isSelected ? 'bg-gray-900/3 ring-1 ring-inset ring-gray-900/10' : 'hover:bg-gray-50'}
                   `}
                 >
                   {/* Day number */}
@@ -342,7 +342,7 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
 
         {/* Day detail panel */}
         {selectedDay && (
-          <div className="hidden lg:flex lg:flex-col w-[300px] bg-white rounded-xl border border-gray-200 overflow-hidden flex-shrink-0">
+          <div className="hidden lg:flex lg:flex-col w-[300px] bg-white rounded-xl border border-gray-200 overflow-hidden shrink-0">
 
             {/* Panel header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">

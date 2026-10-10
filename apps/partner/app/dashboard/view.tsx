@@ -338,9 +338,9 @@ export default function DashboardView({ data }: { data: DashboardData }) {
               <Link
                 key={r.id}
                 href={`/reservations/${r.id}`}
-                className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 hover:shadow-sm transition-shadow"
+                className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 hover:shadow-xs transition-shadow"
               >
-                <div className="flex-shrink-0 text-center w-10">
+                <div className="shrink-0 text-center w-10">
                   <span className="text-sm font-semibold text-amber-700">{timeUntil(r.from)}</span>
                 </div>
                 <div className="flex-1 min-w-0">
@@ -366,10 +366,10 @@ export default function DashboardView({ data }: { data: DashboardData }) {
             </div>
             <div className="flex items-center gap-4 text-xs text-gray-400">
               <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm bg-gray-900" /> {t('revenue')}
+                <span className="w-2.5 h-2.5 rounded-xs bg-gray-900" /> {t('revenue')}
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm bg-red-400" /> {t('fees')}
+                <span className="w-2.5 h-2.5 rounded-xs bg-red-400" /> {t('fees')}
               </span>
             </div>
           </div>
@@ -433,7 +433,7 @@ export default function DashboardView({ data }: { data: DashboardData }) {
                   className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   {/* Date pill */}
-                  <div className="flex-shrink-0 w-11 h-11 rounded-lg bg-gray-100 flex flex-col items-center justify-center">
+                  <div className="shrink-0 w-11 h-11 rounded-lg bg-gray-100 flex flex-col items-center justify-center">
                     <span className="text-[10px] leading-none text-gray-400 uppercase">
                       {new Date(r.from).toLocaleString('en', { month: 'short' })}
                     </span>

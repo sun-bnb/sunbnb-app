@@ -41,14 +41,14 @@ export default function ManageLanding({
           {/* Sunbed management — always shown */}
           <Link
             href={sunbedsHref}
-            className="w-full flex items-center gap-4 bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-4 hover:border-gray-300 hover:shadow transition-all group"
+            className="w-full flex items-center gap-4 bg-white rounded-xl border border-gray-200 shadow-xs px-5 py-4 hover:border-gray-300 hover:shadow-sm transition-all group"
           >
             <span className="text-2xl" aria-hidden="true">⛱️</span>
             <div className="flex-1 min-w-0">
               <div className="font-semibold text-gray-900 group-hover:text-gray-700">{t('sunbedManagement')}</div>
             </div>
             <svg
-              className="w-5 h-5 text-gray-400 group-hover:text-gray-600 flex-shrink-0"
+              className="w-5 h-5 text-gray-400 group-hover:text-gray-600 shrink-0"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -63,14 +63,14 @@ export default function ManageLanding({
           {isAdmin && (
             <Link
               href={summaryHref}
-              className="w-full flex items-center gap-4 bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-4 hover:border-gray-300 hover:shadow transition-all group"
+              className="w-full flex items-center gap-4 bg-white rounded-xl border border-gray-200 shadow-xs px-5 py-4 hover:border-gray-300 hover:shadow-sm transition-all group"
             >
               <span className="text-2xl" aria-hidden="true">📊</span>
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-gray-900 group-hover:text-gray-700">{t('dailySummary')}</div>
               </div>
               <svg
-                className="w-5 h-5 text-gray-400 group-hover:text-gray-600 flex-shrink-0"
+                className="w-5 h-5 text-gray-400 group-hover:text-gray-600 shrink-0"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -86,14 +86,14 @@ export default function ManageLanding({
           {isAdmin && (
             <Link
               href={closeHref}
-              className="w-full flex items-center gap-4 bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-4 hover:border-gray-300 hover:shadow transition-all group"
+              className="w-full flex items-center gap-4 bg-white rounded-xl border border-gray-200 shadow-xs px-5 py-4 hover:border-gray-300 hover:shadow-sm transition-all group"
             >
               <span className="text-2xl" aria-hidden="true">🏁</span>
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-gray-900 group-hover:text-gray-700">{t('dayClose')}</div>
               </div>
               <svg
-                className="w-5 h-5 text-gray-400 group-hover:text-gray-600 flex-shrink-0"
+                className="w-5 h-5 text-gray-400 group-hover:text-gray-600 shrink-0"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -109,14 +109,14 @@ export default function ManageLanding({
           {isAdmin && (
             <Link
               href={trendsHref}
-              className="w-full flex items-center gap-4 bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-4 hover:border-gray-300 hover:shadow transition-all group"
+              className="w-full flex items-center gap-4 bg-white rounded-xl border border-gray-200 shadow-xs px-5 py-4 hover:border-gray-300 hover:shadow-sm transition-all group"
             >
               <span className="text-2xl" aria-hidden="true">📈</span>
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-gray-900 group-hover:text-gray-700">{t('trends')}</div>
               </div>
               <svg
-                className="w-5 h-5 text-gray-400 group-hover:text-gray-600 flex-shrink-0"
+                className="w-5 h-5 text-gray-400 group-hover:text-gray-600 shrink-0"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"

@@ -122,7 +122,7 @@ export default function GuestSearchSheet({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('searchPlaceholder')}
-            className="w-full rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 text-base outline-none focus:border-gray-400 dark:focus:border-gray-500"
+            className="w-full rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 text-base outline-hidden focus:border-gray-400 dark:focus:border-gray-500"
           />
         </div>
 
@@ -195,7 +195,7 @@ export default function GuestSearchSheet({
                           <span className="text-gray-400"> · {days}d</span>
                         </div>
                       </div>
-                      <span className={`flex-shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                      <span className={`shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full ${
                         !today
                           ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
                           : paid

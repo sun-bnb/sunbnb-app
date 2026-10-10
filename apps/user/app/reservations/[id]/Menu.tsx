@@ -165,7 +165,7 @@ export default function Menu({
         dispatch(setValue({
           orderState: 'processing',
           pendingOrderId: result.id,
-          panelBottom: 'bottom-[0px]',
+          panelBottom: 'bottom-0',
         }))
       }
     }
@@ -217,7 +217,7 @@ export default function Menu({
                 onChange={(e) => updateItemNotes(item.product.id, e.target.value)}
                 maxLength={200}
                 className="mt-1.5 ml-7 w-[calc(100%-1.75rem)] border-0 border-b border-transparent bg-transparent py-1 text-xs text-brand-ink
-                           placeholder:text-brand-ink/40 focus:border-brand-ink/20 focus:outline-none"
+                           placeholder:text-brand-ink/40 focus:border-brand-ink/20 focus:outline-hidden"
               />
             </li>
           ))}
@@ -230,12 +230,12 @@ export default function Menu({
           onChange={(e) => setOrderNotes(e.target.value)}
           maxLength={500}
           rows={2}
-          className="mt-2 mb-3 w-full resize-none rounded-xl bg-cream-light p-3 text-xs text-brand-ink ring-1 ring-brand-ink/[0.08]
-                     placeholder:text-brand-ink/40 focus:outline-none focus:ring-brand-ink/25"
+          className="mt-2 mb-3 w-full resize-none rounded-xl bg-cream-light p-3 text-xs text-brand-ink ring-1 ring-brand-ink/8
+                     placeholder:text-brand-ink/40 focus:outline-hidden focus:ring-brand-ink/25"
         />
       </div>
 
-      <div className="space-y-3 border-t border-brand-ink/[0.08] px-5 pt-3 pb-5">
+      <div className="space-y-3 border-t border-brand-ink/8 px-5 pt-3 pb-5">
         <div className="flex items-baseline justify-between">
           <span className="text-sm font-semibold text-brand-ink">{t('Total')}</span>
           <span className="text-lg font-semibold text-brand-ink tabular-nums">{fmt(totalPrice)}</span>
@@ -327,7 +327,7 @@ export default function Menu({
                             alt={product.name}
                             width={64}
                             height={64}
-                            className="w-16 h-16 rounded-xl object-cover flex-shrink-0"
+                            className="w-16 h-16 rounded-xl object-cover shrink-0"
                           />
                         ) : (
                           <ProductPlaceholder category={product.category ?? 'food'} />
@@ -384,13 +384,13 @@ export default function Menu({
 
       {/* Order-confirmed toast — sits just above the order bar, auto-dismisses */}
       {openConfirmation && (
-        <div className="fixed inset-x-4 bottom-[7.5rem] z-20 flex justify-center" role="status">
+        <div className="fixed inset-x-4 bottom-30 z-20 flex justify-center" role="status">
           <div className="flex items-center gap-2.5 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800 shadow-[0_8px_24px_-12px_rgba(23,50,58,0.35)]">
-            <svg className="h-4 w-4 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
               <path fillRule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-8 8a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4L8 12.58l7.3-7.3a1 1 0 0 1 1.4 0Z" clipRule="evenodd" />
             </svg>
             {t('Order received')}
-            <button onClick={() => setOpenConfirmation(false)} aria-label={t('Dismiss')} className="-mr-1 ml-1 rounded p-0.5 text-green-700/70 hover:text-green-800">
+            <button onClick={() => setOpenConfirmation(false)} aria-label={t('Dismiss')} className="-mr-1 ml-1 rounded-sm p-0.5 text-green-700/70 hover:text-green-800">
               <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M5.3 5.3a1 1 0 0 1 1.4 0L10 8.6l3.3-3.3a1 1 0 1 1 1.4 1.4L11.4 10l3.3 3.3a1 1 0 0 1-1.4 1.4L10 11.4l-3.3 3.3a1 1 0 0 1-1.4-1.4L8.6 10 5.3 6.7a1 1 0 0 1 0-1.4Z" /></svg>
             </button>
           </div>
@@ -398,7 +398,7 @@ export default function Menu({
       )}
 
       {/* Fixed bottom bar */}
-      <div className="fixed bottom-12 inset-x-0 px-4 py-2.5 bg-cream/95 backdrop-blur-sm border-t border-brand-ink/10 flex items-center gap-2 z-10">
+      <div className="fixed bottom-12 inset-x-0 px-4 py-2.5 bg-cream/95 backdrop-blur-xs border-t border-brand-ink/10 flex items-center gap-2 z-10">
         <button
           onClick={() => { setDrawerContent('new-order'); setDrawerOpen(true) }}
           disabled={basket.length === 0}
@@ -454,7 +454,7 @@ function CountBubble({ count, className }: { count: number; className: string })
 function ProductPlaceholder({ category }: { category: string }) {
   const drink = category === 'drink'
   return (
-    <div className="grid h-16 w-16 flex-shrink-0 place-items-center rounded-xl bg-cream-dark" aria-hidden="true">
+    <div className="grid h-16 w-16 shrink-0 place-items-center rounded-xl bg-cream-dark" aria-hidden="true">
       <svg viewBox="0 0 32 32" className="h-7 w-7 text-brand-gold/70" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
         {drink ? (
           <>

@@ -78,7 +78,7 @@ function ReservationButton({
               dispatch(setValue({ 
                 reservationState: site.type !== 'paid' ? 'complete' : 'processing',
                 pendingReservationId: saveResult.id,
-                panelBottom: 'bottom-[0px]'
+                panelBottom: 'bottom-0'
               }))
               if (site.type !== 'paid') {
                 router.push(`/reservations/${saveResult.id}`)
@@ -109,7 +109,7 @@ export default function ReservationView({
   const { reservationState, pendingReservationId } = sitesState
 
   let focused = sitesState.focused
-  let panelBottom = sitesState.panelBottom || '-bottom-[364px]'
+  let panelBottom = sitesState.panelBottom || 'bottom-[-364px]'
 
   const { data: reservation } = useGetReservationByIdQuery({ id: pendingReservationId }, {
     skip: !pendingReservationId
@@ -129,7 +129,7 @@ export default function ReservationView({
         <div>
           QUANTITY: <b>{selectedItems.length}</b>
         </div>
-        <div className="text-center text-[64px] -mt-[20px]">
+        <div className="text-center text-[64px] mt-[-20px]">
           {totalPrice} €
         </div>
       </div>
@@ -169,7 +169,7 @@ export default function ReservationView({
               -translate-x-1/2
               inline-block
               whitespace-nowrap
-              z-[1]
+              z-1
               bg-white/60
               py-[6px]
               px-[8px]
@@ -190,7 +190,7 @@ export default function ReservationView({
                 left-1/2
                 -translate-x-1/2
                 inline-block
-                z-[1]
+                z-1
                 py-[6px]
                 px-[8px]
                 w-[80%]
@@ -204,7 +204,7 @@ export default function ReservationView({
           absolute
           bottom-[10px]
           right-[10px]
-          z-[1]
+          z-1
           bg-white/60
           py-[6px]
           px-[8px]

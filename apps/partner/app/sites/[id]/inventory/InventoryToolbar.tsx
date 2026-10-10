@@ -94,7 +94,7 @@ export default function InventoryToolbar({
   // Creating state — instruction + cancel
   if (creating || creatingParcel) {
     return (
-      <div className="flex items-center gap-3 px-3 py-2 bg-green-50 border border-green-200 rounded text-sm">
+      <div className="flex items-center gap-3 px-3 py-2 bg-green-50 border border-green-200 rounded-sm text-sm">
         <span className="text-green-700 font-medium">
           {creating ? 'Click on the map to place a new sunbed' : 'Click on the map to place the new parcel'}
         </span>
@@ -113,7 +113,7 @@ export default function InventoryToolbar({
   // Selection state — unified single row
   if (selectedItemCount > 0) {
     return (
-      <div className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-200 rounded text-sm flex-wrap">
+      <div className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-200 rounded-sm text-sm flex-wrap">
         {/* Selection badge */}
         <div className="flex items-center gap-1.5 mr-1">
           {parcelColor && (
@@ -285,7 +285,7 @@ export default function InventoryToolbar({
   // Single-sunbed selection — same blue pill row as multi-selection, different controls
   if (selectedSingleItemId) {
     return (
-      <div className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-200 rounded text-sm flex-wrap">
+      <div className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-200 rounded-sm text-sm flex-wrap">
         <div className="flex items-center gap-1.5 mr-1">
           {selectedSingleItemParcelColor && (
             <span

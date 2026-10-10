@@ -13,7 +13,7 @@ export default function ChapterFour() {
 
   const frames = [
     <MultimediaFrame layout="horizontal"
-      illustration={<Image alt="Tax Accounting" src={taxAccounting} className="shadow" />}
+      illustration={<Image alt="Tax Accounting" src={taxAccounting} className="shadow-sm" />}
       imageSize={30}
       animation="slideToLeft"
       content={
@@ -26,7 +26,7 @@ export default function ChapterFour() {
       imageFirst={true}
     />,
     <MultimediaFrame layout="horizontal"
-      illustration={<Image alt="Customer receipts" src={receiptSample} className="shadow" />}
+      illustration={<Image alt="Customer receipts" src={receiptSample} className="shadow-sm" />}
       imageSize={40}
       animation="horizontalFlip"
       content={

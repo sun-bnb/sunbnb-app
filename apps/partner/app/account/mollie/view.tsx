@@ -94,11 +94,11 @@ function ReadinessPanel() {
 
   const checkIcon = (ok: boolean) =>
     ok ? (
-      <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+      <svg className="w-4 h-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
       </svg>
     ) : (
-      <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <svg className="w-4 h-4 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
       </svg>
     )
@@ -153,7 +153,7 @@ function ReadinessPanel() {
         </li>
         <li className="flex items-center gap-2">
           {report.onboardingStatus === 'completed' ? checkIcon(true) : (
-            <svg className="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-4 h-4 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
             </svg>
           )}
@@ -175,7 +175,7 @@ function ReadinessPanel() {
       {report.enabledMethods.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {report.enabledMethods.map((m) => (
-            <span key={m} className="inline-block bg-white border border-gray-200 rounded px-2 py-0.5 text-xs text-gray-600 font-medium">
+            <span key={m} className="inline-block bg-white border border-gray-200 rounded-sm px-2 py-0.5 text-xs text-gray-600 font-medium">
               {m}
             </span>
           ))}
@@ -280,7 +280,7 @@ export default function MollieView({ isConnected, profileId, onboardingStatus, s
       {/* Success banner */}
       {success && (
         <div className="mb-6 bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-3">
-          <svg className="w-5 h-5 text-emerald-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-5 h-5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
           </svg>
           <p className="text-sm text-emerald-800">Your Mollie account has been connected successfully!</p>
@@ -290,7 +290,7 @@ export default function MollieView({ isConnected, profileId, onboardingStatus, s
       {/* Error banner */}
       {(error || actionError) && (
         <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3">
-          <svg className="w-5 h-5 text-red-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
           </svg>
           <p className="text-sm text-red-800">{error ? readableError(error) : actionError}</p>
@@ -437,15 +437,15 @@ export default function MollieView({ isConnected, profileId, onboardingStatus, s
         <h2 className="text-sm font-semibold text-gray-900 mb-2">How it works</h2>
         <ul className="space-y-2 text-sm text-gray-600">
           <li className="flex items-start gap-2">
-            <span className="mt-1 w-4 h-4 rounded-full bg-gray-200 text-gray-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0">1</span>
+            <span className="mt-1 w-4 h-4 rounded-full bg-gray-200 text-gray-600 text-[10px] font-bold flex items-center justify-center shrink-0">1</span>
             Connect your existing Mollie account, or create a new one right here using the &ldquo;New to Mollie&rdquo; tab — your details will be pre-filled.
           </li>
           <li className="flex items-start gap-2">
-            <span className="mt-1 w-4 h-4 rounded-full bg-gray-200 text-gray-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0">2</span>
+            <span className="mt-1 w-4 h-4 rounded-full bg-gray-200 text-gray-600 text-[10px] font-bold flex items-center justify-center shrink-0">2</span>
             Complete your Mollie onboarding (identity verification, bank account) if not done yet.
           </li>
           <li className="flex items-start gap-2">
-            <span className="mt-1 w-4 h-4 rounded-full bg-gray-200 text-gray-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0">3</span>
+            <span className="mt-1 w-4 h-4 rounded-full bg-gray-200 text-gray-600 text-[10px] font-bold flex items-center justify-center shrink-0">3</span>
             Once connected, payments from customers go directly to your Mollie account. A small platform fee is deducted automatically.
           </li>
         </ul>
@@ -547,7 +547,7 @@ function ClientLinkTab({ partnerData, onSwitchToExisting }: { partnerData: Partn
   }
 
   const inputCls =
-    'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400'
+    'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-gray-400 focus:outline-hidden focus:ring-1 focus:ring-gray-400'
   const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
 
   // If client links aren't available, show a fallback with manual signup link

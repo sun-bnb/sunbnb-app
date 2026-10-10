@@ -1,6 +1,91 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Cascade order: MUI's Emotion styles (wrapped in `@layer mui` by AppRouterCacheProvider
+   enableCssLayer) sit above Tailwind's preflight and below its utilities, so a Tailwind
+   class on an MUI component wins. Unlayered, MUI would beat every v4 utility. */
+@layer theme, base, mui, components, utilities;
+
+@import 'tailwindcss';
+
+/* Tailwind 4 only auto-detects sources inside this app; the shared packages it
+   renders must be listed explicitly (v3 had them in tailwind.config `content`). */
+/* floor-core owns the manage grid's seat-tile palette (getCellAppearance) and the
+   restaurant/schematic packages ship no CSS of their own: without these their
+   classes are purged (free beds once rendered as empty outlines). */
+@source '../../../packages/ui/src';
+@source '../../../packages/table-reservations-ui/src';
+@source '../../../packages/schematic-editor/src';
+@source '../../../packages/floor-core/src';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-accent: #111827;
+  --color-accent-hover: #374151;
+
+  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-slide-up: slide-up 0.2s ease-out;
+
+  @keyframes slide-up {
+    0% {
+      transform: translateY(100%);
+    }
+    100% {
+      transform: translateY(0);
+    }
+  }
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+/* Semantic component classes — see .claude/rules/ui.md. Prefer these over
+   re-typing the utility strings; one-offs may still use raw utilities. */
+
+@utility btn-primary {
+  @apply bg-accent text-white px-4 py-2 text-sm font-medium rounded-lg transition-colors hover:bg-accent-hover disabled:opacity-60 disabled:cursor-not-allowed;
+}
+
+@utility btn-ghost {
+  @apply text-sm font-medium text-gray-600 transition-colors hover:text-gray-900;
+}
+
+@utility btn-danger {
+  @apply bg-red-600 text-white px-4 py-2 text-sm font-medium rounded-lg transition-colors hover:bg-red-700;
+}
+
+@utility input {
+  @apply w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-accent;
+}
+
+@utility label {
+  @apply block text-xs font-medium text-gray-700 mb-1.5;
+}
+
+@utility card {
+  @apply bg-white rounded-xl border border-gray-200 p-4;
+}
+
+@utility card-add {
+  @apply bg-white rounded-xl border-2 border-dashed border-gray-300 transition-colors hover:border-gray-400 hover:bg-gray-50;
+}
+
+@utility badge {
+  @apply inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full;
+}
 
 @layer base {
   html {
@@ -12,31 +97,21 @@
   }
 }
 
-/* Semantic component classes — see .claude/rules/ui.md. Prefer these over
-   re-typing the utility strings; one-offs may still use raw utilities. */
-@layer components {
-  .btn-primary {
-    @apply bg-accent text-white px-4 py-2 text-sm font-medium rounded-lg transition-colors hover:bg-accent-hover disabled:opacity-60 disabled:cursor-not-allowed;
+/* Tailwind 4's preflight dropped v3's `cursor: pointer` on buttons; keep v3 behaviour. */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
   }
-  .btn-ghost {
-    @apply text-sm font-medium text-gray-600 transition-colors hover:text-gray-900;
-  }
-  .btn-danger {
-    @apply bg-red-600 text-white px-4 py-2 text-sm font-medium rounded-lg transition-colors hover:bg-red-700;
-  }
-  .input {
-    @apply w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent;
-  }
-  .label {
-    @apply block text-xs font-medium text-gray-700 mb-1.5;
-  }
-  .card {
-    @apply bg-white rounded-xl border border-gray-200 p-4;
-  }
-  .card-add {
-    @apply bg-white rounded-xl border-2 border-dashed border-gray-300 transition-colors hover:border-gray-400 hover:bg-gray-50;
-  }
-  .badge {
-    @apply inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full;
+}
+
+/* Tailwind 4's preflight makes form controls `background-color: transparent`; v3 left the
+   browser default (the `Field` system colour, white in light mode). Inputs without an
+   explicit bg-* utility would otherwise show the page colour through (cream in the user app). */
+@layer base {
+  input:where(:not([type='button'], [type='reset'], [type='submit'], [type='image'], [type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'])),
+  textarea,
+  select {
+    background-color: Field;
   }
 }

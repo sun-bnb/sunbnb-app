@@ -129,7 +129,7 @@ function OccupantInfo({
       </div>
 
       {/* Cluster — never wraps */}
-      <div className="flex-shrink-0 flex items-center gap-2">
+      <div className="shrink-0 flex items-center gap-2">
         {/* Note indicator */}
         {reservation.internalNotes && (
           <span title={reservation.internalNotes} aria-label={t('note')}>
@@ -636,18 +636,18 @@ export default function BedDetail({
             {/* Date range picker — shown when the multi-day toggle is on */}
             {!isPool && until !== '' && (
               <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800/40 border-2 dark:border-gray-600 rounded-xl px-3 py-2.5">
-                <span className="text-sm font-medium text-gray-500 dark:text-gray-400 flex-shrink-0">{t('until')}</span>
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400 shrink-0">{t('until')}</span>
                 <input
                   type="date"
                   value={until}
                   min={tomorrow}
                   max={maxUntil}
                   onChange={e => setUntil(e.target.value || tomorrow)}
-                  className="flex-1 bg-transparent text-base font-medium outline-none dark:text-gray-100"
+                  className="flex-1 bg-transparent text-base font-medium outline-hidden dark:text-gray-100"
                 />
                 <button
                   onClick={() => setUntil('')}
-                  className="text-gray-400 dark:text-gray-500 text-2xl leading-none px-1 flex-shrink-0"
+                  className="text-gray-400 dark:text-gray-500 text-2xl leading-none px-1 shrink-0"
                   aria-label={t('cancel')}
                 >
                   &times;
@@ -1023,18 +1023,18 @@ export default function BedDetail({
             {/* Date range picker — shown when multi-day toggle is on */}
             {until !== '' && (
               <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800/40 border-2 dark:border-gray-600 rounded-xl px-3 py-2.5">
-                <span className="text-sm font-medium text-gray-500 dark:text-gray-400 flex-shrink-0">{t('until')}</span>
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400 shrink-0">{t('until')}</span>
                 <input
                   type="date"
                   value={until}
                   min={tomorrow}
                   max={maxUntil}
                   onChange={e => setUntil(e.target.value || tomorrow)}
-                  className="flex-1 bg-transparent text-base font-medium outline-none dark:text-gray-100"
+                  className="flex-1 bg-transparent text-base font-medium outline-hidden dark:text-gray-100"
                 />
                 <button
                   onClick={() => setUntil('')}
-                  className="text-gray-400 dark:text-gray-500 text-2xl leading-none px-1 flex-shrink-0"
+                  className="text-gray-400 dark:text-gray-500 text-2xl leading-none px-1 shrink-0"
                   aria-label={t('cancel')}
                 >
                   &times;
@@ -1155,7 +1155,7 @@ export default function BedDetail({
                     )}
                     <div className="text-gray-600 dark:text-gray-300 text-sm truncate">{reservation.user.email}</div>
                   </div>
-                  <span className="flex-shrink-0 text-xs font-semibold text-red-600 dark:text-red-400 whitespace-nowrap">{t('paymentFailed')}</span>
+                  <span className="shrink-0 text-xs font-semibold text-red-600 dark:text-red-400 whitespace-nowrap">{t('paymentFailed')}</span>
                 </div>
                 <button
                   disabled={isPending}
@@ -1185,7 +1185,7 @@ export default function BedDetail({
                 )}
                 <div className="text-gray-600 dark:text-gray-300 text-sm truncate">{reservation.user.email}</div>
               </div>
-              <span className="flex-shrink-0 text-xs font-semibold text-fuchsia-600 dark:text-fuchsia-400 whitespace-nowrap">{reservation.status}</span>
+              <span className="shrink-0 text-xs font-semibold text-fuchsia-600 dark:text-fuchsia-400 whitespace-nowrap">{reservation.status}</span>
             </div>
           </div>
         )}
@@ -1341,7 +1341,7 @@ export default function BedDetail({
                       step="0.01"
                       value={settleAmount}
                       onChange={e => setSettleAmount(e.target.value)}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent dark:bg-gray-800 dark:text-gray-100"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-accent dark:bg-gray-800 dark:text-gray-100"
                       placeholder="0.00"
                       autoFocus
                     />
@@ -1449,7 +1449,7 @@ export default function BedDetail({
                   ? <div className="font-medium text-base truncate">{reservation.internalNotes}</div>
                   : <div className="text-gray-400 dark:text-gray-500 text-sm italic">{t('blocked')}</div>}
               </div>
-              <span className="flex-shrink-0 text-xl leading-none text-gray-400 dark:text-gray-500" aria-label={t('blocked')} title={t('blocked')}>✕</span>
+              <span className="shrink-0 text-xl leading-none text-gray-400 dark:text-gray-500" aria-label={t('blocked')} title={t('blocked')}>✕</span>
             </div>
             <button
               disabled={isPending}
@@ -1506,7 +1506,7 @@ export default function BedDetail({
                   <div className="text-gray-500 dark:text-gray-400 text-sm italic truncate">{reservation.internalNotes}</div>
                 )}
               </div>
-              <span className="flex-shrink-0 text-2xl leading-none text-sky-500 dark:text-sky-400" aria-label={t('comp')} title={t('comp')}>★</span>
+              <span className="shrink-0 text-2xl leading-none text-sky-500 dark:text-sky-400" aria-label={t('comp')} title={t('comp')}>★</span>
             </div>
             <button
               disabled={isPending}

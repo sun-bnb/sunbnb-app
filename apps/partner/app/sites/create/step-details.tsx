@@ -83,7 +83,7 @@ function WizardPriceBreakdown({
         <div className="flex justify-between mb-1">
           <span className="text-gray-500">
             Service fee
-            <span className="ml-1.5 inline-block rounded bg-indigo-50 px-1 text-[10px] font-medium text-indigo-600 align-middle">
+            <span className="ml-1.5 inline-block rounded-sm bg-indigo-50 px-1 text-[10px] font-medium text-indigo-600 align-middle">
               special rate
             </span>
           </span>
@@ -337,14 +337,14 @@ export default function StepDetails({
                             type="time"
                             value={slot.openTime}
                             onChange={e => updateSlot(slot.idx, 'openTime', e.target.value)}
-                            className="border border-gray-300 rounded px-2 py-1 text-sm w-28"
+                            className="border border-gray-300 rounded-sm px-2 py-1 text-sm w-28"
                           />
                           <span className="text-xs text-gray-400">to</span>
                           <input
                             type="time"
                             value={slot.closeTime}
                             onChange={e => updateSlot(slot.idx, 'closeTime', e.target.value)}
-                            className="border border-gray-300 rounded px-2 py-1 text-sm w-28"
+                            className="border border-gray-300 rounded-sm px-2 py-1 text-sm w-28"
                           />
                           {slots.length > 1 && (
                             <IconButton size="small" onClick={() => removeSlot(slot.idx)}>

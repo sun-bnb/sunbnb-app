@@ -62,7 +62,7 @@ export default function ElementForm({ element, onPatch, onDelete, onClose }: Pro
           maxLength={100}
           onChange={(e) => setLabel(e.target.value)}
           onBlur={() => commit({ label: label.trim() || null })}
-          className="border border-gray-300 rounded px-2 py-1 text-sm"
+          className="border border-gray-300 rounded-sm px-2 py-1 text-sm"
         />
       </label>
 
@@ -75,7 +75,7 @@ export default function ElementForm({ element, onPatch, onDelete, onClose }: Pro
             setShape(v)
             commit({ shape: v })
           }}
-          className="border border-gray-300 rounded px-2 py-1 text-sm"
+          className="border border-gray-300 rounded-sm px-2 py-1 text-sm"
         >
           <option value="rect">{t('shapeRect')}</option>
           <option value="ellipse">{t('shapeEllipse')}</option>
@@ -93,7 +93,7 @@ export default function ElementForm({ element, onPatch, onDelete, onClose }: Pro
             value={cornerRadius}
             onChange={(e) => setCornerRadius(parseFloat(e.target.value) || 0)}
             onBlur={() => commit({ cornerRadius })}
-            className="border border-gray-300 rounded px-2 py-1 text-sm"
+            className="border border-gray-300 rounded-sm px-2 py-1 text-sm"
           />
         </label>
       ) : null}
@@ -108,7 +108,7 @@ export default function ElementForm({ element, onPatch, onDelete, onClose }: Pro
             value={width}
             onChange={(e) => setWidth(parseFloat(e.target.value) || 0)}
             onBlur={() => commit({ width })}
-            className="border border-gray-300 rounded px-2 py-1 text-sm"
+            className="border border-gray-300 rounded-sm px-2 py-1 text-sm"
           />
         </label>
         <label className="flex flex-col gap-1">
@@ -120,7 +120,7 @@ export default function ElementForm({ element, onPatch, onDelete, onClose }: Pro
             value={height}
             onChange={(e) => setHeight(parseFloat(e.target.value) || 0)}
             onBlur={() => commit({ height })}
-            className="border border-gray-300 rounded px-2 py-1 text-sm"
+            className="border border-gray-300 rounded-sm px-2 py-1 text-sm"
           />
         </label>
       </div>
@@ -135,7 +135,7 @@ export default function ElementForm({ element, onPatch, onDelete, onClose }: Pro
           value={rotation}
           onChange={(e) => setRotation(parseFloat(e.target.value) || 0)}
           onBlur={() => commit({ rotation })}
-          className="border border-gray-300 rounded px-2 py-1 text-sm"
+          className="border border-gray-300 rounded-sm px-2 py-1 text-sm"
         />
       </label>
 
@@ -147,13 +147,13 @@ export default function ElementForm({ element, onPatch, onDelete, onClose }: Pro
           value={color}
           onChange={(e) => setColor(e.target.value)}
           onBlur={() => commit({ color: color.trim() || null })}
-          className="border border-gray-300 rounded px-2 py-1 text-sm"
+          className="border border-gray-300 rounded-sm px-2 py-1 text-sm"
         />
       </label>
 
       <button
         onClick={onDelete}
-        className="mt-2 px-3 py-2 text-xs text-red-700 border border-red-300 rounded hover:bg-red-50"
+        className="mt-2 px-3 py-2 text-xs text-red-700 border border-red-300 rounded-sm hover:bg-red-50"
       >
         {t('deleteElement')}
       </button>

@@ -76,7 +76,7 @@ export default function AuditView({ initial, initialTargetUserId }: Props) {
           time) are currently in progress.
         </p>
         {initialTargetUserId && (
-          <div className="mt-2 inline-flex items-center gap-2 text-xs text-gray-400 bg-gray-900/50 border border-gray-800 rounded px-2 py-1">
+          <div className="mt-2 inline-flex items-center gap-2 text-xs text-gray-400 bg-gray-900/50 border border-gray-800 rounded-sm px-2 py-1">
             <span>Filtered by target user:</span>
             <code className="text-purple-300">{initialTargetUserId}</code>
             <a
@@ -90,7 +90,7 @@ export default function AuditView({ initial, initialTargetUserId }: Props) {
       </div>
 
       {error && (
-        <div className="rounded border border-red-700 bg-red-950/40 px-3 py-2 text-sm text-red-300">
+        <div className="rounded-sm border border-red-700 bg-red-950/40 px-3 py-2 text-sm text-red-300">
           {error}
         </div>
       )}
@@ -170,7 +170,7 @@ export default function AuditView({ initial, initialTargetUserId }: Props) {
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1 || loading}
-                className="px-2.5 py-1 rounded text-gray-300 border border-gray-700 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                className="px-2.5 py-1 rounded-sm text-gray-300 border border-gray-700 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 Prev
               </button>
@@ -180,7 +180,7 @@ export default function AuditView({ initial, initialTargetUserId }: Props) {
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages || loading}
-                className="px-2.5 py-1 rounded text-gray-300 border border-gray-700 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                className="px-2.5 py-1 rounded-sm text-gray-300 border border-gray-700 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 Next
               </button>

@@ -87,7 +87,7 @@ export default function EquipmentSelection({
                 : 'border-gray-200 bg-white'
             }`}
           >
-            <span className="text-2xl flex-shrink-0">{emoji}</span>
+            <span className="text-2xl shrink-0">{emoji}</span>
             <div className="flex-1 min-w-0">
               <div className="font-medium text-sm text-gray-900 truncate">{item.name}</div>
               <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
@@ -96,7 +96,7 @@ export default function EquipmentSelection({
                 <span>{available} {t('left')}</span>
               </div>
             </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
+            <div className="flex items-center gap-1 shrink-0">
               <IconButton
                 size="small"
                 disabled={qty === 0}

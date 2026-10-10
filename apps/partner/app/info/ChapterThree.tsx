@@ -15,7 +15,7 @@ export default function ChapterThree() {
 
   const frames = [
     <MultimediaFrame layout="horizontal"
-      illustration={<Image alt="Reserve & Pay" src={reservationCapture} className="shadow" />}
+      illustration={<Image alt="Reserve & Pay" src={reservationCapture} className="shadow-sm" />}
       imageSize={30}
       animation="horizontalFlip"
       content={

@@ -76,7 +76,7 @@ export default function CustomizedInputBase() {
             <Image src={logoIcon} alt="logo" width={30} height={30} />
           </IconButton>
           {getEnvLabel() && (
-            <span className="absolute top-0 right-0 translate-x-1/4 -translate-y-1/4 text-[7px] font-extrabold tracking-wide px-1 py-[1px] rounded bg-amber-400 text-amber-900 leading-none whitespace-nowrap shadow-sm pointer-events-none z-10">
+            <span className="absolute top-0 right-0 translate-x-1/4 -translate-y-1/4 text-[7px] font-extrabold tracking-wide px-1 py-px rounded-sm bg-amber-400 text-amber-900 leading-none whitespace-nowrap shadow-xs pointer-events-none z-10">
               {getEnvLabel()}
             </span>
           )}
@@ -111,13 +111,13 @@ export default function CustomizedInputBase() {
             </>
           
           ) : (
-            <div className="flex flex-grow items-center" onClick={
+            <div className="flex grow items-center" onClick={
               () => {
                 dispatch(setSearchState({ searchText: '' }))
                 dispatch(setSelectedPlace({ selectedPlace: null }))
               }
             }>
-              <div className="flex-grow leading-[20px] pl-2">
+              <div className="grow leading-[20px] pl-2">
                 { selectedPlace.placeName }
               </div>
               <IconButton type="button" sx={{ p: '10px' }} aria-label="search" >
@@ -133,7 +133,7 @@ export default function CustomizedInputBase() {
             <div>
               {
                 loggedIn ? (
-                  <MenuButton className="relative flex max-w-xs items-center rounded-full bg-gray-100 text-sm hover:outline-none hover:ring-2 hover:ring-offset-gray-100"
+                  <MenuButton className="relative flex max-w-xs items-center rounded-full bg-gray-100 text-sm hover:outline-hidden hover:ring-2 hover:ring-offset-gray-100"
                     onClick={() => {
                       setMenuOpenCount(c => c + 1)
                       setIsMenuOpen(!isMenuOpen)
@@ -157,7 +157,7 @@ export default function CustomizedInputBase() {
       </div>
       {
         isMenuOpen && (
-          <div className="animate-slide-down-fade border-b border-black/10 shadow-sm">
+          <div className="animate-slide-down-fade border-b border-black/10 shadow-xs">
             <div className="flex flex-wrap justify-center pt-4 pb-2 gap-1.5">
               {userNavigation.map((item, index) => (
                 <div className="max-w-[300px] truncate font-semibold px-3 py-0.5 rounded-full bg-[#363636] text-cream text-sm animate-bubble-up"

@@ -194,3 +194,10 @@ Operations:
 - changed: one pitfall — any MUI-rendering App Router app must wrap its root layout in `AppRouterCacheProvider` (`@mui/material-nextjs/v16-appRouter`), or Emotion's SSR styles render inline and every page fails hydration under Next 16.
 - reason: gate criterion 4 (hard-earned gotcha — admin, partner and user each broke on it during the Next 16 upgrade, track 029). The rest of that upgrade (dep bumps, async request APIs, proxy rename) is a dep bump per the NO list; the conventions an agent must follow went into the root CLAUDE.md Cross-Cutting Patterns instead.
 - by: claude
+
+## 2026-10-10 — Tailwind 4: design-system sources + cascade-layer pitfalls
+
+- mode: patch (subsystems/design-system.md — sources, token locations, shared-package rule, invariant 4, Common pitfalls)
+- changed: token/`content` references moved from `tailwind.config.js` to `globals.css` `@theme` / `@source`; one pitfall on Tailwind 4 + MUI cascade layers (enableCssLayer + layer-order GlobalStyles), never importing pre-compiled Tailwind CSS from a package, and `@theme inline` for next/font variables.
+- reason: gate criteria 3 + 4 — the config contract moved (every page citing `tailwind.config.js` was now wrong) and three hard-earned gotchas each blanked real UI during the migration (user app MUI unstyled, TextField's v3 output.css overriding all utilities, Geist falling back to the system font).
+- by: claude

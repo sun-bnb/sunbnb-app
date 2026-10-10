@@ -54,19 +54,19 @@ export default function ChapterOne({
             animate={state}>
             <div className="w-full flex justify-center items-center">
               <div className="w-[60%]">
-                <motion.div className="transform rotate-[6deg] border border-[2px] border-black"
+                <motion.div className="transform rotate-6 border border-2 border-black"
                   variants={chapter1Frames['frame0']!['CheckInImage1']}
                   initial="frame0"
                   animate={state}>
                   <Image src={checkInBeach} alt="Self-service check-in" width={220} height={160} />
                 </motion.div>
-                <motion.div className="transform rotate-[-2deg] border border-[2px] border-black"
+                <motion.div className="transform -rotate-2 border border-2 border-black"
                   variants={chapter1Frames['frame0']!['CheckInImage2']}
                   initial="frame0"
                   animate={state}>
                   <Image src={checkInVenue} alt="Self-service check-in" width={220} height={160} />
                 </motion.div>
-                <motion.div className="transform rotate-[4deg] border border-[2px] border-black"
+                <motion.div className="transform rotate-[4deg] border border-2 border-black"
                   variants={chapter1Frames['frame0']!['CheckInImage3']}
                   initial="frame0"
                   animate={state}>

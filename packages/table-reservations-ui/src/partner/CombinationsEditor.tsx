@@ -4,9 +4,9 @@ import { useState } from 'react'
 import type { TableCombinationRecord } from '@repo/table-reservations-core'
 
 const INPUT =
-  'w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900'
+  'w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-gray-900'
 const LABEL = 'block text-[11px] font-medium text-gray-500 mb-1'
-const CARD = 'rounded-xl border border-gray-200 bg-white p-5 shadow-sm'
+const CARD = 'rounded-xl border border-gray-200 bg-white p-5 shadow-xs'
 const HEADING = 'text-sm font-medium text-gray-700'
 
 export interface CombinableTableInfo {
@@ -270,7 +270,7 @@ export function CombinationsEditor({
 
       {/* Inline create / edit form */}
       {draft && (
-        <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4 shadow-xs">
           {/* Table picker */}
           <div className="mb-3">
             <span className={LABEL}>{labels.tablesHeading}</span>

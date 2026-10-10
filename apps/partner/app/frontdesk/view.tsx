@@ -427,7 +427,7 @@ function BoardCard({ item, expanded, onToggle }: {
               </div>
             </div>
 
-            <div className="flex flex-col items-end gap-1.5 flex-shrink-0 pt-0.5">
+            <div className="flex flex-col items-end gap-1.5 shrink-0 pt-0.5">
               <div className="flex items-center gap-1">
                 <Chip
                   label={t(opStatusKey(item.operationalStatus) as any)}

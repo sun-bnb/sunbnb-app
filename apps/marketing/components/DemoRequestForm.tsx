@@ -67,7 +67,7 @@ export default function DemoRequestForm({
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate className={bare ? 'relative space-y-4' : 'card space-y-4 p-5 shadow-sm sm:p-6'}>
+    <form onSubmit={onSubmit} noValidate className={bare ? 'relative space-y-4' : 'card space-y-4 p-5 shadow-xs sm:p-6'}>
       {/* Bare = embedded in a mission sheet that already says what this is. */}
       {!bare && (
         <div>
@@ -77,7 +77,7 @@ export default function DemoRequestForm({
       )}
 
       {/* Honeypot: invisible to people (and to assistive tech), irresistible to form-filling bots. */}
-      <div aria-hidden="true" className="absolute -left-[9999px] h-px w-px overflow-hidden">
+      <div aria-hidden="true" className="absolute left-[-9999px] h-px w-px overflow-hidden">
         <label>
           Website
           <input name={HONEYPOT_FIELD} tabIndex={-1} autoComplete="off" />
@@ -109,7 +109,7 @@ export default function DemoRequestForm({
         <textarea id={ids.message} name="message" rows={3} maxLength={2000} className="input" />
       </div>
       <div className="flex items-start gap-2">
-        <input id={ids.consent} name="consent" type="checkbox" className="mt-0.5 h-4 w-4 rounded border-gray-300" />
+        <input id={ids.consent} name="consent" type="checkbox" className="mt-0.5 h-4 w-4 rounded-sm border-gray-300" />
         <label htmlFor={ids.consent} className="text-xs text-gray-600">
           {
             // next-intl's rich-text types resolve the hoisted @types/react 19; this app is on 18.

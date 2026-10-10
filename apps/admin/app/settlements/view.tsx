@@ -576,7 +576,7 @@ export default function SettlementsView({
 
               {/* Payment info (when paid) */}
               {s.status === 'PAID' && (
-                <div className="text-xs text-green-400 bg-green-400/5 border border-green-500/20 rounded px-2 py-1.5 mb-3">
+                <div className="text-xs text-green-400 bg-green-400/5 border border-green-500/20 rounded-sm px-2 py-1.5 mb-3">
                   Paid {s.paidAt ? fmtDate(s.paidAt) : ''} · Ref: {s.bankReference}
                   {s.notes && <span className="text-green-500 block mt-0.5">{s.notes}</span>}
                 </div>
@@ -697,7 +697,7 @@ export default function SettlementsView({
                 placeholder="Any additional notes about this transfer"
               />
               {actionTarget?.partnerBankAccount && (
-                <div className="text-xs text-gray-400 bg-gray-800 rounded px-2 py-1.5">
+                <div className="text-xs text-gray-400 bg-gray-800 rounded-sm px-2 py-1.5">
                   Transfer to IBAN: <strong className="text-gray-200">{actionTarget.partnerBankAccount}</strong>
                 </div>
               )}

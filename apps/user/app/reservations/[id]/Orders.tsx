@@ -124,7 +124,7 @@ export default function Orders({ orders, reservationId }: { orders: OrderData[],
       <div className="px-5 pt-2 pb-6">
         <button
           onClick={() => setSelectedId(null)}
-          className="-ml-1 mb-3 inline-flex items-center gap-1 rounded px-1 text-sm font-medium text-brand-ink/70 hover:text-brand-ink"
+          className="-ml-1 mb-3 inline-flex items-center gap-1 rounded-sm px-1 text-sm font-medium text-brand-ink/70 hover:text-brand-ink"
         >
           <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
             <path fillRule="evenodd" d="M12.8 4.2a1 1 0 0 1 0 1.4L8.4 10l4.4 4.4a1 1 0 0 1-1.4 1.4l-5.1-5.1a1 1 0 0 1 0-1.4l5.1-5.1a1 1 0 0 1 1.4 0Z" clipRule="evenodd" />
@@ -141,7 +141,7 @@ export default function Orders({ orders, reservationId }: { orders: OrderData[],
         </div>
 
         <div className="mt-4 rounded-2xl bg-white ring-1 ring-brand-ink/[0.07]">
-          <ul className="divide-y divide-brand-ink/[0.06] px-4">
+          <ul className="divide-y divide-brand-ink/6 px-4">
             {lines.map(l => (
               <li key={l.key} className="flex items-baseline justify-between gap-3 py-3 text-sm">
                 <span className="flex min-w-0 items-baseline gap-2.5">
@@ -152,7 +152,7 @@ export default function Orders({ orders, reservationId }: { orders: OrderData[],
               </li>
             ))}
           </ul>
-          <div className="flex items-baseline justify-between border-t border-brand-ink/[0.1] px-4 py-3">
+          <div className="flex items-baseline justify-between border-t border-brand-ink/10 px-4 py-3">
             <span className="text-sm font-semibold text-brand-ink">{t('Total')}</span>
             <span className="text-right">
               <span className="block text-base font-semibold text-brand-ink tabular-nums">{fmt(total)}</span>
@@ -215,7 +215,7 @@ export default function Orders({ orders, reservationId }: { orders: OrderData[],
                     </p>
                   </div>
                   <span className="text-sm font-semibold text-brand-ink tabular-nums">{fmt(o.totalPrice)}</span>
-                  <svg className="h-4 w-4 flex-shrink-0 text-brand-ink/40" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <svg className="h-4 w-4 shrink-0 text-brand-ink/40" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                     <path fillRule="evenodd" d="M7.2 15.8a1 1 0 0 1 0-1.4l4.4-4.4-4.4-4.4a1 1 0 1 1 1.4-1.4l5.1 5.1a1 1 0 0 1 0 1.4l-5.1 5.1a1 1 0 0 1-1.4 0Z" clipRule="evenodd" />
                   </svg>
                 </button>

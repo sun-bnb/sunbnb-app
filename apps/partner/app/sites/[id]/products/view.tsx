@@ -192,7 +192,7 @@ export default function ProductsView() {
             <div className="flex gap-4">
               {/* Image upload */}
               <div
-                className="w-20 h-20 rounded-lg bg-gray-100 flex-shrink-0 flex items-center justify-center overflow-hidden cursor-pointer border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors"
+                className="w-20 h-20 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center overflow-hidden cursor-pointer border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors"
                 onClick={() => fileRef.current?.click()}
               >
                 {previewUrl ? (

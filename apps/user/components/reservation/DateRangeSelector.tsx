@@ -151,7 +151,7 @@ export default function DateRangeSelector({
   return (
     <div className="w-full">
       <div className="relative mt-2">
-        <span className="absolute top-1.5 left-1.5 bg-white px-1.5 text-xs text-gray-400 border border-gray-300 rounded z-10">
+        <span className="absolute top-1.5 left-1.5 bg-white px-1.5 text-xs text-gray-400 border border-gray-300 rounded-sm z-10">
           {label}
         </span>
         <button
@@ -175,7 +175,7 @@ export default function DateRangeSelector({
             ${disabled
               ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
               : 'bg-white text-gray-900 border-gray-300 hover:border-gray-900 cursor-pointer'}
-            focus:outline-none
+            focus:outline-hidden
           `}
         >
           <span className={`pointer-events-none ${from ? 'text-gray-900' : 'text-gray-500'}`}>

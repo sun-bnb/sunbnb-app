@@ -34,7 +34,7 @@ function RestaurantCard({ site, t }: { site: SiteProps; t: ReturnType<typeof use
       <div className="mx-4 mt-3">
         <a
           href={`/restaurants/${site.restaurantId}`}
-          className="flex items-center justify-between px-4 py-3 bg-white rounded-xl border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all text-sm font-medium text-gray-900"
+          className="flex items-center justify-between px-4 py-3 bg-white rounded-xl border border-gray-200 hover:border-gray-300 hover:shadow-xs transition-all text-sm font-medium text-gray-900"
         >
           <span className="flex items-center gap-2">
             <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -70,7 +70,7 @@ function RestaurantCard({ site, t }: { site: SiteProps; t: ReturnType<typeof use
               setCreating(false)
             }
           }}
-          className="ml-3 flex-shrink-0 px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
+          className="ml-3 shrink-0 px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
         >
           {creating ? t('restaurantCreating') : t('restaurantAdd')}
         </button>

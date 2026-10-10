@@ -257,7 +257,7 @@ export default function BrandView() {
   )
 
   const previewLink = (
-    <div className="flex items-center gap-2 px-4 py-3 bg-sky-50 border border-sky-200 rounded">
+    <div className="flex items-center gap-2 px-4 py-3 bg-sky-50 border border-sky-200 rounded-sm">
       <LanguageIcon fontSize="small" className="text-sky-600" />
       <code className="text-sm text-sky-800 flex-1 truncate">{bookingUrl}</code>
       <Button
@@ -325,7 +325,7 @@ export default function BrandView() {
       </div>
 
       {/* Preview link */}
-      <div className="flex items-center gap-2 px-4 py-3 bg-sky-50 border border-sky-200 rounded mb-6">
+      <div className="flex items-center gap-2 px-4 py-3 bg-sky-50 border border-sky-200 rounded-sm mb-6">
         <LanguageIcon fontSize="small" className="text-sky-600" />
         <code className="text-sm text-sky-800 flex-1 truncate">{bookingUrl}</code>
         <Button
@@ -401,7 +401,7 @@ export default function BrandView() {
                     type="color"
                     value={bgColor}
                     onChange={(e) => setBgColor(e.target.value)}
-                    className="w-10 h-10 rounded border border-gray-300 cursor-pointer"
+                    className="w-10 h-10 rounded-sm border border-gray-300 cursor-pointer"
                   />
                   <span className="text-sm text-gray-600 font-mono">{bgColor}</span>
                 </div>
@@ -413,7 +413,7 @@ export default function BrandView() {
                     type="color"
                     value={fgColor}
                     onChange={(e) => setFgColor(e.target.value)}
-                    className="w-10 h-10 rounded border border-gray-300 cursor-pointer"
+                    className="w-10 h-10 rounded-sm border border-gray-300 cursor-pointer"
                   />
                   <span className="text-sm text-gray-600 font-mono">{fgColor}</span>
                 </div>
@@ -427,7 +427,7 @@ export default function BrandView() {
         {/* Live preview */}
         <section>
           <h3 className="font-medium text-gray-700 mb-4">Preview</h3>
-          <div className="rounded-lg border border-gray-200 overflow-hidden shadow-sm mx-auto" style={{ maxWidth: 420 }}>
+          <div className="rounded-lg border border-gray-200 overflow-hidden shadow-xs mx-auto" style={{ maxWidth: 420 }}>
             {/* Hero image with gradient + brand name */}
             <div className="relative">
               {site.image ? (
@@ -435,7 +435,7 @@ export default function BrandView() {
               ) : (
                 <div className="w-full h-[140px] bg-gray-300" />
               )}
-              <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/40 to-transparent" style={{ height: '60%' }} />
+              <div className="absolute inset-0 bg-linear-to-b from-black/80 via-black/40 to-transparent" style={{ height: '60%' }} />
               <div className="absolute top-3 left-4 right-4">
                 <div className="text-white font-bold text-base drop-shadow-lg">{brandName || 'Your Beach'}</div>
                 {tagline && <div className="text-white/80 text-xs mt-0.5 drop-shadow-md">{tagline}</div>}
@@ -501,10 +501,10 @@ export default function BrandView() {
               })()}
               {/* Date range field mockup */}
               <div className="relative">
-                <div className="rounded border px-3 py-2.5 flex items-center bg-white" style={{ borderColor: `${fgColor}40` }}>
+                <div className="rounded-sm border px-3 py-2.5 flex items-center bg-white" style={{ borderColor: `${fgColor}40` }}>
                   <div className="flex-1 text-center text-xs text-gray-500">{dayjs().format('YYYY-MM-DD')} &ndash; {dayjs().add(1, 'day').format('YYYY-MM-DD')}</div>
                 </div>
-                <div className="absolute -top-2 left-2 px-1.5 text-[9px] rounded bg-white" style={{ color: `${fgColor}80`, border: `1px solid ${fgColor}30` }}>
+                <div className="absolute -top-2 left-2 px-1.5 text-[9px] rounded-sm bg-white" style={{ color: `${fgColor}80`, border: `1px solid ${fgColor}30` }}>
                   From - To
                 </div>
               </div>

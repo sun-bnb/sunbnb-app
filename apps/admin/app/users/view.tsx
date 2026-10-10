@@ -83,7 +83,7 @@ function AppRoleIcons({ user, loadingApp, disabled, onImpersonate }: AppRoleIcon
   const showPartner = role === 'partner' || role === 'both'
   const showConsumer = role === 'user' || role === 'both'
   const baseBtn =
-    'inline-flex items-center justify-center w-7 h-7 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-800/60 cursor-pointer'
+    'inline-flex items-center justify-center w-7 h-7 rounded-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-800/60 cursor-pointer'
 
   return (
     <span className="inline-flex items-center justify-center gap-1">
@@ -298,7 +298,7 @@ export default function UsersView({ initialUsers }: { initialUsers: AdminUser[] 
             value={email}
             onChange={(e) => { setEmail(e.target.value); setError(null) }}
             placeholder="Enter email address"
-            className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+            className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-hidden focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
           />
           <button
             type="submit"
@@ -404,7 +404,7 @@ export default function UsersView({ initialUsers }: { initialUsers: AdminUser[] 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by email or name (min 2 characters)"
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg pl-10 pr-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg pl-10 pr-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-hidden focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
           />
           <div className="absolute left-3 top-1/2 -translate-y-1/2">
             {searching ? (
@@ -527,7 +527,7 @@ export default function UsersView({ initialUsers }: { initialUsers: AdminUser[] 
                   <button
                     onClick={() => setListPage((p) => Math.max(1, p - 1))}
                     disabled={listPage <= 1 || listLoading}
-                    className="px-2.5 py-1 rounded text-gray-300 border border-gray-700 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="px-2.5 py-1 rounded-sm text-gray-300 border border-gray-700 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     Prev
                   </button>
@@ -537,7 +537,7 @@ export default function UsersView({ initialUsers }: { initialUsers: AdminUser[] 
                   <button
                     onClick={() => setListPage((p) => Math.min(totalPages, p + 1))}
                     disabled={listPage >= totalPages || listLoading}
-                    className="px-2.5 py-1 rounded text-gray-300 border border-gray-700 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="px-2.5 py-1 rounded-sm text-gray-300 border border-gray-700 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     Next
                   </button>
@@ -644,10 +644,10 @@ export default function UsersView({ initialUsers }: { initialUsers: AdminUser[] 
 
       {/* ── Delete Confirmation Modal ──────────────────────── */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
           <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl max-w-md w-full mx-4 p-6">
             <div className="flex items-center gap-3 mb-4">
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-900/50 flex items-center justify-center">
+              <div className="shrink-0 w-10 h-10 rounded-full bg-red-900/50 flex items-center justify-center">
                 <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
                 </svg>

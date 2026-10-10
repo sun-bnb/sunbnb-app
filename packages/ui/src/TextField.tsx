@@ -1,6 +1,5 @@
 'use client'
 
-import './output.css'
 
 interface TextFieldProps {
   label?: string
@@ -19,7 +18,7 @@ export const TextField = ({ label, id, name, placeholder, type, value, onChange 
       <div className="w-full">
         <input name={name} type={type || 'text'} defaultValue={value} onChange={onChange}
           id={id}
-          className="rounded w-full py-2 px-3 text-gray-700 border focus:outline-none focus:ring-0 focus:border-black"
+          className="rounded-sm w-full py-2 px-3 text-gray-700 border focus:outline-hidden focus:ring-0 focus:border-black"
           placeholder={placeholder} />
       </div>  
     </div>

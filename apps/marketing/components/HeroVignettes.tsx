@@ -47,7 +47,7 @@ export default function HeroVignettes({
   return (
     <div className="pointer-events-none h-full w-full overflow-hidden" aria-hidden>
       <div
-        className={`flex h-full ${reduced || jump ? '' : 'transition-transform duration-[900ms] ease-[cubic-bezier(.22,.8,.24,1)]'}`}
+        className={`flex h-full ${reduced || jump ? '' : 'transition-transform duration-900 ease-[cubic-bezier(.22,.8,.24,1)]'}`}
         style={{ transform: `translateX(-${index * 100}%)` }}
       >
         {ORDER.map((m) => (
@@ -291,7 +291,7 @@ export function RentScene({ active }: { active: boolean }) {
         {boards.map((c, i) => (
           <div
             key={c}
-            className={`w-[22px] rounded-full border border-black/20 shadow transition-all duration-700 ${active && i === out ? '-translate-y-24 opacity-0' : 'opacity-100'}`}
+            className={`w-[22px] rounded-full border border-black/20 shadow-sm transition-all duration-700 ${active && i === out ? '-translate-y-24 opacity-0' : 'opacity-100'}`}
             style={{ background: c, height: 150 + (i % 2) * 22 }}
           />
         ))}
@@ -336,8 +336,8 @@ export function CheckinScene({ active }: { active: boolean }) {
         })}
       </div>
       <div className="mt-2.5 flex gap-3 text-[10px] text-gray-600">
-        <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-fuchsia-400" />{t('reserved')}</span>
-        <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-red-400" />{t('checkedIn')}</span>
+        <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-xs bg-fuchsia-400" />{t('reserved')}</span>
+        <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-xs bg-red-400" />{t('checkedIn')}</span>
       </div>
     </div>
   )

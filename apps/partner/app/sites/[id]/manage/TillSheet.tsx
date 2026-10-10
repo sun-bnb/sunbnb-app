@@ -118,7 +118,7 @@ export default function TillSheet({
           <h2 className="text-xl font-black text-gray-900 dark:text-gray-100 truncate">
             💶 {t('title', { name: worker.name })}
           </h2>
-          <button onClick={onClose} aria-label={t('close')} className="text-gray-400 dark:text-gray-500 text-4xl leading-none p-3 -mr-2 flex-shrink-0">&times;</button>
+          <button onClick={onClose} aria-label={t('close')} className="text-gray-400 dark:text-gray-500 text-4xl leading-none p-3 -mr-2 shrink-0">&times;</button>
         </div>
 
         {/* Body */}

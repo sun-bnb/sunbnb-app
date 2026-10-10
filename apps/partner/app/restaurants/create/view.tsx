@@ -61,7 +61,7 @@ export default function CreateRestaurantView({ availableSites }: Props) {
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Chiringuito El Sol"
             required
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-gray-900 focus:border-transparent"
           />
         </div>
 
@@ -75,7 +75,7 @@ export default function CreateRestaurantView({ availableSites }: Props) {
               id="linked-site"
               value={siteId}
               onChange={(e) => setSiteId(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent bg-white"
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-gray-900 focus:border-transparent bg-white"
             >
               <option value="">No site link</option>
               {availableSites.map((site) => (

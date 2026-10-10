@@ -190,11 +190,11 @@ export default function CreateRentalModal({
                           </div>
                         </div>
                         {selected ? (
-                          <span className="text-3xl font-black text-green-600 dark:text-green-400 flex-shrink-0 ml-3">
+                          <span className="text-3xl font-black text-green-600 dark:text-green-400 shrink-0 ml-3">
                             {qty}
                           </span>
                         ) : (
-                          <span className="text-2xl text-gray-300 dark:text-gray-500 flex-shrink-0 ml-3">+</span>
+                          <span className="text-2xl text-gray-300 dark:text-gray-500 shrink-0 ml-3">+</span>
                         )}
                       </div>
                     </button>

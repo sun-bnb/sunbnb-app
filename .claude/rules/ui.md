@@ -12,14 +12,14 @@ pulled on demand.
   selects / date pickers / tooltips until an accessible Tailwind replacement exists. Toggles are
   done — use the Tailwind `Toggle` (`@repo/table-reservations-ui`), not MUI `Switch`.
 - **One `accent` token per app** for the primary action (a dark neutral; `accent` + `accent-hover`),
-  defined in that app's `tailwind.config.js`. Rebrand in one place; never hardcode the neutral.
+  defined in that app's `@theme` block (`app/globals.css`). Rebrand in one place; never hardcode the neutral.
 - **Use the component classes / token** (`.btn-*`, `.input`, `.card`, `.badge`, `accent`); raw
   utilities only for genuine one-offs. Don't invent `text-base`, `emerald`-for-status, or a bespoke button.
 - **Status = green / red / amber / blue** via `{ bg-X-50, border-X-200, text-X-600/700 }`. Success
   is **green**, not emerald.
 - **Shared-package components** (`@repo/*`) can't see an app's `.classes` / `accent` — they style
-  with raw utilities matching the language; the consuming app's `tailwind.config.js` `content` must
-  scan the package or its classes get purged.
+  with raw utilities matching the language; the consuming app's `globals.css` must
+  list the package as an `@source` (Tailwind 4 only auto-detects files inside the app) or its classes get purged.
 - **Accessibility is on us** once we leave MUI: `role`, focus management, keyboard (banners
   `role="status"`, toggles `role="switch"`).
 

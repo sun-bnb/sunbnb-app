@@ -25,7 +25,7 @@ export default function ReferenceBrandPage({ site, apiKey, initialAvailableCount
       </div>
 
       <div className="mx-auto max-w-6xl px-4 py-10 lg:flex lg:gap-8">
-        <div className="lg:flex-[3] lg:min-w-0">
+        <div className="lg:flex-3 lg:min-w-0">
           <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Custom brand page</p>
           <h1 className="mt-2 text-4xl font-semibold">{site.name}</h1>
           {site.description && (

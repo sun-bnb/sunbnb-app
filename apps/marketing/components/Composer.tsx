@@ -164,7 +164,7 @@ export default function Composer({
   return (
     <div className="relative">
       {showList && (
-        <ul id={ids.list} role="listbox" className="absolute inset-x-0 bottom-full z-30 mb-2 max-h-[40svh] overflow-auto rounded-2xl border border-[#0e3a4a]/10 bg-white/95 py-2 shadow-2xl backdrop-blur">
+        <ul id={ids.list} role="listbox" className="absolute inset-x-0 bottom-full z-30 mb-2 max-h-[40svh] overflow-auto rounded-2xl border border-[#0e3a4a]/10 bg-white/95 py-2 shadow-2xl backdrop-blur-sm">
           {suggestions.map((s, i) => (
             <li
               key={s.placeId}
@@ -212,7 +212,7 @@ export default function Composer({
           onKeyDown={onKeyDown}
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
-          className="min-w-0 flex-1 bg-transparent py-2 text-base text-[#0e3a4a] placeholder:text-[#0e3a4a]/45 focus:outline-none sm:text-lg"
+          className="min-w-0 flex-1 bg-transparent py-2 text-base text-[#0e3a4a] placeholder:text-[#0e3a4a]/45 focus:outline-hidden sm:text-lg"
         />
         {searching && intent.count !== null && (
           <span className="shrink-0 animate-[pop_160ms_ease-out] rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 ring-1 ring-green-200">

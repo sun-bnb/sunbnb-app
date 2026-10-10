@@ -22,7 +22,7 @@ export interface CanvasDimensionsHeaderProps {
 
 // Raw utilities (shared package — no app `.input`/`accent`), aligned with .claude/rules/ui.md.
 const NUM_INPUT =
-  'w-20 rounded-lg border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900'
+  'w-20 rounded-lg border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:outline-hidden focus:ring-2 focus:ring-gray-900'
 
 /**
  * Inline-debounced width/height inputs for the editor canvas. Sits in the

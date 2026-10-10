@@ -337,7 +337,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
         </div>
 
         {/* Status chips */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           <Chip
             label={t(paymentStatusKey(r.status) as any)}
             size="small"
@@ -594,7 +594,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
               )}
               {r.paymentRef && (
                 <div className="flex justify-between text-sm gap-4 min-w-0">
-                  <span className="text-gray-500 flex-shrink-0">{t('reference')}</span>
+                  <span className="text-gray-500 shrink-0">{t('reference')}</span>
                   <span className="text-gray-600 font-mono text-xs truncate">{r.paymentRef}</span>
                 </div>
               )}

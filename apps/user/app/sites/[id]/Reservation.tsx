@@ -714,7 +714,7 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
             onClick={() => dispatch(setValue({ reservationMode: 'hours' }))}
             className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-all ${
               reservationMode === 'hours'
-                ? 'bg-white text-gray-900 shadow-sm'
+                ? 'bg-white text-gray-900 shadow-xs'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -725,7 +725,7 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
             onClick={() => dispatch(setValue({ reservationMode: 'days' }))}
             className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-all ${
               reservationMode === 'days'
-                ? 'bg-white text-gray-900 shadow-sm'
+                ? 'bg-white text-gray-900 shadow-xs'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -838,7 +838,7 @@ function ViewModeSelector({
         onClick={() => onChange('sunbeds')}
         className={`flex-1 flex items-center justify-center gap-1.5 rounded-md py-2 text-sm font-medium transition-all ${
           mode === 'sunbeds'
-            ? 'bg-white text-gray-900 shadow-sm'
+            ? 'bg-white text-gray-900 shadow-xs'
             : 'text-gray-500 hover:text-gray-700'
         }`}
       >
@@ -850,7 +850,7 @@ function ViewModeSelector({
         onClick={() => onChange('equipment')}
         className={`flex-1 flex items-center justify-center gap-1.5 rounded-md py-2 text-sm font-medium transition-all ${
           mode === 'equipment'
-            ? 'bg-white text-gray-900 shadow-sm'
+            ? 'bg-white text-gray-900 shadow-xs'
             : 'text-gray-500 hover:text-gray-700'
         }`}
       >

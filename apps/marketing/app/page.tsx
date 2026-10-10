@@ -48,7 +48,7 @@ export default async function LandingPage({
     <>
       <TrackOnMount name="landing_view" context={{ angle }} />
       <ReadingTracker />
-      <main className="relative bg-[#fff5e1]">
+      <main className="relative bg-sand">
         <SiteHeader overlay />
         <Experience
           title={title}

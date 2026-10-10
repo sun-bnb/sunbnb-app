@@ -147,9 +147,9 @@ function ErrorBanner({
     <div
       role="status"
       aria-live="assertive"
-      className="fixed top-4 inset-x-4 z-50 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 shadow-sm"
+      className="fixed top-4 inset-x-4 z-50 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 shadow-xs"
     >
-      <svg className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+      <svg className="w-4 h-4 text-red-600 mt-0.5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
         <path fillRule="evenodd" d="M18 10A8 8 0 11 2 10a8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
       </svg>
       <p className="flex-1 text-sm text-red-700">{message}</p>
@@ -167,9 +167,9 @@ function SuccessBanner({ message }: { message: string }) {
     <div
       role="status"
       aria-live="polite"
-      className="fixed top-4 inset-x-4 z-50 flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 shadow-sm"
+      className="fixed top-4 inset-x-4 z-50 flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 shadow-xs"
     >
-      <svg className="w-4 h-4 text-green-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+      <svg className="w-4 h-4 text-green-600 shrink-0" viewBox="0 0 20 20" fill="currentColor">
         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
       </svg>
       <p className="text-sm text-green-700">{message}</p>
@@ -608,9 +608,9 @@ export default function DineView({
         <div
           role="status"
           aria-live="assertive"
-          className="fixed top-4 inset-x-4 z-50 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 shadow-sm"
+          className="fixed top-4 inset-x-4 z-50 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 shadow-xs"
         >
-          <svg className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+          <svg className="w-4 h-4 text-red-600 mt-0.5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M18 10A8 8 0 11 2 10a8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
           </svg>
           <p className="flex-1 text-sm text-red-700">{paymentFailedMsg}</p>
@@ -682,7 +682,7 @@ export default function DineView({
                         return (
                           <div
                             key={product.id}
-                            className="flex items-start gap-3 bg-white rounded-xl p-3 shadow-sm border border-gray-100"
+                            className="flex items-start gap-3 bg-white rounded-xl p-3 shadow-xs border border-gray-100"
                           >
                             {/* Product image */}
                             {product.imageUrl ? (
@@ -691,10 +691,10 @@ export default function DineView({
                                 alt={product.name}
                                 width={64}
                                 height={64}
-                                className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
+                                className="w-16 h-16 rounded-lg object-cover shrink-0"
                               />
                             ) : (
-                              <div className="w-16 h-16 rounded-lg bg-gray-50 flex-shrink-0" />
+                              <div className="w-16 h-16 rounded-lg bg-gray-50 shrink-0" />
                             )}
 
                             {/* Info + controls */}
@@ -768,7 +768,7 @@ export default function DineView({
               {tab.orders.map((order, idx) => (
                 <div
                   key={order.id}
-                  className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden"
+                  className="bg-white rounded-xl border border-gray-100 shadow-xs overflow-hidden"
                 >
                   <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                     <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -785,12 +785,12 @@ export default function DineView({
                     {order.items.map((item) => (
                       <div key={item.id} className="px-4 py-2.5 flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-[11px] font-medium text-gray-600 flex-shrink-0">
+                          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-[11px] font-medium text-gray-600 shrink-0">
                             {item.quantity}
                           </span>
                           <span className="text-sm text-gray-800 truncate">{item.name}</span>
                         </div>
-                        <span className="text-sm font-medium text-gray-900 flex-shrink-0">
+                        <span className="text-sm font-medium text-gray-900 shrink-0">
                           {item.totalPrice.toFixed(2)}&nbsp;€
                         </span>
                       </div>
@@ -806,7 +806,7 @@ export default function DineView({
                   is never shown to (or paid by) the diner; it settles in
                   parallel via applicationFee + the PLATFORM invoice. */}
               {tab.orders.length > 0 && (
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mt-2">
+                <div className="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden mt-2">
                   <div className="divide-y divide-gray-100">
                     <div className="px-4 py-3 flex items-center justify-between bg-gray-50">
                       <span className="text-sm font-semibold text-gray-900">{t('payableTotal')}</span>
@@ -837,7 +837,7 @@ export default function DineView({
 
       {/* ── Fixed cart bar (only when cart has items and ordering is allowed) ── */}
       {totalItems > 0 && !isPendingPayment && uiState.phase === 'ordering' && (
-        <div className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-sm border-t border-gray-100 px-4 py-3 z-20">
+        <div className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-xs border-t border-gray-100 px-4 py-3 z-20">
           <div className="max-w-xl mx-auto">
             <button
               onClick={() => setReviewOpen(true)}
@@ -896,12 +896,12 @@ export default function DineView({
                   <div key={item.product.id} className="py-3 border-b border-gray-100 last:border-0">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
-                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-xs font-medium text-gray-600 flex-shrink-0">
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-xs font-medium text-gray-600 shrink-0">
                           {item.quantity}
                         </span>
                         <span className="text-sm text-gray-800 truncate">{item.product.name}</span>
                       </div>
-                      <span className="text-sm font-medium text-gray-900 flex-shrink-0">
+                      <span className="text-sm font-medium text-gray-900 shrink-0">
                         {(item.product.totalPrice * item.quantity).toFixed(2)}&nbsp;€
                       </span>
                     </div>
@@ -913,7 +913,7 @@ export default function DineView({
                         value={item.notes ?? ''}
                         onChange={(e) => updateItemNotes(item.product.id, e.target.value)}
                         maxLength={200}
-                        className="w-full text-xs text-gray-500 bg-transparent border-b border-gray-100 focus:border-gray-300 outline-none py-1 placeholder:text-gray-300"
+                        className="w-full text-xs text-gray-500 bg-transparent border-b border-gray-100 focus:border-gray-300 outline-hidden py-1 placeholder:text-gray-300"
                       />
                     </div>
                   </div>
@@ -927,7 +927,7 @@ export default function DineView({
                     onChange={(e) => setOrderNotes(e.target.value)}
                     maxLength={500}
                     rows={2}
-                    className="w-full text-xs text-gray-600 bg-gray-50 rounded-lg border border-gray-200 focus:border-gray-300 outline-none p-2 placeholder:text-gray-300 resize-none"
+                    className="w-full text-xs text-gray-600 bg-gray-50 rounded-lg border border-gray-200 focus:border-gray-300 outline-hidden p-2 placeholder:text-gray-300 resize-none"
                   />
                 </div>
               </div>

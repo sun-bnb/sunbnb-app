@@ -113,7 +113,7 @@ export default function DineInQRButton({ consumerAppUrl, tables, label }: Props)
       type="button"
       onClick={handlePrint}
       disabled={busy}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-xs hover:bg-gray-50 disabled:opacity-50"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"

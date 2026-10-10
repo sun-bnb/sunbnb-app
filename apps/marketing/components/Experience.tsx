@@ -575,7 +575,7 @@ export default function Experience({
               <button type="button" className={chipCls} onClick={() => rotate(15)} aria-label={t('rotateRight')}>
                 ↻
               </button>
-              <button type="button" aria-pressed={moving} className={`${chipCls} ${moving ? '!border-[#0e3a4a] !bg-[#0e3a4a] !text-white' : ''}`} onClick={() => setMoving((m) => !m)}>
+              <button type="button" aria-pressed={moving} className={`${chipCls} ${moving ? 'border-[#0e3a4a]! bg-[#0e3a4a]! text-white!' : ''}`} onClick={() => setMoving((m) => !m)}>
                 {t('move')}
               </button>
               <button type="button" className={chipCls} onClick={() => dispatch({ type: 'changeBeach' })}>
@@ -718,7 +718,7 @@ export default function Experience({
   return (
     // Once about a beach, the experience is pinned to the viewport: focusing an input or a long
     // thread can't scroll the page out from under the map.
-    <section ref={stageRef} className={`w-full overflow-hidden ${s.beach ? 'fixed inset-0 z-10 h-[100svh]' : 'relative h-[100svh] min-h-[560px]'}`}>
+    <section ref={stageRef} className={`w-full overflow-hidden ${s.beach ? 'fixed inset-0 z-10 h-svh' : 'relative h-svh min-h-[560px]'}`}>
       <World
         apiKey={apiKey}
         center={s.beach ? { lat: s.beach.lat, lng: s.beach.lng } : null}
@@ -740,7 +740,7 @@ export default function Experience({
       />
       {moving && s.step === 'count' && (
         <div className="pointer-events-none absolute inset-x-0 top-16 z-10 flex justify-center px-4">
-          <p role="status" className="rounded-full bg-[#0e3a4a]/90 px-4 py-2 text-sm text-white shadow">
+          <p role="status" className="rounded-full bg-[#0e3a4a]/90 px-4 py-2 text-sm text-white shadow-sm">
             {t('moveHint')}
           </p>
         </div>
@@ -755,7 +755,7 @@ export default function Experience({
 
       {/* The landing headline floats on the sea until the visit becomes about their beach. */}
       {!s.beach && (
-        <div ref={headRef} className="pointer-events-none absolute inset-x-0 top-0 px-4 pt-[4.25rem] sm:pt-24 [@media(max-height:700px)]:pt-14">
+        <div ref={headRef} className="pointer-events-none absolute inset-x-0 top-0 px-4 pt-17 sm:pt-24 [@media(max-height:700px)]:pt-14">
           <div className="mx-auto max-w-3xl lg:grid lg:max-w-6xl lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-center lg:gap-12">
             <div>
               <HeroSlides
@@ -814,7 +814,7 @@ function OfferPill({ short, full }: { short: string; full: string }) {
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="inline-flex max-w-full items-center gap-2 rounded-full border border-amber-200 bg-amber-50/95 px-3 py-1 text-left text-xs font-medium [@media(max-height:700px)]:whitespace-nowrap text-amber-800 shadow-sm sm:px-3.5 sm:py-1.5 sm:text-sm"
+        className="inline-flex max-w-full items-center gap-2 rounded-full border border-amber-200 bg-amber-50/95 px-3 py-1 text-left text-xs font-medium [@media(max-height:700px)]:whitespace-nowrap text-amber-800 shadow-xs sm:px-3.5 sm:py-1.5 sm:text-sm"
       >
         <span className="min-w-0 truncate">{short}</span>
         <svg className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden>
@@ -822,7 +822,7 @@ function OfferPill({ short, full }: { short: string; full: string }) {
         </svg>
       </button>
       {/* Overlays rather than pushes: the scene is fitted to the headline block. */}
-      {open && <p className="absolute left-0 top-full z-20 mt-2 animate-[pop_160ms_ease-out] rounded-xl border border-amber-200 bg-amber-50/95 px-3.5 py-2.5 text-sm text-amber-800 shadow">{full}</p>}
+      {open && <p className="absolute left-0 top-full z-20 mt-2 animate-[pop_160ms_ease-out] rounded-xl border border-amber-200 bg-amber-50/95 px-3.5 py-2.5 text-sm text-amber-800 shadow-sm">{full}</p>}
     </div>
   )
 }

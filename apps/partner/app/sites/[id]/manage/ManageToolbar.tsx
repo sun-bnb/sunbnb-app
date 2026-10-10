@@ -51,7 +51,7 @@ export default function ManageToolbar({
   // bottom rounding, and there's no top border (their tops tuck behind the card).
   // The wrapper's negative margin + the card's z-index give the "from under" look.
   const tabClass = (active: boolean, isFirst: boolean, isLast: boolean) =>
-    `flex-shrink-0 flex items-center justify-center gap-1 px-3 pt-5 pb-3 min-h-[52px] border-b border-r border-t-0 text-sm font-semibold whitespace-nowrap transition-colors select-none ${
+    `shrink-0 flex items-center justify-center gap-1 px-3 pt-5 pb-3 min-h-[52px] border-b border-r border-t-0 text-sm font-semibold whitespace-nowrap transition-colors select-none ${
       isFirst ? 'border-l rounded-bl-lg ' : ''
     }${isLast ? 'rounded-br-lg ' : ''}${
       active
@@ -63,7 +63,7 @@ export default function ManageToolbar({
     <>
       {/* Header card — zoom control (sticky) */}
       <div
-        className={`flex items-center justify-between gap-3 px-3 py-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm sticky top-0 z-10${showSwitcher ? '' : ' mb-5'}`}
+        className={`flex items-center justify-between gap-3 px-3 py-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xs sticky top-0 z-10${showSwitcher ? '' : ' mb-5'}`}
       >
         {/* Zoom control — always visible (scroll+zoom is the only mode) */}
         <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 font-semibold">
@@ -80,7 +80,7 @@ export default function ManageToolbar({
             onClick={onResetZoom}
             aria-label={t('resetZoom')}
             title={t('resetZoom')}
-            className="flex items-center justify-center px-2 min-h-[36px] text-xs font-semibold border-l border-gray-200 dark:border-gray-700 transition-colors bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 tabular-nums min-w-[3.5rem]"
+            className="flex items-center justify-center px-2 min-h-[36px] text-xs font-semibold border-l border-gray-200 dark:border-gray-700 transition-colors bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 tabular-nums min-w-14"
           >
             {Math.round(zoom * 100)}%
           </button>
@@ -96,7 +96,7 @@ export default function ManageToolbar({
         </div>
 
         {/* View controls — reverse seat order + dark mode */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           {/* Reverse seat order — applies to the active parcel */}
           <button
             onClick={onToggleReversed}
@@ -135,7 +135,7 @@ export default function ManageToolbar({
           <div
             role="tablist"
             aria-label={t('parcel', { n: '' }).trim()}
-            className="flex flex-nowrap items-stretch px-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="flex flex-nowrap items-stretch px-2 overflow-x-auto scrollbar-none [&::-webkit-scrollbar]:hidden"
           >
             {parcelNums.map((n, i) => (
               <button

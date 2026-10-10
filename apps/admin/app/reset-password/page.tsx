@@ -69,7 +69,7 @@ function ResetPasswordContent() {
         </div>
         <h2 className="text-xl font-bold text-white">Password updated</h2>
         <p className="mt-2 text-sm text-gray-400">Your password has been reset successfully.</p>
-        <Link href="/sign-in" className="inline-block mt-6 text-sm font-semibold text-white bg-purple-600 rounded-xl hover:bg-purple-500 px-6 py-2.5 transition-colors shadow-sm">
+        <Link href="/sign-in" className="inline-block mt-6 text-sm font-semibold text-white bg-purple-600 rounded-xl hover:bg-purple-500 px-6 py-2.5 transition-colors shadow-xs">
           Sign in
         </Link>
       </div>
@@ -101,7 +101,7 @@ function ResetPasswordContent() {
             autoComplete="new-password"
             required
             minLength={6}
-            className="w-full px-3.5 py-2.5 text-sm bg-gray-900 border border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-400/30 focus:border-purple-400 transition-all placeholder:text-gray-600 text-gray-200"
+            className="w-full px-3.5 py-2.5 text-sm bg-gray-900 border border-gray-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-purple-400/30 focus:border-purple-400 transition-all placeholder:text-gray-600 text-gray-200"
           />
         </div>
         <div>
@@ -115,13 +115,13 @@ function ResetPasswordContent() {
             autoComplete="new-password"
             required
             minLength={6}
-            className="w-full px-3.5 py-2.5 text-sm bg-gray-900 border border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-400/30 focus:border-purple-400 transition-all placeholder:text-gray-600 text-gray-200"
+            className="w-full px-3.5 py-2.5 text-sm bg-gray-900 border border-gray-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-purple-400/30 focus:border-purple-400 transition-all placeholder:text-gray-600 text-gray-200"
           />
         </div>
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full py-2.5 text-sm font-semibold text-white bg-purple-600 rounded-xl hover:bg-purple-500 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full py-2.5 text-sm font-semibold text-white bg-purple-600 rounded-xl hover:bg-purple-500 transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isLoading ? (
             <span className="inline-flex items-center gap-2">

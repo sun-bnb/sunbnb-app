@@ -111,7 +111,7 @@ export default function ManageView({
     })
   }
 
-  // Extend the body background to cover the area outside the max-w-screen-lg container.
+  // Extend the body background to cover the area outside the max-w-(--breakpoint-lg) container.
   useEffect(() => {
     const prev = document.body.style.backgroundColor
     document.body.style.backgroundColor = isDark ? '#0a0a0a' : ''
@@ -996,7 +996,7 @@ export default function ManageView({
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div
-      className={`flex flex-col h-[calc(100dvh-var(--impersonation-offset,0px))] overflow-hidden px-2 pt-2 mx-auto w-full max-w-screen-lg transition-colors dark:bg-gray-950 dark:text-gray-100 ${isDark ? 'dark' : ''}`}
+      className={`flex flex-col h-[calc(100dvh-var(--impersonation-offset,0px))] overflow-hidden px-2 pt-2 mx-auto w-full max-w-(--breakpoint-lg) transition-colors dark:bg-gray-950 dark:text-gray-100 ${isDark ? 'dark' : ''}`}
     >
       {/* Back link to manage landing — shown only when backHref is provided.
           On the sunbed view, seat stats (O/R/Free/Comp) are right-aligned on
@@ -1032,7 +1032,7 @@ export default function ManageView({
       {/* Header — parcel toolbar (zoom / parcel tabs) in a parcel view;
           a minimal placeholder title in the rentals view. */}
       {showRentals ? (
-        <div className="flex items-center justify-between gap-2 mb-3 px-3 py-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm sticky top-0 z-10">
+        <div className="flex items-center justify-between gap-2 mb-3 px-3 py-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xs sticky top-0 z-10">
           <div className="flex items-center gap-2">
             <span aria-hidden="true" className="text-xl">🏄</span>
             <span className="text-base font-bold text-gray-900 dark:text-gray-100">{t('rentals')}</span>
@@ -1077,7 +1077,7 @@ export default function ManageView({
             <button
               type="button"
               onClick={() => { setMovingRes(null); setMoveError(null); setMoveQueue([]) }}
-              className="flex-shrink-0 px-3 min-h-[36px] rounded-lg border border-blue-300 dark:border-blue-700 active:bg-blue-100 dark:active:bg-blue-900/40 font-semibold"
+              className="shrink-0 px-3 min-h-[36px] rounded-lg border border-blue-300 dark:border-blue-700 active:bg-blue-100 dark:active:bg-blue-900/40 font-semibold"
             >
               {t('moveCancel')}
             </button>
@@ -1348,9 +1348,9 @@ export default function ManageView({
                   </div>
                   {bulkUntil !== '' && (
                     <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800/40 border-2 dark:border-gray-600 rounded-xl px-3 py-2.5">
-                      <span className="text-sm font-medium text-gray-500 dark:text-gray-400 flex-shrink-0">{tb('until')}</span>
-                      <input type="date" value={bulkUntil} min={tomorrow} max={maxUntil} onChange={e => setBulkUntil(e.target.value || tomorrow)} className="flex-1 bg-transparent text-base font-medium outline-none" />
-                      <button type="button" onClick={() => setBulkUntil('')} className="text-gray-400 text-2xl leading-none px-1 flex-shrink-0" aria-label={tb('cancel')}>&times;</button>
+                      <span className="text-sm font-medium text-gray-500 dark:text-gray-400 shrink-0">{tb('until')}</span>
+                      <input type="date" value={bulkUntil} min={tomorrow} max={maxUntil} onChange={e => setBulkUntil(e.target.value || tomorrow)} className="flex-1 bg-transparent text-base font-medium outline-hidden" />
+                      <button type="button" onClick={() => setBulkUntil('')} className="text-gray-400 text-2xl leading-none px-1 shrink-0" aria-label={tb('cancel')}>&times;</button>
                     </div>
                   )}
                 </>

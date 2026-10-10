@@ -24,10 +24,10 @@ function UserBrandingPanel() {
       </div>
 
       <div className="relative">
-        <h1 className="text-4xl xl:text-5xl font-extrabold text-gray-900 leading-tight tracking-tight">
+        <h1 className="text-4xl xl:text-5xl font-extrabold text-gray-900 leading-tight xl:leading-none tracking-tight">
           Your place
           <br />
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-cyan to-cyan-500">
+          <span className="text-transparent bg-clip-text bg-linear-to-r from-brand-cyan to-cyan-500">
             under the sun
           </span>
         </h1>

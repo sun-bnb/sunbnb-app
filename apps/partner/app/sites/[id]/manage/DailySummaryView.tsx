@@ -291,7 +291,7 @@ export default function DailySummaryView({
       <div className="bg-white dark:bg-gray-900 border-b-2 border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center gap-3">
         <Link
           href={backHref}
-          className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors flex-shrink-0"
+          className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors shrink-0"
           aria-label={t('backToMenu')}
         >
           <svg
@@ -398,7 +398,7 @@ export default function DailySummaryView({
               max={today}
               value={dayInput}
               onChange={e => setDayInput(e.target.value)}
-              className="w-full rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 text-sm font-semibold text-gray-900 dark:text-gray-100 focus:outline-none focus:border-accent dark:focus:border-gray-400 transition-colors"
+              className="w-full rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 text-sm font-semibold text-gray-900 dark:text-gray-100 focus:outline-hidden focus:border-accent dark:focus:border-gray-400 transition-colors"
             />
             {!dayInput && (
               <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 mt-1">
@@ -511,7 +511,7 @@ export default function DailySummaryView({
                         </div>
                       )}
                     </div>
-                    <div className={`text-2xl font-black tabular-nums flex-shrink-0 ${
+                    <div className={`text-2xl font-black tabular-nums shrink-0 ${
                       cs.phase === 'closed'
                         ? 'text-green-600 dark:text-green-400'
                         : hasBalance
@@ -541,12 +541,12 @@ export default function DailySummaryView({
                               <div className="flex items-start gap-1.5">
                                 {item.carryOver && (
                                   <span
-                                    className="w-1.5 h-1.5 mt-1.5 rounded-full bg-amber-400 dark:bg-amber-500 flex-shrink-0"
+                                    className="w-1.5 h-1.5 mt-1.5 rounded-full bg-amber-400 dark:bg-amber-500 shrink-0"
                                     aria-hidden="true"
                                     title={t('carryOverTag')}
                                   />
                                 )}
-                                <div className="min-w-0 text-sm font-bold text-gray-800 dark:text-gray-200 break-words">
+                                <div className="min-w-0 text-sm font-bold text-gray-800 dark:text-gray-200 wrap-break-word">
                                   {item.label}
                                 </div>
                               </div>
@@ -566,7 +566,7 @@ export default function DailySummaryView({
                                 )}
                               </div>
                             </div>
-                            <div className="text-sm font-black tabular-nums text-gray-900 dark:text-gray-100 flex-shrink-0">
+                            <div className="text-sm font-black tabular-nums text-gray-900 dark:text-gray-100 shrink-0">
                               {`€${item.amount.toFixed(2)}`}
                             </div>
                           </li>
@@ -654,7 +654,7 @@ export default function DailySummaryView({
                         })}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 flex-shrink-0">
+                    <div className="flex items-center gap-3 shrink-0">
                       <div className="text-2xl font-black tabular-nums text-gray-900 dark:text-gray-100">
                         {`€${shift.total.toFixed(2)}`}
                       </div>
@@ -703,14 +703,14 @@ export default function DailySummaryView({
                                 className="flex items-center justify-between gap-3 px-4 py-2.5"
                               >
                                 <div className="min-w-0 flex-1">
-                                  <div className="text-sm font-bold text-gray-800 dark:text-gray-200 break-words">
+                                  <div className="text-sm font-bold text-gray-800 dark:text-gray-200 wrap-break-word">
                                     {seatLabel}
                                   </div>
                                   <div className="text-xs font-semibold text-gray-400 dark:text-gray-500 mt-0.5">
                                     {timeStr}
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-2 flex-shrink-0">
+                                <div className="flex items-center gap-2 shrink-0">
                                   {/* Cash/card channel badge — status colors: green=cash, blue=card */}
                                   <span
                                     className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border ${

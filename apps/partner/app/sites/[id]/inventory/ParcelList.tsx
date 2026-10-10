@@ -48,7 +48,7 @@ export default function ParcelList({
               flex items-center gap-1.5 px-2.5 py-1 rounded-full cursor-pointer shrink-0
               border transition-all text-xs
               ${allSelected
-                ? 'border-blue-400 bg-blue-50 shadow-sm'
+                ? 'border-blue-400 bg-blue-50 shadow-xs'
                 : 'border-gray-200 bg-gray-50 hover:bg-gray-100 hover:border-gray-300'}
             `}
             onClick={() => onSelectParcel(group)}

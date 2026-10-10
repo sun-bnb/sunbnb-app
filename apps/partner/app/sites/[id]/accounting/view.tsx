@@ -220,7 +220,7 @@ function TrendChartTooltip({
         {channels.map((p) => (
           <div key={p.dataKey} className="flex items-center justify-between gap-3 mb-0.5">
             <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: CHANNEL_COLORS[p.dataKey] ?? '#9ca3af' }} />
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: CHANNEL_COLORS[p.dataKey] ?? '#9ca3af' }} />
               <span className="text-gray-600 capitalize">{p.dataKey}</span>
             </span>
             <span className="font-medium text-gray-900 tabular-nums">{fmt(p.value as number)}</span>
@@ -704,15 +704,15 @@ export default function AccountingView() {
             {trendMetric === 'revenue' && (
               <div className="flex items-center gap-4 mb-3">
                 <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: '#16a34a' }} />
+                  <span className="w-2.5 h-2.5 rounded-xs shrink-0" style={{ backgroundColor: '#16a34a' }} />
                   <span className="text-xs text-gray-500">{t('channelCash')}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: '#2563eb' }} />
+                  <span className="w-2.5 h-2.5 rounded-xs shrink-0" style={{ backgroundColor: '#2563eb' }} />
                   <span className="text-xs text-gray-500">{t('channelQr')}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: '#111827' }} />
+                  <span className="w-2.5 h-2.5 rounded-xs shrink-0" style={{ backgroundColor: '#111827' }} />
                   <span className="text-xs text-gray-500">{t('channelOnline')}</span>
                 </div>
               </div>
@@ -807,7 +807,7 @@ export default function AccountingView() {
       <div className="mb-6 border border-gray-200 rounded-lg bg-white overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-4">
           <h3 className="text-sm font-semibold text-gray-800">{t('employeeCardTitle')}</h3>
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             <label htmlFor="employee-day-picker" className="text-xs text-gray-500 font-medium">
               {t('employeeDayPicker')}
             </label>
@@ -845,7 +845,7 @@ export default function AccountingView() {
                       aria-expanded={isExpanded}
                     >
                       <span className="flex items-center gap-1.5 text-sm text-gray-800 truncate">
-                        <span className="text-gray-400 flex-shrink-0" aria-hidden="true">
+                        <span className="text-gray-400 shrink-0" aria-hidden="true">
                           {isExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                         </span>
                         {shift.name}
@@ -853,7 +853,7 @@ export default function AccountingView() {
                           <span className="ml-2 text-[11px] text-gray-400">{t('inactiveStaff')}</span>
                         )}
                       </span>
-                      <span className="text-sm text-gray-700 tabular-nums whitespace-nowrap flex-shrink-0 ml-3">
+                      <span className="text-sm text-gray-700 tabular-nums whitespace-nowrap shrink-0 ml-3">
                         <span className="font-semibold">€{shift.total.toFixed(2)}</span>
                         <span className="text-gray-400 ml-2">{t('staffSales', { count: shift.count })}</span>
                       </span>
@@ -868,14 +868,14 @@ export default function AccountingView() {
                             className="flex items-center justify-between px-3 py-2"
                           >
                             <div className="flex-1 min-w-0">
-                              <div className="text-xs text-gray-700 break-words">
+                              <div className="text-xs text-gray-700 wrap-break-word">
                                 {item.seats.length > 0 ? item.seats.join(', ') : '—'}
                               </div>
                               <div className="text-[11px] text-gray-400 mt-0.5">
                                 {formatTime(item.at)}
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                            <div className="flex items-center gap-2 shrink-0 ml-3">
                               <span
                                 className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
                                   item.channel === 'cash'
@@ -954,17 +954,17 @@ export default function AccountingView() {
           ) : (
             <div className="mt-2 space-y-1">
               <div className="flex items-center gap-1.5">
-                <EventSeatIcon sx={{ fontSize: 13 }} className="text-gray-400 flex-shrink-0" />
+                <EventSeatIcon sx={{ fontSize: 13 }} className="text-gray-400 shrink-0" />
                 <span className="text-xs text-gray-500 flex-1">{t('sourceSunbeds')}</span>
                 <span className="text-xs font-semibold text-gray-800 tabular-nums">€{monthlySummary.current.sunbeds.revenue.toFixed(2)}</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <BeachAccessIcon sx={{ fontSize: 13 }} className="text-gray-400 flex-shrink-0" />
+                <BeachAccessIcon sx={{ fontSize: 13 }} className="text-gray-400 shrink-0" />
                 <span className="text-xs text-gray-500 flex-1">{t('sourceRentals')}</span>
                 <span className="text-xs font-semibold text-gray-800 tabular-nums">€{monthlySummary.current.rentals.revenue.toFixed(2)}</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <ShoppingCartIcon sx={{ fontSize: 13 }} className="text-gray-400 flex-shrink-0" />
+                <ShoppingCartIcon sx={{ fontSize: 13 }} className="text-gray-400 shrink-0" />
                 <span className="text-xs text-gray-500 flex-1">{t('sourceOrders')}</span>
                 <span className="text-xs font-semibold text-gray-800 tabular-nums">€{monthlySummary.current.orders.revenue.toFixed(2)}</span>
               </div>
@@ -1104,7 +1104,7 @@ export default function AccountingView() {
           <button
             onClick={downloadFiscalCsv}
             disabled={fiscalDownloading || fiscalLoading || !fiscalReport || fiscalReport.count === 0}
-            className="flex-shrink-0 px-3 py-1.5 text-xs font-semibold rounded-md bg-accent text-white hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="shrink-0 px-3 py-1.5 text-xs font-semibold rounded-md bg-accent text-white hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {fiscalDownloading ? '…' : `↓ ${t('downloadCsvRegister')}`}
           </button>
@@ -1175,7 +1175,7 @@ export default function AccountingView() {
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-500">{t('platformCommissionLabel')}</span>
                   {fiscalReport.platformReverseCharge && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
                       {t('reverseChargeChip')}
                     </span>
                   )}

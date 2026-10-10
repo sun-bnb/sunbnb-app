@@ -184,9 +184,9 @@ export default function ReservationConfirmationView({
 
         {/* ── Where the confirmation went ── */}
         {confirmationEmail && (
-          <div className="flex items-center justify-center gap-2 border-t border-brand-ink/[0.06] px-6 py-3.5 text-xs text-brand-ink/70" role="status">
+          <div className="flex items-center justify-center gap-2 border-t border-brand-ink/6 px-6 py-3.5 text-xs text-brand-ink/70" role="status">
             <MailOutlineIcon sx={{ fontSize: 15 }} aria-hidden="true" />
-            <span className="min-w-0 break-words">{t('Confirmation emailed to {email}', { email: confirmationEmail })}</span>
+            <span className="min-w-0 wrap-break-word">{t('Confirmation emailed to {email}', { email: confirmationEmail })}</span>
           </div>
         )}
 
@@ -194,7 +194,7 @@ export default function ReservationConfirmationView({
         {showReceipt && (
           <button
             onClick={() => window.open(authUrl(`/reservations/${reservation.id}/receipt`), '_blank')}
-            className="flex w-full items-center justify-center gap-1.5 border-t border-brand-ink/[0.06] px-6 py-3.5
+            className="flex w-full items-center justify-center gap-1.5 border-t border-brand-ink/6 px-6 py-3.5
                        text-xs font-semibold text-brand-ink hover:bg-cream-light active:bg-cream transition-colors"
           >
             {t('Open receipt')}
@@ -204,7 +204,7 @@ export default function ReservationConfirmationView({
 
         {/* ── Email-me-a-receipt — anonymous viewers only ── */}
         {showReceipt && !session?.user?.id && (
-          <div className="border-t border-brand-ink/[0.06] px-6 py-4">
+          <div className="border-t border-brand-ink/6 px-6 py-4">
             {receiptSent ? (
               <p className="text-center text-xs font-medium text-green-700" role="status">{t('Receipt sent')}</p>
             ) : (
@@ -220,7 +220,7 @@ export default function ReservationConfirmationView({
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder={t('Enter your email')}
-                  className="w-full rounded-lg border border-brand-ink/15 px-3 py-2 text-sm text-brand-ink focus:border-brand-ink/40 focus:outline-none focus:ring-2 focus:ring-brand-ink/10"
+                  className="w-full rounded-lg border border-brand-ink/15 px-3 py-2 text-sm text-brand-ink focus:border-brand-ink/40 focus:outline-hidden focus:ring-2 focus:ring-brand-ink/10"
                 />
                 {receiptError && <p className="text-center text-xs text-red-600" role="status">{receiptError}</p>}
                 <button

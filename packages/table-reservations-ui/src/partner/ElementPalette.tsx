@@ -64,11 +64,11 @@ function Section({
                 e.dataTransfer.setData(SCHEMATIC_DRAG_MIME, type)
                 e.dataTransfer.effectAllowed = 'copy'
               }}
-              className="flex items-center gap-2 rounded border border-gray-200 bg-gray-50 px-2 py-1.5 cursor-grab active:cursor-grabbing hover:border-gray-300"
+              className="flex items-center gap-2 rounded-sm border border-gray-200 bg-gray-50 px-2 py-1.5 cursor-grab active:cursor-grabbing hover:border-gray-300"
             >
               <span
                 className={`inline-block h-4 w-4 border ${
-                  RESTAURANT_ELEMENT_PRESETS[type]?.shape === 'ellipse' ? 'rounded-full' : 'rounded-sm'
+                  RESTAURANT_ELEMENT_PRESETS[type]?.shape === 'ellipse' ? 'rounded-full' : 'rounded-xs'
                 }`}
                 style={{ backgroundColor: visual?.fill ?? '#e5e7eb', borderColor: visual?.stroke ?? '#9ca3af' }}
               />

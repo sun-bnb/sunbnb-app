@@ -127,7 +127,7 @@ export default function CustomizedInputBase() {
               <div>
                 {
                   loggedIn ? (
-                    <MenuButton className="relative flex max-w-xs items-center rounded-full bg-gray-100 text-sm hover:outline-none hover:ring-2 hover:ring-offset-gray-100"
+                    <MenuButton className="relative flex max-w-xs items-center rounded-full bg-gray-100 text-sm hover:outline-hidden hover:ring-2 hover:ring-offset-gray-100"
                       onClick={() => setIsMenuOpen(!isMenuOpen)}>
                       <img alt="" src={session?.user?.image!} className="h-8 w-8 rounded-full" />
                     </MenuButton>

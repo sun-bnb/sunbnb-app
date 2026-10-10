@@ -115,7 +115,7 @@ export default function AlcudiaBrandPage({ site, apiKey, initialAvailableCount }
       `}</style>
 
       <div className="mx-auto max-w-[1200px] lg:flex lg:gap-10 lg:px-8">
-        <main className="min-w-0 px-4 pb-4 lg:flex-[3] lg:px-0">
+        <main className="min-w-0 px-4 pb-4 lg:flex-3 lg:px-0">
           {/* ── Dry sand: the hero ─────────────────────────────────────────── */}
           <header className="pb-10 pt-12 lg:pt-16">
             <p className="alc-eyebrow alc-rise" style={{ color: STRAW }}>
@@ -178,7 +178,7 @@ export default function AlcudiaBrandPage({ site, apiKey, initialAvailableCount }
             <button
               type="button"
               onClick={() => dispatch(setValue({ focused: true }))}
-              className="mt-8 w-full rounded-xl px-6 py-4 text-[1.05rem] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 lg:hidden"
+              className="mt-8 w-full rounded-xl px-6 py-4 text-[1.05rem] focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 lg:hidden"
               style={{
                 fontFamily: 'var(--alc-display)',
                 fontWeight: 700,
@@ -320,10 +320,10 @@ export default function AlcudiaBrandPage({ site, apiKey, initialAvailableCount }
               39.83° N · 3.12° E
             </div>
             <nav aria-label="Site" className="alc-prose flex flex-col gap-2">
-              <a href="/s/alcudia/reservations" className="underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style={{ textDecorationColor: `${DEEP_TEXT}55`, outlineColor: STRAW }}>
+              <a href="/s/alcudia/reservations" className="underline underline-offset-4 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2" style={{ textDecorationColor: `${DEEP_TEXT}55`, outlineColor: STRAW }}>
                 My reservations
               </a>
-              <a href="/tos" className="underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style={{ textDecorationColor: `${DEEP_TEXT}55`, outlineColor: STRAW }}>
+              <a href="/tos" className="underline underline-offset-4 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2" style={{ textDecorationColor: `${DEEP_TEXT}55`, outlineColor: STRAW }}>
                 Terms of service
               </a>
             </nav>

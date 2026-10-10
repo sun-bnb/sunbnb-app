@@ -126,7 +126,7 @@ export default function BeachStage({
     <div ref={outer} style={{ height: `${heightVh}vh` }} className="relative">
       <div
         ref={stage}
-        className="lp-stage sticky top-0 h-[100svh] w-full overflow-hidden bg-[#f8efdc]"
+        className="lp-stage sticky top-0 h-svh w-full overflow-hidden bg-[#f8efdc]"
         style={{ ['--p' as string]: 0 }}
         data-beat={beat}
       >

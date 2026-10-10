@@ -89,7 +89,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           </a>
         </div>
         <div className="flex items-center gap-3">
-          <span className={`px-2 py-0.5 rounded border text-xs ${STATUS_STYLES[lead.status] ?? STATUS_STYLES.mockup}`}>
+          <span className={`px-2 py-0.5 rounded-sm border text-xs ${STATUS_STYLES[lead.status] ?? STATUS_STYLES.mockup}`}>
             {statusLabel(lead.status)}
           </span>
           <StatusChanger id={lead.id} current={lead.status} />
@@ -99,7 +99,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
       <div className="grid gap-4 md:grid-cols-2">
         <Card title="Score">
           <div className="flex items-center gap-3 mb-2">
-            <span className={`px-2 py-0.5 rounded border text-sm font-semibold ${scoreStyle(lead.score.score)}`}>
+            <span className={`px-2 py-0.5 rounded-sm border text-sm font-semibold ${scoreStyle(lead.score.score)}`}>
               {lead.score.score}
             </span>
             <span className="text-xs text-gray-500">of 100</span>
@@ -181,7 +181,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           ) : (
             <div className="flex flex-wrap gap-1.5">
               {runs.map((r) => (
-                <span key={r} className="px-2 py-0.5 rounded bg-gray-800 text-gray-300 text-xs">
+                <span key={r} className="px-2 py-0.5 rounded-sm bg-gray-800 text-gray-300 text-xs">
                   {r}
                 </span>
               ))}

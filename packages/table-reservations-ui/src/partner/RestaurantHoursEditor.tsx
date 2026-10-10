@@ -9,7 +9,7 @@ export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 // Raw utility strings — aligned with .claude/rules/ui.md by hand (this shared
 // package can't see the partner app's component classes).
 const TIME_INPUT =
-  'text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-gray-900'
+  'text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-gray-900'
 const BTN =
   'bg-gray-900 text-white px-4 py-2 text-sm font-medium rounded-lg transition-colors hover:bg-gray-700 disabled:opacity-60 disabled:cursor-not-allowed'
 
@@ -88,7 +88,7 @@ export function RestaurantHoursEditor({
   }
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-xs">
       <h3 className="text-sm font-medium text-gray-700 mb-3">{labels.heading}</h3>
       <div className="flex flex-col">
         {rows.map((r, idx) => (

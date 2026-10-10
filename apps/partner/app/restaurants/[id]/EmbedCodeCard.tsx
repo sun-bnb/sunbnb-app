@@ -25,7 +25,7 @@ export function EmbedCodeCard({ restaurantId }: { restaurantId: string }) {
   }
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-xs">
       <h3 className="text-sm font-medium text-gray-700 mb-1">{t('embedHeading')}</h3>
       <p className="text-xs text-gray-500 mb-3">{t('embedHint')}</p>
       <pre className="overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-800">

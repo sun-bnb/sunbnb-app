@@ -112,7 +112,7 @@ export default function ReservationView({ serviceFee, siteType, orderPaymentType
         <TermsES />
       </div>
       <div className="p-2 border-t border-gray-300">
-        <button className="w-full py-2 bg-blue-600 text-white rounded" onClick={() => setDisplayTerms(false)}>
+        <button className="w-full py-2 bg-blue-600 text-white rounded-sm" onClick={() => setDisplayTerms(false)}>
           I Agree
         </button>
       </div>

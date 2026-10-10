@@ -73,7 +73,7 @@ export default function InfoPage() {
   ]
 
   return (
-    <div className="relative w-screen h-[100dvh] overflow-hidden bg-[#fff5e1]">
+    <div className="relative w-screen h-dvh overflow-hidden bg-[#fff5e1]">
       <motion.div
         className="absolute top-0 left-0"
         variants={logoVariants}
@@ -98,7 +98,7 @@ export default function InfoPage() {
 
       <motion.div
         // pinned at absolute bottom-left
-        className="absolute bottom-[20px] left-[0px] h-auto w-full"
+        className="absolute bottom-[20px] left-0 h-auto w-full"
         variants={chaptersContainerVariants}
         initial="hidden"
         animate={chaptersState}

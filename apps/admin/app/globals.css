@@ -1,6 +1,31 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Cascade order: MUI's Emotion styles (wrapped in `@layer mui` by AppRouterCacheProvider
+   enableCssLayer) sit above Tailwind's preflight and below its utilities, so a Tailwind
+   class on an MUI component wins. Unlayered, MUI would beat every v4 utility. */
+@layer theme, base, mui, components, utilities;
+
+@import 'tailwindcss';
+
+/* Tailwind 4 only auto-detects sources inside this app; the shared packages it
+   renders must be listed explicitly (v3 had them in tailwind.config `content`). */
+@source '../../../packages/ui/src';
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
 
 @layer base {
   html {
@@ -9,5 +34,24 @@
   }
   body {
     @apply text-gray-200 bg-gray-950;
+  }
+}
+
+/* Tailwind 4's preflight dropped v3's `cursor: pointer` on buttons; keep v3 behaviour. */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/* Tailwind 4's preflight makes form controls `background-color: transparent`; v3 left the
+   browser default (the `Field` system colour, white in light mode). Inputs without an
+   explicit bg-* utility would otherwise show the page colour through (cream in the user app). */
+@layer base {
+  input:where(:not([type='button'], [type='reset'], [type='submit'], [type='image'], [type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'])),
+  textarea,
+  select {
+    background-color: Field;
   }
 }

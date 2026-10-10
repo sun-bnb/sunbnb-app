@@ -203,7 +203,7 @@ export default function StepContent({
                     : 'border-gray-200 bg-white hover:border-gray-300'
                 }`}
               >
-                <div className={`flex-shrink-0 ${selected ? 'text-blue-600' : 'text-gray-400'}`}>
+                <div className={`shrink-0 ${selected ? 'text-blue-600' : 'text-gray-400'}`}>
                   {service.icon}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -213,7 +213,7 @@ export default function StepContent({
                   <div className="text-xs text-gray-500">{service.description}</div>
                 </div>
                 {selected && (
-                  <CheckCircleOutlineIcon fontSize="small" className="text-blue-500 flex-shrink-0" />
+                  <CheckCircleOutlineIcon fontSize="small" className="text-blue-500 shrink-0" />
                 )}
               </button>
             )

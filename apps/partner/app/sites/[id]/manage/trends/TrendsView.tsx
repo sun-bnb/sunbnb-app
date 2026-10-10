@@ -89,7 +89,7 @@ function TrendChartTooltip({
         {channels.map((p) => (
           <div key={p.dataKey} className="flex items-center justify-between gap-3 mb-0.5">
             <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: CHANNEL_COLORS[p.dataKey] ?? '#9ca3af' }} />
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: CHANNEL_COLORS[p.dataKey] ?? '#9ca3af' }} />
               <span className="text-gray-600 capitalize">{p.dataKey}</span>
             </span>
             <span className="font-medium text-gray-900 tabular-nums">{fmt(p.value as number)}</span>
@@ -307,7 +307,7 @@ export default function TrendsView({
       <div className="bg-white dark:bg-gray-900 border-b-2 border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center gap-3">
         <Link
           href={backHref}
-          className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors flex-shrink-0"
+          className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors shrink-0"
           aria-label={t('backToMenu')}
         >
           <svg
@@ -414,15 +414,15 @@ export default function TrendsView({
                 {trendMetric === 'revenue' && (
                   <div className="flex items-center gap-4 px-1">
                     <div className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: '#16a34a' }} />
+                      <span className="w-2.5 h-2.5 rounded-xs shrink-0" style={{ backgroundColor: '#16a34a' }} />
                       <span className="text-xs text-gray-500 dark:text-gray-400">{t('channelCash')}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: '#2563eb' }} />
+                      <span className="w-2.5 h-2.5 rounded-xs shrink-0" style={{ backgroundColor: '#2563eb' }} />
                       <span className="text-xs text-gray-500 dark:text-gray-400">{t('channelQr')}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: '#111827' }} />
+                      <span className="w-2.5 h-2.5 rounded-xs shrink-0" style={{ backgroundColor: '#111827' }} />
                       <span className="text-xs text-gray-500 dark:text-gray-400">{t('channelOnline')}</span>
                     </div>
                   </div>

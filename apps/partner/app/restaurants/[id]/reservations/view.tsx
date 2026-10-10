@@ -144,7 +144,7 @@ export default function ReservationsView({ restaurantId }: { restaurantId: strin
                           <span className="text-xs text-gray-500">· {w.requestedTime}</span>
                         ) : null}
                         {w.notifiedAt ? (
-                          <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-px text-xs text-blue-600">
+                          <span className="rounded-sm border border-blue-200 bg-blue-50 px-1.5 py-px text-xs text-blue-600">
                             {t('waitlistNotified')}
                           </span>
                         ) : null}

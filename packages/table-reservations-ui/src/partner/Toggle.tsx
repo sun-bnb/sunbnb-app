@@ -32,12 +32,12 @@ export function Toggle({
       aria-label={ariaLabel}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50 ${dims.track} ${
+      className={`relative inline-flex shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-hidden focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50 ${dims.track} ${
         checked ? 'bg-gray-900' : 'bg-gray-200'
       }`}
     >
       <span
-        className={`inline-block transform rounded-full bg-white shadow-sm transition-transform ${dims.thumb} ${
+        className={`inline-block transform rounded-full bg-white shadow-xs transition-transform ${dims.thumb} ${
           checked ? dims.on : dims.off
         }`}
       />

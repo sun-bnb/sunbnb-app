@@ -31,7 +31,7 @@ export default function AccountView({ account, userImage } : { account: AccountP
     return <button 
       disabled={status.pending}
       type="submit"
-      className="w-full text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:outline-none disabled:bg-blue-200 font-medium rounded-xl text-sm px-5 py-3 text-center transition-colors">
+      className="w-full text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:outline-hidden disabled:bg-blue-200 font-medium rounded-xl text-sm px-5 py-3 text-center transition-colors">
         {status.pending ? '...' : t('Save')}
     </button>
   }

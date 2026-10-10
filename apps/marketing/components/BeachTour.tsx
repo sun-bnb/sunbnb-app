@@ -73,11 +73,11 @@ export default function BeachTour({ tags }: { tags: Record<HeroMode, string> }) 
     <section ref={ref} data-track-section="tour" aria-label={t('label')} className="relative" style={{ height: `${STOPS.length * 85}svh` }}>
       {/* dvh, not svh: when the mobile address bar hides on scroll-down the stage grows to the full
           screen and the stop cards (bottom-anchored) move down into the freed space. */}
-      <div className="sticky top-0 h-[100svh] overflow-hidden bg-[#f7ebd1] supports-[height:100dvh]:h-[100dvh]">
+      <div className="sticky top-0 h-svh overflow-hidden bg-[#f7ebd1] supports-[height:100dvh]:h-dvh">
         {/* Everything top-anchored sits in a LARGEST-viewport box (lvh): when the mobile address bar
             hides, the stage grows but this layer — and the canvas inside it — keeps its size, so
             nothing is resized (a canvas resize wipes it: that was the scroll-down flicker). */}
-        <div className="absolute inset-x-0 top-0 h-[100svh] supports-[height:100lvh]:h-[100lvh]">
+        <div className="absolute inset-x-0 top-0 h-svh supports-[height:100lvh]:h-lvh">
           {/* The beach, panned like a camera walking along it (slower than the scenes: depth). */}
           <div className="absolute inset-y-0 left-0 w-[220%]" style={{ transform: `translateX(-${(pos / (STOPS.length - 1)) * 54.5}%)` }}>
             <HeroBeach shore={0.12} band={[0.2, 0.5]} mode="book" tags={tags} />

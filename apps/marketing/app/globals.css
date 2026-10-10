@@ -1,6 +1,70 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@theme {
+  --color-accent: #111827;
+  --color-accent-hover: #374151;
+
+  --color-sand: #fff5e1;
+  --color-sand-light: #fff9ed;
+  --color-sand-dark: #fbe8c4;
+
+}
+
+/* `inline`: the next/font variables are set on <body>, not :root, so these must be
+   inlined into the utilities (resolved on the element). A plain @theme emits them on
+   :root, where var(--font-geist-*) is undefined and text falls back to the system font. */
+@theme inline {
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+/* Semantic component classes — same names and expansions as partner (.claude/rules/ui.md).
+   The landing page uses a larger control size (.input-lg / .btn-primary-lg) for the hero form. */
+
+@utility btn-primary {
+  @apply bg-accent text-white px-4 py-2 text-sm font-medium rounded-lg transition-colors hover:bg-accent-hover disabled:opacity-60 disabled:cursor-not-allowed;
+}
+
+@utility btn-primary-lg {
+  @apply btn-primary px-5 py-3;
+}
+
+@utility btn-ghost {
+  @apply text-sm font-medium text-gray-600 transition-colors hover:text-gray-900;
+}
+
+@utility input {
+  @apply w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-accent;
+}
+
+@utility input-lg {
+  @apply input px-4 py-3;
+}
+
+@utility label {
+  @apply block text-xs font-medium text-gray-700 mb-1.5;
+}
+
+@utility card {
+  @apply bg-white rounded-xl border border-gray-200 p-4;
+}
 
 @layer base {
   html {
@@ -9,32 +73,6 @@
   }
   body {
     @apply text-gray-900 bg-white;
-  }
-}
-
-/* Semantic component classes — same names and expansions as partner (.claude/rules/ui.md).
-   The landing page uses a larger control size (.input-lg / .btn-primary-lg) for the hero form. */
-@layer components {
-  .btn-primary {
-    @apply bg-accent text-white px-4 py-2 text-sm font-medium rounded-lg transition-colors hover:bg-accent-hover disabled:opacity-60 disabled:cursor-not-allowed;
-  }
-  .btn-primary-lg {
-    @apply btn-primary px-5 py-3;
-  }
-  .btn-ghost {
-    @apply text-sm font-medium text-gray-600 transition-colors hover:text-gray-900;
-  }
-  .input {
-    @apply w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent;
-  }
-  .input-lg {
-    @apply input px-4 py-3;
-  }
-  .label {
-    @apply block text-xs font-medium text-gray-700 mb-1.5;
-  }
-  .card {
-    @apply bg-white rounded-xl border border-gray-200 p-4;
   }
 }
 
@@ -65,4 +103,23 @@
 @keyframes device-sway {
   from { transform: rotateX(-13deg) rotateY(-36deg); }
   to { transform: rotateX(-8deg) rotateY(28deg); }
+}
+
+/* Tailwind 4's preflight dropped v3's `cursor: pointer` on buttons; keep v3 behaviour. */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/* Tailwind 4's preflight makes form controls `background-color: transparent`; v3 left the
+   browser default (the `Field` system colour, white in light mode). Inputs without an
+   explicit bg-* utility would otherwise show the page colour through (cream in the user app). */
+@layer base {
+  input:where(:not([type='button'], [type='reset'], [type='submit'], [type='image'], [type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'])),
+  textarea,
+  select {
+    background-color: Field;
+  }
 }

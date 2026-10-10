@@ -136,7 +136,7 @@ export default function DayCloseView({
       <div className="bg-white dark:bg-gray-900 border-b-2 border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center gap-3">
         <Link
           href={backHref}
-          className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors flex-shrink-0"
+          className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors shrink-0"
           aria-label={t('backToMenu')}
         >
           <svg
@@ -225,7 +225,7 @@ export default function DayCloseView({
                           {t('employeeSalesCount', { count: till.count })}
                         </div>
                       </div>
-                      <div className={`text-lg font-black tabular-nums flex-shrink-0 ${
+                      <div className={`text-lg font-black tabular-nums shrink-0 ${
                         till.total > 0
                           ? 'text-gray-900 dark:text-gray-100'
                           : 'text-gray-300 dark:text-gray-600'

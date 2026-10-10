@@ -142,7 +142,7 @@ export default function BookingSurface({
       }
 
       {/* Desktop: sticky sidebar beside the page content */}
-      <div className="hidden lg:block lg:flex-[2] lg:min-w-[360px] lg:max-w-[480px]">
+      <div className="hidden lg:block lg:flex-2 lg:min-w-[360px] lg:max-w-[480px]">
         <div
           className={`lg:sticky lg:top-[80px] px-3 pb-4 ${theme ? '' : 'bg-cream'}`}
           style={theme ? { backgroundColor: background } : undefined}

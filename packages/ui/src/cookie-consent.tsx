@@ -48,7 +48,7 @@ export function CookieConsent({
   }
 
   const card = (
-    <div className="pointer-events-auto bg-white/95 backdrop-blur border border-gray-200 shadow-lg rounded-lg px-4 py-2.5 flex items-center gap-3 max-w-lg text-xs text-gray-600">
+    <div className="pointer-events-auto bg-white/95 backdrop-blur-sm border border-gray-200 shadow-lg rounded-lg px-4 py-2.5 flex items-center gap-3 max-w-lg text-xs text-gray-600">
       <p>
         {hasAnalytics
           ? <>We use essential cookies and analytics to improve the service. <a href={privacyHref} className="underline hover:text-gray-900">Privacy policy</a></>
@@ -86,7 +86,7 @@ export function CookieConsent({
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[9999] p-3 flex justify-center pointer-events-none">
+    <div className="fixed bottom-0 left-0 right-0 z-9999 p-3 flex justify-center pointer-events-none">
       {card}
     </div>
   )

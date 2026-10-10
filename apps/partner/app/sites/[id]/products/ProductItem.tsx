@@ -102,7 +102,7 @@ export default function ProductItem({ product, onUpdated }: ProductItemProps) {
       <div className="flex items-start gap-4 p-4">
         {/* Image */}
         <div
-          className="relative w-16 h-16 rounded-lg bg-gray-100 flex-shrink-0 flex items-center justify-center overflow-hidden cursor-pointer group"
+          className="relative w-16 h-16 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center overflow-hidden cursor-pointer group"
           onClick={() => fileRef.current?.click()}
         >
           {product.imageUrl ? (
@@ -121,7 +121,7 @@ export default function ProductItem({ product, onUpdated }: ProductItemProps) {
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-gray-900 truncate">{product.name}</h3>
             {soldOut && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700">SOLD OUT</span>
+              <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-bold bg-red-100 text-red-700">SOLD OUT</span>
             )}
           </div>
           {product.description && (
@@ -138,7 +138,7 @@ export default function ProductItem({ product, onUpdated }: ProductItemProps) {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-0.5 flex-shrink-0">
+        <div className="flex items-center gap-0.5 shrink-0">
           <Tooltip title={soldOut ? 'Mark available' : 'Mark sold out'}>
             <IconButton size="small" onClick={handleToggleSoldOut}>
               <span className="text-sm">{soldOut ? '✅' : '🚫'}</span>

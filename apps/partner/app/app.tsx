@@ -88,8 +88,8 @@ function PaymentsNotice({
           href={href}
           className={
             tone === 'blue'
-              ? 'flex-shrink-0 text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline'
-              : `flex-shrink-0 text-xs font-semibold text-white ${c.btn} px-3 py-1.5 rounded-lg transition-colors`
+              ? 'shrink-0 text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline'
+              : `shrink-0 text-xs font-semibold text-white ${c.btn} px-3 py-1.5 rounded-lg transition-colors`
           }
         >
           {cta}
@@ -180,7 +180,7 @@ function PaymentsBanner({
       <div className="bg-amber-50 border-b border-amber-200">
         <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-4">
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-400/20 flex items-center justify-center">
+            <span className="shrink-0 w-5 h-5 rounded-full bg-amber-400/20 flex items-center justify-center">
               <svg className="w-3 h-3 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
               </svg>
@@ -192,7 +192,7 @@ function PaymentsBanner({
           </div>
           <Link
             href="/account/mollie"
-            className="flex-shrink-0 text-xs font-semibold text-white bg-amber-500 hover:bg-amber-600 px-3 py-1.5 rounded-lg transition-colors"
+            className="shrink-0 text-xs font-semibold text-white bg-amber-500 hover:bg-amber-600 px-3 py-1.5 rounded-lg transition-colors"
           >
             {t('connectMollie')}
           </Link>
@@ -207,7 +207,7 @@ function PaymentsBanner({
       <div className="bg-orange-50 border-b border-orange-200">
         <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-4">
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-orange-400/20 flex items-center justify-center">
+            <span className="shrink-0 w-5 h-5 rounded-full bg-orange-400/20 flex items-center justify-center">
               <svg className="w-3 h-3 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
               </svg>
@@ -217,7 +217,7 @@ function PaymentsBanner({
               <p className="text-xs text-orange-600 mt-0.5">{reason}</p>
             </div>
           </div>
-          <div className="flex-shrink-0 flex items-center gap-3">
+          <div className="shrink-0 flex items-center gap-3">
             <a
               href="https://my.mollie.com/dashboard"
               target="_blank"
@@ -262,7 +262,7 @@ function PaymentsBanner({
       <div className="bg-amber-50 border-b border-amber-200">
         <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-4">
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-400/20 flex items-center justify-center">
+            <span className="shrink-0 w-5 h-5 rounded-full bg-amber-400/20 flex items-center justify-center">
               <svg className="w-3 h-3 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1.001.43-1.563A6 6 0 1121.75 8.25z" />
               </svg>
@@ -278,7 +278,7 @@ function PaymentsBanner({
               which refreshes the session so this banner clears right away. */}
           <a
             href="/api/mollie/authorize"
-            className="flex-shrink-0 text-xs font-semibold text-white bg-amber-500 hover:bg-amber-600 px-3 py-1.5 rounded-lg transition-colors"
+            className="shrink-0 text-xs font-semibold text-white bg-amber-500 hover:bg-amber-600 px-3 py-1.5 rounded-lg transition-colors"
           >
             {t('updateMolliePermissions')}
           </a>
@@ -293,7 +293,7 @@ function PaymentsBanner({
       <div className="bg-blue-50 border-b border-blue-200">
         <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-4">
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-400/20 flex items-center justify-center">
+            <span className="shrink-0 w-5 h-5 rounded-full bg-blue-400/20 flex items-center justify-center">
               <svg className="w-3 h-3 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
               </svg>
@@ -305,7 +305,7 @@ function PaymentsBanner({
           </div>
           <Link
             href="/account/mollie"
-            className="flex-shrink-0 text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline"
+            className="shrink-0 text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline"
           >
             {t('viewMollieDetails')}
           </Link>

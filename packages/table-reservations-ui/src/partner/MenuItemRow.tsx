@@ -71,17 +71,17 @@ export function MenuItemRow({
         <img
           src={item.imageUrl}
           alt={item.name}
-          className="h-12 w-12 rounded object-cover border border-gray-200"
+          className="h-12 w-12 rounded-sm object-cover border border-gray-200"
         />
       ) : (
-        <div className="h-12 w-12 rounded bg-gray-100 border border-gray-200" />
+        <div className="h-12 w-12 rounded-sm bg-gray-100 border border-gray-200" />
       )}
 
       <div className="flex flex-col min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-900 truncate">{item.name}</span>
           {item.soldOut && (
-            <span className="text-[10px] uppercase tracking-wide text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+            <span className="text-[10px] uppercase tracking-wide text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-sm">
               {labels.soldOutBadge}
             </span>
           )}

@@ -60,7 +60,7 @@ function Site({ site }: { site: SiteProps }) {
     }
           </Link>
         }
-        <div className="font-semibold text-white px-3 py-1 absolute top-2 left-2 bg-black/30 rounded-lg text-sm backdrop-blur-sm">
+        <div className="font-semibold text-white px-3 py-1 absolute top-2 left-2 bg-black/30 rounded-lg text-sm backdrop-blur-xs">
           <Link href={`/sites/${site.id}`} prefetch={true}>{site.name}</Link>
         </div>
       </div>
@@ -246,7 +246,7 @@ function ClusteredMarkers({ sites, selectedSite, onMarkerClick }: {
                 </div>
               </div>
             ) : (
-              <div className="w-[36px] h-[36px] bg-white/90 rounded-full flex justify-center items-center shadow-sm border border-gray-200 hover:shadow-card hover:scale-110 transition-all duration-150 cursor-pointer">
+              <div className="w-[36px] h-[36px] bg-white/90 rounded-full flex justify-center items-center shadow-xs border border-gray-200 hover:shadow-card hover:scale-110 transition-all duration-150 cursor-pointer">
                 <span className="text-2xl leading-none">&#x26F1;</span>
               </div>
             )
@@ -271,7 +271,7 @@ function SiteMap({ sites, geography, apiKey }: { sites: SiteProps[], geography?:
 
   return (
     <div className="px-2 md:px-4 lg:px-6 lg:flex lg:gap-5" key={`${geography?.center.lat}-${geography?.center.lng}-${geography?.bounds?.north}-${geography?.bounds?.south}-${geography?.bounds?.east}-${geography?.bounds?.west}`}>
-      <div className={`w-full mt-3 rounded-xl overflow-hidden shadow-soft transition-all duration-300 ${selectedSite ? 'h-[250px] md:h-[400px] lg:h-[550px]' : 'h-[300px] md:h-[450px] lg:h-[550px]'} ${selectedSite ? 'lg:flex-[3]' : ''}`}>
+      <div className={`w-full mt-3 rounded-xl overflow-hidden shadow-soft transition-all duration-300 ${selectedSite ? 'h-[250px] md:h-[400px] lg:h-[550px]' : 'h-[300px] md:h-[450px] lg:h-[550px]'} ${selectedSite ? 'lg:flex-3' : ''}`}>
         <SafeAPIProvider apiKey={apiKey}>
           <SafeMap mapId={'7a0196a7ba317ea5'}
             defaultZoom={defaultBounds ? undefined : 8}
@@ -293,7 +293,7 @@ function SiteMap({ sites, geography, apiKey }: { sites: SiteProps[], geography?:
       </div>
       {
         selectedSite && (
-          <div className="mt-3 lg:mt-3 lg:flex-[2] lg:max-w-sm animate-in fade-in">
+          <div className="mt-3 lg:mt-3 lg:flex-2 lg:max-w-sm animate-in fade-in">
             <div className="relative">
               <button 
                 onClick={() => setSelectedSite(null)}
@@ -358,12 +358,12 @@ export default function Sites({ sites, geography, apiKey }: {
               )
             }
           </div>
-          <div className="flex bg-white/60 border border-gray-200 rounded-full p-0.5 shadow-sm">
+          <div className="flex bg-white/60 border border-gray-200 rounded-full p-0.5 shadow-xs">
             <button
               onClick={() => setViewMode('map')}
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
                 viewMode === 'map'
-                  ? 'bg-gray-800 text-white shadow-sm'
+                  ? 'bg-gray-800 text-white shadow-xs'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -374,7 +374,7 @@ export default function Sites({ sites, geography, apiKey }: {
               onClick={() => setViewMode('list')}
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
                 viewMode === 'list'
-                  ? 'bg-gray-800 text-white shadow-sm'
+                  ? 'bg-gray-800 text-white shadow-xs'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >

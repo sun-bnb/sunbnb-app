@@ -226,7 +226,7 @@ export function TableLayoutEditor(props: TableLayoutEditorProps) {
   const showPropertiesPanel = !!(propertiesTable || (propertiesElement && !propertiesTable))
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+    <div className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xs">
       <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-2.5">
         <div className="flex items-center gap-2">
           <button
@@ -256,12 +256,12 @@ export function TableLayoutEditor(props: TableLayoutEditorProps) {
         <div className="flex-1 relative bg-gray-100">
           {selectedElement && !selectedTable ? (
             <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2">
-              <div className="flex gap-1 bg-white/95 backdrop-blur border border-gray-200 rounded-md shadow-sm p-1">
+              <div className="flex gap-1 bg-white/95 backdrop-blur-sm border border-gray-200 rounded-md shadow-xs p-1">
                 <button
                   type="button"
                   onClick={() => void bumpElementZ(1)}
                   title={props.labels.bringForward}
-                  className="h-7 px-2 flex items-center text-xs text-gray-700 rounded hover:bg-gray-100 whitespace-nowrap"
+                  className="h-7 px-2 flex items-center text-xs text-gray-700 rounded-sm hover:bg-gray-100 whitespace-nowrap"
                 >
                   ↑ {props.labels.bringForward}
                 </button>
@@ -269,17 +269,17 @@ export function TableLayoutEditor(props: TableLayoutEditorProps) {
                   type="button"
                   onClick={() => void bumpElementZ(-1)}
                   title={props.labels.sendBackward}
-                  className="h-7 px-2 flex items-center text-xs text-gray-700 rounded hover:bg-gray-100 whitespace-nowrap"
+                  className="h-7 px-2 flex items-center text-xs text-gray-700 rounded-sm hover:bg-gray-100 whitespace-nowrap"
                 >
                   ↓ {props.labels.sendBackward}
                 </button>
               </div>
-              <div className="flex gap-1 bg-white/95 backdrop-blur border border-gray-200 rounded-md shadow-sm p-1">
+              <div className="flex gap-1 bg-white/95 backdrop-blur-sm border border-gray-200 rounded-md shadow-xs p-1">
                 <button
                   type="button"
                   onClick={() => setPropertiesOpenElementId(selectedElement.id)}
                   title={props.labels.editElement}
-                  className="w-7 h-7 flex items-center justify-center text-sm text-gray-700 rounded hover:bg-gray-100"
+                  className="w-7 h-7 flex items-center justify-center text-sm text-gray-700 rounded-sm hover:bg-gray-100"
                 >
                   ✎
                 </button>
@@ -294,7 +294,7 @@ export function TableLayoutEditor(props: TableLayoutEditorProps) {
                     })
                   }}
                   title={props.labels.deleteElement}
-                  className="w-7 h-7 flex items-center justify-center text-sm text-red-600 rounded hover:bg-red-50"
+                  className="w-7 h-7 flex items-center justify-center text-sm text-red-600 rounded-sm hover:bg-red-50"
                 >
                   ✕
                 </button>
@@ -314,12 +314,12 @@ export function TableLayoutEditor(props: TableLayoutEditorProps) {
 
           {selectedTable ? (
             <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2">
-              <div className="flex gap-1 bg-white/95 backdrop-blur border border-gray-200 rounded-md shadow-sm p-1">
+              <div className="flex gap-1 bg-white/95 backdrop-blur-sm border border-gray-200 rounded-md shadow-xs p-1">
                 <button
                   type="button"
                   onClick={() => setPropertiesOpenTableId(selectedTable.id)}
                   title={props.labels.editTable}
-                  className="w-7 h-7 flex items-center justify-center text-sm text-gray-700 rounded hover:bg-gray-100"
+                  className="w-7 h-7 flex items-center justify-center text-sm text-gray-700 rounded-sm hover:bg-gray-100"
                 >
                   ✎
                 </button>
@@ -327,7 +327,7 @@ export function TableLayoutEditor(props: TableLayoutEditorProps) {
                   type="button"
                   onClick={() => duplicateAndSelect(selectedTable.id)}
                   title={props.labels.duplicateTable}
-                  className="w-7 h-7 flex items-center justify-center text-sm text-gray-700 rounded hover:bg-gray-100"
+                  className="w-7 h-7 flex items-center justify-center text-sm text-gray-700 rounded-sm hover:bg-gray-100"
                 >
                   ⧉
                 </button>
@@ -342,7 +342,7 @@ export function TableLayoutEditor(props: TableLayoutEditorProps) {
                     })
                   }}
                   title={props.labels.deleteTable}
-                  className="w-7 h-7 flex items-center justify-center text-sm text-red-600 rounded hover:bg-red-50"
+                  className="w-7 h-7 flex items-center justify-center text-sm text-red-600 rounded-sm hover:bg-red-50"
                 >
                   ✕
                 </button>

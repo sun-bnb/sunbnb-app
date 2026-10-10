@@ -100,7 +100,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
                 return (
                   <tr key={l.id} className="border-b border-gray-800 last:border-0 hover:bg-gray-900/40 align-top">
                     <td className="px-3 py-2.5">
-                      <Link href={href} title={reasons} className={`inline-block px-2 py-0.5 rounded border text-xs font-semibold ${scoreStyle(l.score.score)}`}>
+                      <Link href={href} title={reasons} className={`inline-block px-2 py-0.5 rounded-sm border text-xs font-semibold ${scoreStyle(l.score.score)}`}>
                         {l.score.score}
                       </Link>
                     </td>
@@ -117,7 +117,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
                       ) : (
                         <div className="flex flex-wrap gap-1">
                           {runs.map((r) => (
-                            <span key={r} className="px-1.5 py-0.5 rounded bg-gray-800 text-gray-300 text-xs">
+                            <span key={r} className="px-1.5 py-0.5 rounded-sm bg-gray-800 text-gray-300 text-xs">
                               {r}
                             </span>
                           ))}
@@ -125,7 +125,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
                       )}
                     </td>
                     <td className="px-3 py-2.5">
-                      <span className={`inline-block px-2 py-0.5 rounded border text-xs ${STATUS_STYLES[l.status] ?? STATUS_STYLES.mockup}`}>
+                      <span className={`inline-block px-2 py-0.5 rounded-sm border text-xs ${STATUS_STYLES[l.status] ?? STATUS_STYLES.mockup}`}>
                         {statusLabel(l.status)}
                       </span>
                     </td>

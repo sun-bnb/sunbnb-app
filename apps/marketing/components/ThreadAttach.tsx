@@ -20,9 +20,9 @@ const QRCode = QRCodeLib as unknown as FC<{ value: string; size?: number; style?
  * like a bot's inline keyboard, and acts on the world behind it.
  */
 
-export const cardCls = 'rounded-2xl border border-[#0e3a4a]/10 bg-white/95 p-3 shadow-md backdrop-blur'
+export const cardCls = 'rounded-2xl border border-[#0e3a4a]/10 bg-white/95 p-3 shadow-md backdrop-blur-sm'
 export const chipCls =
-  'flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[#0e3a4a]/15 bg-white/95 px-3.5 py-2 text-sm font-medium [@media(max-width:400px)]:px-3 [@media(max-width:400px)]:text-[13px] text-[#0e3a4a] shadow-sm backdrop-blur transition active:scale-95'
+  'flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[#0e3a4a]/15 bg-white/95 px-3.5 py-2 text-sm font-medium [@media(max-width:400px)]:px-3 [@media(max-width:400px)]:text-[13px] text-[#0e3a4a] shadow-xs backdrop-blur-sm transition active:scale-95'
 const bigBtn =
   'w-full rounded-xl bg-[#0e3a4a] px-5 py-3 text-base font-semibold text-white shadow-[0_4px_0_#06222c] transition active:translate-y-[3px] active:shadow-[0_1px_0_#06222c] disabled:opacity-50 disabled:shadow-none'
 
@@ -60,12 +60,12 @@ export function RunsChips({ onDone }: { onDone: (runs: Run[], echo: string) => v
   return (
     <Chips>
       {options.map((r) => (
-        <button key={r} type="button" aria-pressed={picked.includes(r)} onClick={() => toggle(r)} className={`${chipCls} ${picked.includes(r) ? '!border-[#0e3a4a] !bg-[#0e3a4a] !text-white' : ''}`}>
+        <button key={r} type="button" aria-pressed={picked.includes(r)} onClick={() => toggle(r)} className={`${chipCls} ${picked.includes(r) ? 'border-[#0e3a4a]! bg-[#0e3a4a]! text-white!' : ''}`}>
           {t(`run_${r}`)}
         </button>
       ))}
       {picked.length ? (
-        <button type="button" onClick={() => onDone(picked, picked.map((r) => t(`run_${r}`)).join(' + '))} className={`${chipCls} !border-green-300 !bg-green-50 !text-green-800`}>
+        <button type="button" onClick={() => onDone(picked, picked.map((r) => t(`run_${r}`)).join(' + '))} className={`${chipCls} border-green-300! bg-green-50! text-green-800!`}>
           {t('runsDone')}
         </button>
       ) : (
@@ -156,7 +156,7 @@ export function BedCard({ label, rowText, price, onPrice, onReserve }: { label: 
     onPrice(Math.max(1, Math.min(500, v)))
   }
   return (
-    <div className={`${cardCls} !border-gray-200`}>
+    <div className={`${cardCls} border-gray-200!`}>
       <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-gray-300" aria-hidden />
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -189,7 +189,7 @@ export function BedCard({ label, rowText, price, onPrice, onReserve }: { label: 
 export function PayCard({ label, price, paying, onPay }: { label: string; price: number; paying: boolean; onPay: () => void }) {
   const t = useTranslations('Thread')
   return (
-    <div className={`${cardCls} !border-gray-200`}>
+    <div className={`${cardCls} border-gray-200!`}>
       <div className="flex justify-between border-b border-gray-100 pb-2 text-sm">
         <span className="text-gray-600">
           {t('bedTitle', { label })} · {t('today')}
@@ -213,7 +213,7 @@ export function PassCard({ label, price, onNext }: { label: string; price: numbe
   const t = useTranslations('Thread')
   return (
     <div className="space-y-2">
-      <div className={`${cardCls} flex items-center gap-3 !border-gray-200`}>
+      <div className={`${cardCls} flex items-center gap-3 border-gray-200!`}>
         <div className="w-24 shrink-0 rounded-lg border border-gray-200 bg-white p-1.5">
           <QRCode value={`SUNBNB-DEMO:${label}`} size={88} style={{ width: '100%', height: 'auto' }} />
         </div>
@@ -238,7 +238,7 @@ export function StaffCard({ layout, guestBed, checkedIn, onCheckIn }: { layout: 
   const seats = useMemo(() => staffWindow(layout, guestBed, 8), [layout, guestBed])
   const examples = useMemo(() => exampleBookings(seats, guestBed), [seats, guestBed])
   return (
-    <div className={`${cardCls} !border-gray-200`}>
+    <div className={`${cardCls} border-gray-200!`}>
       <div className="mb-2 flex items-center justify-between text-xs text-gray-500">
         <span>{t('staffToday')}</span>
         <span>{t('example')}</span>
@@ -280,7 +280,7 @@ export function StaffCard({ layout, guestBed, checkedIn, onCheckIn }: { layout: 
           ['bg-red-400 border-red-600', t('legendIn')],
         ].map(([cls, label]) => (
           <span key={label} className="flex items-center gap-1">
-            <span className={`h-2.5 w-2.5 rounded-sm border ${cls}`} aria-hidden />
+            <span className={`h-2.5 w-2.5 rounded-xs border ${cls}`} aria-hidden />
             {label}
           </span>
         ))}
@@ -328,7 +328,7 @@ export function OrderCard({ guestBed, onDone }: { guestBed: string; onDone: (ech
   const t = useTranslations('Thread')
   const locale = useLocale()
   return (
-    <div className={`${cardCls} !border-gray-200`}>
+    <div className={`${cardCls} border-gray-200!`}>
       <div className="flex items-center justify-between text-xs text-gray-500">
         <span>{t('orderBoard')}</span>
         <span>{t('example')}</span>
@@ -350,7 +350,7 @@ export function RentalCard({ onDone }: { onDone: (echoKey: string) => void }) {
   const t = useTranslations('Thread')
   const locale = useLocale()
   return (
-    <div className={`${cardCls} !border-gray-200`}>
+    <div className={`${cardCls} border-gray-200!`}>
       <div className="flex items-center justify-between text-xs text-gray-500">
         <span>{t('rentalsToday')}</span>
         <span>{t('example')}</span>
@@ -383,7 +383,7 @@ export function TablesCard({ onDone }: { onDone: (echoKey: string) => void }) {
   const [seated, setSeated] = useState<string | null>(null)
   const [nope, setNope] = useState<string | null>(null)
   return (
-    <div className={`${cardCls} !border-gray-200`}>
+    <div className={`${cardCls} border-gray-200!`}>
       <div className="flex items-center justify-between text-xs text-gray-500">
         <span>{t('tablesTonight')}</span>
         <span>{t('example')}</span>
@@ -446,7 +446,7 @@ export function DayCloseCard({ lines, onDone }: { lines: PaidLine[]; onDone: (ec
     [t('dc_vat'), t('dc_vatValue')],
   ]
   return (
-    <div className={`${cardCls} !border-gray-200`}>
+    <div className={`${cardCls} border-gray-200!`}>
       <div className="flex items-center justify-between text-xs text-gray-500">
         <span>{t('dc_title')}</span>
         <span>{t('dc_fromDemo')}</span>
@@ -484,7 +484,7 @@ export function DayCloseCard({ lines, onDone }: { lines: PaidLine[]; onDone: (ec
 export function VerifactuCard({ onDone }: { onDone: () => void }) {
   const t = useTranslations('Thread')
   return (
-    <div className={`${cardCls} !border-gray-200`}>
+    <div className={`${cardCls} border-gray-200!`}>
       <span className="inline-block rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800">{t('vf_badge')}</span>
       <ul className="mt-2 space-y-1.5 text-sm text-gray-700">
         {(['vf_1', 'vf_2', 'vf_3'] as const).map((k) => (
@@ -577,7 +577,7 @@ export function ProjectionCard({
 
   return (
     <div className="space-y-2">
-      <div className={`${cardCls} !border-gray-200`}>
+      <div className={`${cardCls} border-gray-200!`}>
         <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
           <span className="text-sm text-gray-600">{confirmed ? t('pj_price') : t('pj_priceAsk', { price: eur(p) })}</span>
           <div className="flex items-center gap-2">

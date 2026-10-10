@@ -91,7 +91,7 @@ export function MultimediaFrame({ layout, header, illustration, content, animati
             initial="initial"
             animate="animate"
             exit="exit"
-            className="w-full mt-[8px] -mb-[20px]">
+            className="w-full mt-[8px] mb-[-20px]">
             { header }
           </motion.div>
       }

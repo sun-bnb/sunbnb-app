@@ -167,7 +167,7 @@ export default function CardTerminalsCard({ siteId }: { siteId: string }) {
                     placeholder={t('labelPlaceholder')}
                     value={labelDrafts[device.terminalId] ?? ''}
                     onChange={(e) => setLabelDrafts((prev) => ({ ...prev, [device.terminalId]: e.target.value }))}
-                    className="mt-1 w-full rounded border border-gray-200 px-2 py-1 text-xs"
+                    className="mt-1 w-full rounded-sm border border-gray-200 px-2 py-1 text-xs"
                   />
                 )}
               </div>

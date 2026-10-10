@@ -28,7 +28,7 @@ export default function Reservations({ reservations } : { reservations: Reservat
           {
               (visibleReservations || []).map((reservation, i) => {
                 return (
-                  <div key={reservation.id} className="border-b-[1px] border-gray-200">
+                  <div key={reservation.id} className="border-b border-gray-200">
                     <ReservationListItem reservation={reservation} />
                   </div>
                 )

@@ -1,6 +1,5 @@
 'use client'
 
-import './output.css'
 
 interface TextFieldProps {
   label?: string

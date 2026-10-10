@@ -592,7 +592,7 @@ export default function SchematicView() {
                 setWidthInput(e.target.value)
                 saveDims(e.target.value, heightInput)
               }}
-              className="w-16 rounded border border-gray-300 px-1.5 py-0.5 text-xs text-gray-700"
+              className="w-16 rounded-sm border border-gray-300 px-1.5 py-0.5 text-xs text-gray-700"
             />
             <span>m</span>
           </label>
@@ -607,7 +607,7 @@ export default function SchematicView() {
                 setHeightInput(e.target.value)
                 saveDims(widthInput, e.target.value)
               }}
-              className="w-16 rounded border border-gray-300 px-1.5 py-0.5 text-xs text-gray-700"
+              className="w-16 rounded-sm border border-gray-300 px-1.5 py-0.5 text-xs text-gray-700"
             />
             <span>m</span>
           </label>
@@ -699,12 +699,12 @@ export default function SchematicView() {
             }
             return (
               <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2">
-                <div className="flex gap-1 bg-white/95 backdrop-blur border border-gray-200 rounded-md shadow-sm p-1">
+                <div className="flex gap-1 bg-white/95 backdrop-blur-sm border border-gray-200 rounded-md shadow-xs p-1">
                   <button
                     type="button"
                     onClick={() => bump(1)}
                     title={t('bringForward')}
-                    className="h-7 px-2 flex items-center text-xs text-gray-700 rounded hover:bg-gray-100 whitespace-nowrap"
+                    className="h-7 px-2 flex items-center text-xs text-gray-700 rounded-sm hover:bg-gray-100 whitespace-nowrap"
                   >
                     ↑ {t('bringForward')}
                   </button>
@@ -712,17 +712,17 @@ export default function SchematicView() {
                     type="button"
                     onClick={() => bump(-1)}
                     title={t('sendBackward')}
-                    className="h-7 px-2 flex items-center text-xs text-gray-700 rounded hover:bg-gray-100 whitespace-nowrap"
+                    className="h-7 px-2 flex items-center text-xs text-gray-700 rounded-sm hover:bg-gray-100 whitespace-nowrap"
                   >
                     ↓ {t('sendBackward')}
                   </button>
                 </div>
-                <div className="flex gap-1 bg-white/95 backdrop-blur border border-gray-200 rounded-md shadow-sm p-1">
+                <div className="flex gap-1 bg-white/95 backdrop-blur-sm border border-gray-200 rounded-md shadow-xs p-1">
                   <button
                     type="button"
                     onClick={() => setPropertiesOpenId(selected.id)}
                     title={t('editElement')}
-                    className="w-7 h-7 flex items-center justify-center text-sm text-gray-700 rounded hover:bg-gray-100"
+                    className="w-7 h-7 flex items-center justify-center text-sm text-gray-700 rounded-sm hover:bg-gray-100"
                   >
                     ✎
                   </button>
@@ -735,7 +735,7 @@ export default function SchematicView() {
                       await refresh()
                     }}
                     title={t('deleteElement')}
-                    className="w-7 h-7 flex items-center justify-center text-sm text-red-600 rounded hover:bg-red-50"
+                    className="w-7 h-7 flex items-center justify-center text-sm text-red-600 rounded-sm hover:bg-red-50"
                   >
                     ✕
                   </button>

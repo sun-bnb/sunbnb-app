@@ -24,7 +24,7 @@ interface BusinessEntity {
  * pass (they search by name), card terminals, live Veri*factu, a native app.
  */
 
-const mono = 'font-[family-name:var(--font-geist-mono)]'
+const mono = 'font-(family-name:--font-geist-mono)'
 
 // The floor grid's own palette (`getCellAppearance` in @repo/floor-core) — the hero shows
 // the beach the way staff actually see it, not a stock icon.
@@ -55,7 +55,7 @@ function SignInLink({ className, children }: { className: string; children: Reac
 function BeachGrid() {
   const t = useTranslations('Landing.hero')
   return (
-    <figure className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm" aria-label={t('gridLabel')}>
+    <figure className="rounded-xl border border-gray-200 bg-white p-4 shadow-xs" aria-label={t('gridLabel')}>
       <div className="flex items-baseline justify-between border-b border-gray-100 pb-3">
         <span className="text-sm font-semibold text-gray-900">{t('gridTitle')}</span>
         <span className={`${mono} text-xs text-gray-400`}>{t('gridToday')}</span>
@@ -67,7 +67,7 @@ function BeachGrid() {
           <div key={r} className="flex items-center gap-1.5">
             <span className={`${mono} w-4 text-[10px] text-gray-400`}>{r + 1}</span>
             {row.map((s, i) => (
-              <span key={i} className={`h-6 flex-1 rounded border-2 ${SEAT[s]}`} />
+              <span key={i} className={`h-6 flex-1 rounded-sm border-2 ${SEAT[s]}`} />
             ))}
           </div>
         ))}
@@ -75,7 +75,7 @@ function BeachGrid() {
       <figcaption className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-gray-500">
         {(Object.keys(SEAT) as Seat[]).map((s) => (
           <span key={s} className="inline-flex items-center gap-1.5">
-            <span className={`h-3 w-3 rounded-sm border-2 ${SEAT[s]}`} aria-hidden />
+            <span className={`h-3 w-3 rounded-xs border-2 ${SEAT[s]}`} aria-hidden />
             {t(`legend.${s}`)}
           </span>
         ))}
@@ -149,7 +149,7 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
           <div className="flex items-center gap-2">
             <Image alt="Sunbnb" src={sunbnbLogo} className="h-7 w-7" />
             <span className="font-semibold tracking-tight">Sunbnb</span>
-            <span className="ml-1 rounded border border-gray-300 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+            <span className="ml-1 rounded-sm border border-gray-300 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
               {t('nav.badge')}
             </span>
           </div>
@@ -161,7 +161,7 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
       <section className="mx-auto grid max-w-5xl items-center gap-12 px-6 pb-20 pt-16 md:grid-cols-[1.15fr_1fr] md:pt-24">
         <div>
           <p className="text-sm font-medium text-gray-500">{t('hero.eyebrow')}</p>
-          <h1 className="mt-3 text-4xl font-bold leading-[1.1] tracking-tight md:text-5xl">
+          <h1 className="mt-3 text-4xl font-bold leading-[1.1] tracking-tight md:text-5xl md:leading-none">
             <span className="block">{t('hero.title1')}</span>
             <span className="block text-gray-400">{t('hero.title2')}</span>
           </h1>
@@ -238,7 +238,7 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
               <div className="flex items-center justify-between">
                 <p className="font-semibold">{p.name}</p>
                 {p.featured && (
-                  <span className="rounded bg-gray-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
+                  <span className="rounded-sm bg-gray-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
                     {t('plans.mostChosen')}
                   </span>
                 )}

@@ -163,16 +163,16 @@ export function MenuItemDialog({
               <img
                 src={imageUrl}
                 alt=""
-                className="h-16 w-16 rounded object-cover border border-gray-200"
+                className="h-16 w-16 rounded-sm object-cover border border-gray-200"
               />
             ) : imageFile ? (
               <img
                 src={URL.createObjectURL(imageFile)}
                 alt=""
-                className="h-16 w-16 rounded object-cover border border-gray-200"
+                className="h-16 w-16 rounded-sm object-cover border border-gray-200"
               />
             ) : (
-              <div className="h-16 w-16 rounded bg-gray-100 border border-gray-200" />
+              <div className="h-16 w-16 rounded-sm bg-gray-100 border border-gray-200" />
             )}
             <div className="flex flex-col gap-1">
               <input

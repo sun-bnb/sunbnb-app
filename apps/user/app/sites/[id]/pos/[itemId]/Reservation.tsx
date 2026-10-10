@@ -97,7 +97,7 @@ function ReservationButton({
               dispatch(setValue({ 
                 reservationState: site.type !== 'paid' ? 'complete' : 'processing',
                 pendingReservationId: saveResult.id,
-                panelBottom: 'bottom-[0px]'
+                panelBottom: 'bottom-0'
               }))
               if (site.type !== 'paid') {
                 router.push(`/reservations/${saveResult.id}`)
@@ -121,7 +121,7 @@ function ReservationButton({
 function SeatLabel({ item, className }: { item: InventoryItem; className?: string }) {
   return (
     <div
-      className={`absolute top-[-52px] z-20 text-center text-lg font-semibold text-[rgb(142,114,49)] ${className ?? ''}`}
+      className={`absolute top-[-52px] z-20 text-center text-lg font-semibold text-brand-gold ${className ?? ''}`}
     >
       {formatSeatId(item)}
     </div>
@@ -206,7 +206,7 @@ export default function ReservationView({
   const { reservationState, pendingReservationId } = sitesState
 
   let focused = sitesState.focused
-  let panelBottom = sitesState.panelBottom || '-bottom-[364px]'
+  let panelBottom = sitesState.panelBottom || 'bottom-[-364px]'
 
   const { data: reservation } = useGetReservationByIdQuery({ id: pendingReservationId }, {
     skip: !pendingReservationId
@@ -283,7 +283,7 @@ export default function ReservationView({
           
         </div>
         {selectedItems.length > 0 && (
-          <div className="text-center text-[64px] -mt-[20px]">
+          <div className="text-center text-[64px] mt-[-20px]">
             {totalPrice} €
           </div>
         )}
@@ -323,7 +323,7 @@ export default function ReservationView({
                 left-1/2
                 -translate-x-1/2
                 inline-block
-                z-[1]
+                z-1
                 py-[6px]
                 px-[8px]
                 w-[80%]
@@ -332,8 +332,8 @@ export default function ReservationView({
             </div>
       }
       <div className="w-full">
-        <div className="text-center text-2xl h-[80px] w-full flex justify-center border-b-[2px] border-[rgb(142,114,49)]">
-          <div className="text-[rgb(142,114,49)] mt-[22px]">
+        <div className="text-center text-2xl h-[80px] w-full flex justify-center border-b-2 border-brand-gold">
+          <div className="text-brand-gold mt-[22px]">
             Chiringuito La Cepa Playa
           </div>
         </div>

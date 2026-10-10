@@ -263,7 +263,7 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
         <Panel beat="close" className="inset-0 flex items-center">
           <div className="w-full px-5 pb-[10svh] md:px-8 md:pb-0">
             <div className="mx-auto max-w-xl rounded-[26px] p-7 text-center md:p-10 lp-glass-dusk">
-              <h2 className="lp-display text-[clamp(2.1rem,6vw,3.4rem)] leading-[1]">{t('ctaTitle')}</h2>
+              <h2 className="lp-display text-[clamp(2.1rem,6vw,3.4rem)] leading-none">{t('ctaTitle')}</h2>
               <p className="mx-auto mt-4 max-w-[42ch] text-[15px] leading-relaxed text-[#c9d6dc] md:text-[16px]">
                 {t('ctaDesc')}
               </p>
@@ -271,7 +271,7 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
                 <button
                   type="button"
                   onClick={() => router.push('/sites')}
-                  className="rounded-xl bg-[#fdf6e6] px-7 py-3 text-sm font-semibold text-[#17323a] transition-colors hover:bg-white"
+                  className="rounded-xl bg-[#fdf6e6] px-7 py-3 text-sm font-semibold text-brand-ink transition-colors hover:bg-white"
                 >
                   {t('ctaExplore')}
                 </button>
@@ -298,7 +298,7 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
       </BeachStage>
 
       {/* ── After dark: what is actually true, and the footer ───────────── */}
-      <section className="bg-[var(--lp-dusk)] text-[#fdf6e6]">
+      <section className="bg-(--lp-dusk) text-[#fdf6e6]">
         <div className="mx-auto max-w-6xl px-5 pb-6 pt-14 md:px-8 md:pt-20">
           <dl className="grid grid-cols-1 gap-y-9 sm:grid-cols-2 sm:gap-x-10 lg:grid-cols-4 lg:gap-x-0">
             {facts.map((fact, i) => (
@@ -365,14 +365,14 @@ function StageCopy({
 }) {
   return (
     <div className="max-w-[520px] rounded-[24px] p-6 md:p-8 lp-glass">
-      <p className="lp-stage-label text-[15px] text-[var(--lp-straw)] md:text-[17px]">{label}</p>
+      <p className="lp-stage-label text-[15px] text-(--lp-straw) md:text-[17px]">{label}</p>
       <h2 className="lp-display mt-2 text-[clamp(1.6rem,3.6vw,2.3rem)] leading-[1.08]">{title}</h2>
       <p className="mt-4 max-w-[48ch] text-[15px] leading-relaxed text-[#3f5157] md:text-[16px]">{desc}</p>
       {cta && (
         <button
           type="button"
           onClick={cta.onClick}
-          className="mt-6 rounded-xl bg-[#17323a] px-5 py-2.5 text-sm font-semibold text-[#fffdf7] transition-colors hover:bg-[#0f242a]"
+          className="mt-6 rounded-xl bg-brand-ink px-5 py-2.5 text-sm font-semibold text-[#fffdf7] transition-colors hover:bg-[#0f242a]"
         >
           {cta.label}
         </button>

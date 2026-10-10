@@ -71,7 +71,7 @@ function ValidationDot({ ok, label }: { ok: boolean; label: string }) {
   )
 }
 
-const INPUT_CLASS = 'w-full px-3.5 py-2.5 text-sm bg-white border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-cyan/30 transition-all placeholder:text-gray-300 text-gray-900 pr-9'
+const INPUT_CLASS = 'w-full px-3.5 py-2.5 text-sm bg-white border rounded-xl focus:outline-hidden focus:ring-2 focus:ring-brand-cyan/30 transition-all placeholder:text-gray-300 text-gray-900 pr-9'
 
 function inputBorder(state: ValidationState) {
   if (state === 'valid') return 'border-emerald-400/60 focus:border-emerald-400'
@@ -149,7 +149,7 @@ function ResetPasswordContent() {
         </div>
         <h2 className="text-xl font-bold text-gray-900">{t('Password updated')}</h2>
         <p className="mt-2 text-sm text-gray-500">{t('Your password has been reset successfully')}</p>
-        <Link href="/sign-in" className="inline-block mt-6 text-sm font-semibold text-white bg-gray-900 rounded-xl hover:bg-gray-800 px-6 py-2.5 transition-colors shadow-sm">
+        <Link href="/sign-in" className="inline-block mt-6 text-sm font-semibold text-white bg-gray-900 rounded-xl hover:bg-gray-800 px-6 py-2.5 transition-colors shadow-xs">
           {t('Sign in')}
         </Link>
       </div>
@@ -228,7 +228,7 @@ function ResetPasswordContent() {
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full py-2.5 text-sm font-semibold text-white bg-gray-900 rounded-xl hover:bg-gray-800 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full py-2.5 text-sm font-semibold text-white bg-gray-900 rounded-xl hover:bg-gray-800 transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isLoading ? (
             <span className="inline-flex items-center gap-2">

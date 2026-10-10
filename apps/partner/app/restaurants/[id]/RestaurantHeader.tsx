@@ -70,16 +70,16 @@ export function RestaurantHeader({
 
   const restaurant = restaurantProp ?? fetched
   if (!restaurant) {
-    return <div className="h-[68px] rounded-xl border border-gray-200 bg-white shadow-sm" />
+    return <div className="h-[68px] rounded-xl border border-gray-200 bg-white shadow-xs" />
   }
 
   const priceLabel = restaurant.priceRange ? '$'.repeat(restaurant.priceRange) : null
   const monogram = restaurant.name.trim().charAt(0).toUpperCase() || 'R'
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-xs">
       <div className="flex min-w-0 items-center gap-3">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-100 to-orange-100 text-lg font-semibold text-amber-700">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-amber-100 to-orange-100 text-lg font-semibold text-amber-700">
           {monogram}
         </div>
         <div className="min-w-0">

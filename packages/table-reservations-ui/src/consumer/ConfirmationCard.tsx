@@ -100,7 +100,7 @@ export function ConfirmationCard({
       {!isCanceled && (
         <div>
           {confirmOpen ? (
-            <div className="rounded border border-amber-200 bg-amber-50 p-3">
+            <div className="rounded-sm border border-amber-200 bg-amber-50 p-3">
               <div className="text-sm font-medium text-amber-900 mb-1">
                 {labels.cancelConfirmTitle}
               </div>

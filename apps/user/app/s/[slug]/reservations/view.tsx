@@ -180,7 +180,7 @@ function BrandedReservationCard({
               </div>
             )}
           </div>
-          <div className="ml-3 flex-shrink-0">
+          <div className="ml-3 shrink-0">
             <Chip
               color={statusToChipColor[reservation.status]}
               label={t(getChipLabel(reservation))}

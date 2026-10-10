@@ -8,11 +8,11 @@ Consumer-facing + **mobile-first**, so it diverges from partner:
 
 - **No token layer adopted yet.** The `accent` token and `.btn-*`/`.input`/`.card` classes are
   partner-app-scoped — not defined here. Build net-new user UI on the general patterns with raw
-  Tailwind; introduce a token layer (mirror partner's `tailwind.config.js` + `globals.css`) if/when
+  Tailwind; introduce a token layer (mirror partner's `@theme` + `@utility` blocks in `globals.css`) if/when
   a design-system pass lands here.
 - **Landing page (`app/view.tsx`) carries its own scoped layer.** It is the one marketing surface
   in the app, so it defines a local palette and a display face inside the page rather than in
-  `tailwind.config.js` — nothing else in the app sees them. Ink `#17323a` (sea-pine), straw
+  the app's `@theme` — nothing else in the app sees them. Ink `#17323a` (sea-pine), straw
   `#7a6029`, sea-deep `#046b7d` for links, over the existing `cream` page; display type is
   **Fraunces** (`next/font/google`, axes `SOFT`/`WONK`/`opsz`) for the headline, section heads and
   stage labels, Geist for everything else. Every muted tone there was picked against `#fff5e1` at

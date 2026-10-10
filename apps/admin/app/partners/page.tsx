@@ -112,7 +112,7 @@ export default async function PartnersPage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${tierColor}`}
+                        className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-semibold ${tierColor}`}
                       >
                         {tier}
                       </span>
@@ -122,7 +122,7 @@ export default async function PartnersPage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       {hasCustom ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-400/20 text-amber-300">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-semibold bg-amber-400/20 text-amber-300">
                           custom
                         </span>
                       ) : (

@@ -151,7 +151,7 @@ function SiteCard({ site, t }: { site: SiteCardProps; t: T }) {
       <div className="p-4">
         <div className="flex items-start justify-between gap-2 mb-2">
           <h3 className="text-sm font-semibold text-gray-900 truncate">{site.name}</h3>
-          <div className="flex items-center gap-1.5 flex-shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <SetupBadge site={site} t={t} />
             <StatusBadge status={site.status} t={t} />
           </div>

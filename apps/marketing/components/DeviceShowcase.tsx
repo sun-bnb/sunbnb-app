@@ -153,7 +153,7 @@ export function DeviceModel({ step, drag = 0, animate = true, className }: { ste
         }}
       >
         <div
-          className="[&_*]:[backface-visibility:hidden]"
+          className="**:backface-hidden"
           style={{
             transformStyle: 'preserve-3d',
             transform: `rotateY(${drag}deg)`,
@@ -212,7 +212,7 @@ function Device({ wheelTurn, animate }: { wheelTurn: number; animate: boolean })
       {/* The wheel, just behind the front plate: only the window shows it. */}
       <Face w={W} h={H} transform={`translateZ(${D / 2 - PLATE - 4}px)`} style={{ background: '#2b2f33', overflow: 'hidden', borderRadius: CORNER }}>
         <div
-          className={`absolute rounded-full ${animate ? 'transition-transform duration-[1100ms] ease-[cubic-bezier(.5,-0.15,.25,1.25)] motion-reduce:transition-none' : ''}`}
+          className={`absolute rounded-full ${animate ? 'transition-transform duration-1100 ease-[cubic-bezier(.5,-0.15,.25,1.25)] motion-reduce:transition-none' : ''}`}
           style={{
             width: R_OUT * 2 + 16,
             height: R_OUT * 2 + 16,

@@ -126,11 +126,11 @@ export default function SiteView({ site, apiKey, brand, initialAvailableCount }:
       />
       <div className="lg:flex lg:gap-8 lg:px-6 lg:pt-4">
         {/* Left column: site info */}
-        <div className="lg:flex-[3] lg:min-w-0">
+        <div className="lg:flex-3 lg:min-w-0">
         <div className="relative overflow-hidden lg:rounded-xl" onClick={() => {
           dispatch(setValue({ focused: false }))
         }}>
-          <div className={`w-full leading-[0] ${brand ? '' : 'border-t border-cream'}`}>
+          <div className={`w-full leading-0 ${brand ? '' : 'border-t border-cream'}`}>
             {
               (site.image && site.imageWidth && site.imageHeight) && (
                 brand ? (
@@ -143,7 +143,7 @@ export default function SiteView({ site, apiKey, brand, initialAvailableCount }:
           </div>
           {brand ? (
             <>
-              <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/40 to-transparent" style={{ height: '60%' }}></div>
+              <div className="absolute inset-0 bg-linear-to-b from-black/80 via-black/40 to-transparent" style={{ height: '60%' }}></div>
               <div className="absolute top-3 left-3 right-14">
                 <h1 className="text-2xl font-bold text-white drop-shadow-lg">{brand.brandName}</h1>
                 {brand.tagline && (
@@ -156,15 +156,15 @@ export default function SiteView({ site, apiKey, brand, initialAvailableCount }:
                   const target = slugMatch ? `/s/${slugMatch[1]}/reservations` : '/reservations'
                   router.push(target)
                 }}
-                className="absolute bottom-3 right-3 flex items-center justify-center w-9 h-9 rounded-full bg-black/40 backdrop-blur-sm text-white hover:bg-black/60 transition-colors"
+                className="absolute bottom-3 right-3 flex items-center justify-center w-9 h-9 rounded-full bg-black/40 backdrop-blur-xs text-white hover:bg-black/60 transition-colors"
               >
                 <EventNoteIcon style={{ fontSize: 20 }} />
               </button>
             </>
           ) : (
             <>
-              <div className="absolute inset-0 bg-gradient-to-b from-cream to-transparent via-transparent h-100"></div>
-              <div className="absolute top-2 left-3 text-2xl bg-black/30 px-3 py-1 rounded-lg text-white backdrop-blur-sm font-semibold">
+              <div className="absolute inset-0 bg-linear-to-b from-cream to-transparent via-transparent h-100"></div>
+              <div className="absolute top-2 left-3 text-2xl bg-black/30 px-3 py-1 rounded-lg text-white backdrop-blur-xs font-semibold">
                 { site.name }
               </div>
             </>

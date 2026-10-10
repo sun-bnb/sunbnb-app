@@ -127,7 +127,7 @@ function ResourceLinks({ tokenId, sites }: { tokenId: string; sites: OwnedSite[]
                 const url = `${base}/sites/${site.id}/${resource.path}?key=${tokenId}`
                 return (
                   <li key={resource.key} className="flex items-start gap-3 px-3 py-2.5">
-                    <div className="mt-0.5 text-gray-400 flex-shrink-0">{resource.icon}</div>
+                    <div className="mt-0.5 text-gray-400 shrink-0">{resource.icon}</div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-gray-700">{t(resource.labelKey as any)}</p>
                       <p className="text-[11px] text-gray-400 leading-snug">{t(resource.descKey as any)}</p>
@@ -220,7 +220,7 @@ export default function SecurityView() {
               type="checkbox"
               checked={adminAccess}
               onChange={(e) => setAdminAccess(e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 text-gray-900 accent-gray-900"
+              className="w-4 h-4 rounded-sm border-gray-300 text-gray-900 accent-gray-900"
             />
             {t('adminAccess')}
           </label>
@@ -247,20 +247,20 @@ export default function SecurityView() {
       {/* Success banner */}
       {createdToken && (
         <div className="mb-6 bg-green-50 border border-green-200 rounded-xl p-4 flex items-start gap-3">
-          <svg className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-5 h-5 text-green-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
           </svg>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-green-800">{t('accessKeyCreated')}</p>
             <p className="text-xs text-green-700/80 mt-0.5">{t('accessKeyHint')}</p>
             <div className="mt-2 flex items-center gap-2">
-              <code className="block flex-1 text-xs text-green-700 bg-green-100 rounded px-2 py-1 font-mono break-all">
+              <code className="block flex-1 text-xs text-green-700 bg-green-100 rounded-sm px-2 py-1 font-mono break-all">
                 {createdToken}
               </code>
               <CopyButton value={createdToken} label={t('copy')} />
             </div>
           </div>
-          <button onClick={() => setCreatedToken(null)} className="text-green-400 hover:text-green-600 flex-shrink-0">
+          <button onClick={() => setCreatedToken(null)} className="text-green-400 hover:text-green-600 shrink-0">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>
@@ -271,7 +271,7 @@ export default function SecurityView() {
       {/* Error banner */}
       {error && (
         <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3" role="alert">
-          <svg className="w-5 h-5 text-red-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
           </svg>
           <p className="text-sm text-red-700">{error}</p>
@@ -296,7 +296,7 @@ export default function SecurityView() {
                     className="flex-1 min-w-0 flex items-center gap-3 text-left"
                   >
                     <svg
-                      className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                      className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -306,7 +306,7 @@ export default function SecurityView() {
                     </svg>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <code className="text-xs font-mono text-gray-600 bg-gray-50 rounded px-1.5 py-0.5">
+                        <code className="text-xs font-mono text-gray-600 bg-gray-50 rounded-sm px-1.5 py-0.5">
                           {token.id.slice(0, 12)}…
                         </code>
                         <span className="inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-md bg-gray-100 text-gray-600">
@@ -323,7 +323,7 @@ export default function SecurityView() {
                   </button>
                   <button
                     onClick={() => handleDelete(token.id)}
-                    className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0"
+                    className="text-gray-300 hover:text-red-500 transition-colors shrink-0"
                     title={t('deleteTitle')}
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

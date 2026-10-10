@@ -347,7 +347,7 @@ function TabCard({
 
   if (confirm === 'settle') {
     return (
-      <div className="w-full rounded-xl border-2 border-green-200 bg-white shadow-sm p-4 space-y-3">
+      <div className="w-full rounded-xl border-2 border-green-200 bg-white shadow-xs p-4 space-y-3">
         <div className="font-bold text-gray-900">{t('tabSettleConfirmTitle')}</div>
         <div className="text-sm text-gray-600">
           {t('tabSettleConfirmBody', { amount: `€${tab.amountDue.toFixed(2)}` })}
@@ -374,7 +374,7 @@ function TabCard({
 
   if (confirm === 'discard') {
     return (
-      <div className="w-full rounded-xl border-2 border-red-200 bg-white shadow-sm p-4 space-y-3">
+      <div className="w-full rounded-xl border-2 border-red-200 bg-white shadow-xs p-4 space-y-3">
         <div className="font-bold text-gray-900">{t('tabDiscardConfirmTitle')}</div>
         <div className="text-sm text-gray-600">{t('tabDiscardConfirmBody')}</div>
         <div className="flex gap-2">
@@ -398,7 +398,7 @@ function TabCard({
   }
 
   return (
-    <div className="w-full rounded-xl border-2 border-gray-200 bg-white shadow-sm overflow-hidden">
+    <div className="w-full rounded-xl border-2 border-gray-200 bg-white shadow-xs overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
         <div className="flex items-center gap-3 min-w-0">
@@ -502,7 +502,7 @@ function OrderCard({
   }, [order.orderItems])
 
   return (
-    <div className="w-full rounded-xl border-2 border-gray-200 bg-white shadow-sm overflow-hidden">
+    <div className="w-full rounded-xl border-2 border-gray-200 bg-white shadow-xs overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
         <div className="flex items-center gap-3 min-w-0">
@@ -675,7 +675,7 @@ export default function Orders({
   }
 
   return (
-    <div className="flex flex-col h-[100dvh]">
+    <div className="flex flex-col h-dvh">
       {/* Tab bar — sticky top. Language-proof: the count badge is absolutely
           positioned in the tab's corner so it can never disturb label layout;
           labels center, shrink to text-xs on phones, and may wrap to at most
@@ -691,7 +691,7 @@ export default function Orders({
                 ? 'text-gray-900 border-b-2 border-gray-900'
                 : 'text-gray-400 hover:text-gray-600'}`}
           >
-            <span className="line-clamp-2 break-words">{t(tab.labelKey as any)}</span>
+            <span className="line-clamp-2 wrap-break-word">{t(tab.labelKey as any)}</span>
             {counts[tab.key] > 0 && tab.key !== 'history' && (
               <span className={`absolute top-1 right-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-white
                 ${tab.key === 'incoming' ? 'bg-red-500 animate-pulse' : tab.key === 'tabs' ? 'bg-green-600' : 'bg-gray-500'}`}>

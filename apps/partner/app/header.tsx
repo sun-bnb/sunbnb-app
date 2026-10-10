@@ -62,16 +62,16 @@ export default function Header() {
     : session?.user?.email?.[0]?.toUpperCase() || '?'
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-gray-200">
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-xs border-b border-gray-200">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
 
         {/* Left: Logo + Nav */}
         <div className="flex items-center gap-8">
-          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
+          <Link href="/" className="flex items-center gap-2 shrink-0">
             <span className="relative">
               <Image alt="Sunbnb" src={sunbnbLogo} className="w-8 h-8" />
               {getEnvLabel() && (
-                <span className="absolute top-0 right-0 translate-x-1/4 -translate-y-1/4 text-[7px] font-extrabold tracking-wide px-1 py-[1px] rounded bg-amber-400 text-amber-900 leading-none whitespace-nowrap shadow-sm pointer-events-none z-10">
+                <span className="absolute top-0 right-0 translate-x-1/4 -translate-y-1/4 text-[7px] font-extrabold tracking-wide px-1 py-px rounded-sm bg-amber-400 text-amber-900 leading-none whitespace-nowrap shadow-xs pointer-events-none z-10">
                   {getEnvLabel()}
                 </span>
               )}

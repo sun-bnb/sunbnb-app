@@ -95,7 +95,7 @@ function SignInContent() {
   }
 
   return (
-    <SignInLayout theme="dark" left={<AdminHealthPanel />} className="bg-gray-950 font-[var(--font-geist-sans)]">
+    <SignInLayout theme="dark" left={<AdminHealthPanel />} className="bg-gray-950 font-(family-name:--font-geist-sans)">
       {/* Mobile logo */}
       <div className="lg:hidden flex items-center gap-3 mb-10">
         <Image alt="Sunbnb" src={sunbnbLogo} className="w-7 h-7 brightness-200" />

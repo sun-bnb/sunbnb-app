@@ -31,7 +31,7 @@ export default async function MockupPage({ params: paramsPromise }: { params: Pr
   })
 
   return (
-    <main className="relative bg-[#fff5e1]">
+    <main className="relative bg-sand">
       <SiteHeader overlay />
       {/* Client key only — never fall back to the server key, which would ship it in the HTML. */}
       <Experience

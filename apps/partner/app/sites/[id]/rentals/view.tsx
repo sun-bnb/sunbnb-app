@@ -428,7 +428,7 @@ export default function RentalsView() {
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-gray-900">{item.name}</span>
                       {!item.active && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-gray-200 text-gray-500">Inactive</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded-sm bg-gray-200 text-gray-500">Inactive</span>
                       )}
                     </div>
                     {item.description && (

@@ -258,7 +258,7 @@ export default function StripeView({
               setBusinessType(bt);
               run(() => startStripeOnboarding(bt));
             }}
-            className="text-left border border-gray-200 rounded-xl p-4 hover:border-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
+            className="text-left border border-gray-200 rounded-xl p-4 hover:border-gray-400 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
           >
             <span className="block text-sm font-semibold text-gray-900">
               {t(bt === "company" ? "typeCompany" : "typeIndividual")}

@@ -80,19 +80,19 @@ export default function TimeRangeSelector({
           onChange={handleFromChange}
           onFocus={onFocus}
           disabled={disabled}
-          className="flex-1 -mt-[3px] text-center bg-transparent text-base text-gray-900 outline-none disabled:text-gray-400 appearance-none cursor-pointer"
+          className="flex-1 mt-[-3px] text-center bg-transparent text-base text-gray-900 outline-hidden disabled:text-gray-400 appearance-none cursor-pointer"
         >
           {fromOptions.map(h => (
             <option key={h} value={h}>{fmtHour(h)}</option>
           ))}
         </select>
-        <span className="text-gray-400 -mt-[3px] mx-1">–</span>
+        <span className="text-gray-400 mt-[-3px] mx-1">–</span>
         <select
           value={toHour}
           onChange={handleToChange}
           onFocus={onFocus}
           disabled={disabled}
-          className="flex-1 -mt-[3px] text-center bg-transparent text-base text-gray-900 outline-none disabled:text-gray-400 appearance-none cursor-pointer"
+          className="flex-1 mt-[-3px] text-center bg-transparent text-base text-gray-900 outline-hidden disabled:text-gray-400 appearance-none cursor-pointer"
         >
           {toOptions.map(h => (
             <option key={h} value={h}>{fmtHour(h)}</option>

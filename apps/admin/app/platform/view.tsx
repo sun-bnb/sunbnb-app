@@ -407,7 +407,7 @@ export default function PlatformView({
               This cannot be undone.
             </DialogContentText>
             {deleteError && (
-              <div className="mt-2 rounded border border-red-500/30 bg-red-500/5 px-3 py-2">
+              <div className="mt-2 rounded-sm border border-red-500/30 bg-red-500/5 px-3 py-2">
                 <p className="text-xs text-red-400">{deleteError}</p>
               </div>
             )}

@@ -151,8 +151,8 @@ export function CredentialsForm({ onSubmit, theme = 'light', inputFocusClassName
   const focusClasses = inputFocusClassName || defaultInputFocus
 
   const inputBase = isDark
-    ? 'w-full px-3.5 py-2.5 text-sm bg-gray-900 border rounded-xl focus:outline-none focus:ring-2 transition-all placeholder:text-gray-600 text-gray-200'
-    : 'w-full px-3.5 py-2.5 text-sm bg-white border rounded-xl focus:outline-none focus:ring-2 transition-all placeholder:text-gray-300 text-gray-900'
+    ? 'w-full px-3.5 py-2.5 text-sm bg-gray-900 border rounded-xl focus:outline-hidden focus:ring-2 transition-all placeholder:text-gray-600 text-gray-200'
+    : 'w-full px-3.5 py-2.5 text-sm bg-white border rounded-xl focus:outline-hidden focus:ring-2 transition-all placeholder:text-gray-300 text-gray-900'
 
   const defaultBorder = isDark ? 'border-gray-700' : 'border-gray-200'
   const validBorder = isDark ? 'border-emerald-500/50' : 'border-emerald-400/60'
@@ -169,8 +169,8 @@ export function CredentialsForm({ onSubmit, theme = 'light', inputFocusClassName
     : 'block text-xs font-medium text-gray-600 mb-1.5'
 
   const defaultButtonClass = isDark
-    ? 'w-full py-2.5 text-sm font-semibold text-white bg-purple-600 rounded-xl hover:bg-purple-500 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed'
-    : 'w-full py-2.5 text-sm font-semibold text-white bg-gray-900 rounded-xl hover:bg-gray-800 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed'
+    ? 'w-full py-2.5 text-sm font-semibold text-white bg-purple-600 rounded-xl hover:bg-purple-500 transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed'
+    : 'w-full py-2.5 text-sm font-semibold text-white bg-gray-900 rounded-xl hover:bg-gray-800 transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed'
   const buttonClass = customButtonClassName || defaultButtonClass
 
   return (

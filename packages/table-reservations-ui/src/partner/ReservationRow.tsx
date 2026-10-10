@@ -195,7 +195,7 @@ export function ReservationRow({
       {notesOpen && (
         <div className="px-3 pb-3 border-t border-gray-100">
           <textarea
-            className="mt-2 w-full rounded border border-gray-300 px-2 py-1.5 text-sm text-gray-900 focus:outline-none focus:border-black"
+            className="mt-2 w-full rounded-sm border border-gray-300 px-2 py-1.5 text-sm text-gray-900 focus:outline-hidden focus:border-black"
             rows={2}
             placeholder={labels.notesPlaceholder}
             value={notes}
@@ -259,7 +259,7 @@ function Badge({
   }
   return (
     <span
-      className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border ${cls[tone]}`}
+      className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-sm border ${cls[tone]}`}
     >
       {children}
     </span>

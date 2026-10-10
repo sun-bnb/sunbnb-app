@@ -71,7 +71,7 @@ export default function TableReservationItem({ reservation }: { reservation: Tab
               <span>{reservation.partySize} {t(reservation.partySize === 1 ? 'guest' : 'guests')}</span>
             </div>
           </div>
-          <div className="ml-3 flex-shrink-0">
+          <div className="ml-3 shrink-0">
             <Chip
               color={chipColor(reservation)}
               label={t(chipLabel(reservation))}

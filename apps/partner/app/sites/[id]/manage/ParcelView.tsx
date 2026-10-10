@@ -305,12 +305,12 @@ export default function ParcelView({
           {/* Row label — pans/scales with the content (no longer sticky) */}
           <div
             className={`
-              flex-shrink-0 flex items-center justify-center
+              shrink-0 flex items-center justify-center
               ${rowNum % 2 === 0 ? 'bg-gray-50 dark:bg-gray-800/40' : 'bg-white dark:bg-gray-950'}
             `}
             style={{ width: ROW_LABEL_WIDTH }}
           >
-            <span className="text-[10px] font-bold text-gray-500 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5 leading-none whitespace-nowrap">
+            <span className="text-[10px] font-bold text-gray-500 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-sm px-1.5 py-0.5 leading-none whitespace-nowrap">
               {t('rowLabel', { n: rowNum })}
             </span>
           </div>
@@ -318,18 +318,18 @@ export default function ParcelView({
           {/* Bed cells */}
           {displayColumns.map((col, colIdx) => {
             if (col.kind === 'gap') {
-              return <div key={`g${colIdx}`} className="flex-shrink-0" style={{ width: GROUP_GAP_PX }} />
+              return <div key={`g${colIdx}`} className="shrink-0" style={{ width: GROUP_GAP_PX }} />
             }
             const key = col.kind === 'pos' ? `p${col.pos}` : `x${col.afterPos}-${col.slot}`
             const resolved = resolveColumn(col, positions)
             if (resolved.kind === 'empty') {
               return (
-                <div key={key} className="flex-shrink-0 min-h-[44px]" style={{ width: 48 }} />
+                <div key={key} className="shrink-0 min-h-[44px]" style={{ width: 48 }} />
               )
             }
             if (resolved.kind === 'seat') {
               return (
-                <div key={key} className="flex-shrink-0" style={{ display: 'grid', width: 48 }}>
+                <div key={key} className="shrink-0" style={{ display: 'grid', width: 48 }}>
                   <Item
                     siteId={siteId}
                     item={resolved.item}
@@ -343,7 +343,7 @@ export default function ParcelView({
             // Group-extra seat
             const { bg: extraBg, icon: extraIcon } = getCellAppearance(resolved.item)
             return (
-              <div key={key} className="flex-shrink-0" style={{ width: 48 }}>
+              <div key={key} className="shrink-0" style={{ width: 48 }}>
                 <button
                   data-item-id={resolved.item.id}
                   onClick={() => select(resolved.item, false, true)}

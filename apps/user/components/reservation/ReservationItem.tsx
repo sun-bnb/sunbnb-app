@@ -77,7 +77,7 @@ export default function ReservationItem({ reservation }: { reservation: Reservat
                 </div>
               )}
             </div>
-            <div className="ml-3 flex-shrink-0">
+            <div className="ml-3 shrink-0">
               <Chip color={statusToChipColor[reservation.status]} 
                 label={t(getChipLabel(reservation))}
                 sx={{ height: '24px', fontSize: '0.75rem' }} />
@@ -108,7 +108,7 @@ export default function ReservationItem({ reservation }: { reservation: Reservat
                 </div>
               )}
             </div>
-            <div className="ml-3 flex-shrink-0">
+            <div className="ml-3 shrink-0">
               <Chip color={statusToChipColor[reservation.status]} 
                 label={t(getChipLabel(reservation))}
                 sx={{ height: '24px', fontSize: '0.75rem' }} />

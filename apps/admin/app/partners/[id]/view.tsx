@@ -557,7 +557,7 @@ export default function PartnerDetailView({
           <BusinessIcon sx={{ fontSize: 22 }} className="text-purple-400" />
           <h2 className="text-lg font-semibold text-gray-100">{company}</h2>
           <span
-            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${tierBadgeColor(baseTier)}`}
+            className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-semibold ${tierBadgeColor(baseTier)}`}
           >
             {baseTier}
           </span>

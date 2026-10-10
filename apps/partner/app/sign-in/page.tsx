@@ -27,12 +27,12 @@ function PartnerBrandingPanel() {
       </div>
 
       <div className="relative">
-        <h1 className="text-4xl xl:text-5xl font-extrabold text-white leading-tight tracking-tight">
+        <h1 className="text-4xl xl:text-5xl font-extrabold text-white leading-tight xl:leading-none tracking-tight">
           Manage your
           <br />
           beach business,
           <br />
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">
+          <span className="text-transparent bg-clip-text bg-linear-to-r from-emerald-400 to-cyan-400">
             effortlessly.
           </span>
         </h1>

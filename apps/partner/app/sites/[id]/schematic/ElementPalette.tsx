@@ -30,10 +30,10 @@ export default function ElementPalette() {
           e.dataTransfer.setData(SCHEMATIC_DRAG_MIME, type)
           e.dataTransfer.effectAllowed = 'copy'
         }}
-        className="flex items-center gap-2 px-3 py-2 rounded text-xs border border-gray-200 hover:bg-gray-50 cursor-grab active:cursor-grabbing select-none"
+        className="flex items-center gap-2 px-3 py-2 rounded-sm text-xs border border-gray-200 hover:bg-gray-50 cursor-grab active:cursor-grabbing select-none"
       >
         <span
-          className="inline-block w-4 h-4 rounded"
+          className="inline-block w-4 h-4 rounded-sm"
           style={{ background: visual?.fill, border: `1px solid ${visual?.stroke ?? '#1f2937'}` }}
         />
         <span>{t(labelKey)}</span>

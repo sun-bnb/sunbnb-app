@@ -1,36 +1,97 @@
+/* Cascade order: MUI's Emotion styles (wrapped in `@layer mui` by AppRouterCacheProvider
+   enableCssLayer) sit above Tailwind's preflight and below its utilities, so a Tailwind
+   class on an MUI component wins. Unlayered, MUI would beat every v4 utility. */
+@layer theme, base, mui, components, utilities;
+
 /* @import must precede every other rule (Turbopack/lightningcss rejects it after
    the @tailwind directives; webpack hoisted it, so this keeps the same order). */
-@import "react-day-picker/style.css";
+@import 'react-day-picker/style.css' layer(base);
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
-/* Restore react-day-picker styles that Tailwind Preflight strips */
-.rdp-root {
-  color: #1f2937;
-  width: 100%;
-  --rdp-day-height: 2.75rem;
-  --rdp-day-width: 100%; /* let table-layout: fixed handle sizing */
-  --rdp-day_button-width: 2.5rem;
-  --rdp-day_button-height: 2.5rem;
+/* Tailwind 4 only auto-detects sources inside this app; the shared packages it
+   renders must be listed explicitly (v3 had them in tailwind.config `content`). */
+/* Shared restaurant UI (e.g. FloorMapPicker's h-80 map container). Brand modules
+   live inside the app, so automatic source detection already covers ./brands. */
+@source '../../../packages/ui/src';
+@source '../../../packages/table-reservations-ui/src';
+
+@theme {
+  --color-cream: #fff5e1;
+  --color-cream-light: #fff9ed;
+  --color-cream-dark: #fff0d4;
+  --color-cream-muted: #fff3d2;
+
+  --color-brand-cyan: #00cef1;
+  --color-brand-cyan-dark: #00b8d8;
+  --color-brand-gold: rgb(142, 114, 49);
+  --color-brand-gold-light: rgb(168, 140, 75);
+  --color-brand-ink: #17323a;
+  --color-brand-ink-hover: #0f262c;
+
+
+  --border-color-subtle: rgba(0, 0, 0, 0.06);
+
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.04);
 }
-.rdp-root .rdp-months {
-  width: 100%;
-  max-width: 100%; /* override fit-content */
+
+/* `inline`: the next/font variables are set on <body>, not :root, so these must be
+   inlined into the utilities (resolved on the element). A plain @theme emits them on
+   :root, where var(--font-geist-*) is undefined and text falls back to the system font. */
+@theme inline {
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono), monospace;
 }
-.rdp-root .rdp-month {
-  width: 100%;
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
 }
-.rdp-root .rdp-month_grid {
-  width: 100%;
-  table-layout: fixed;
-  border-collapse: collapse;
-}
-.rdp-root button {
-  color: #1f2937;
-  background-color: transparent;
-  cursor: pointer;
+
+/* Base layer, not utilities: these must beat Tailwind's preflight `button` reset but
+   still LOSE to react-day-picker's own, more specific state rules (e.g. the selected
+   day's fill) — exactly the specificity contest they had unlayered under v3. */
+@layer base {
+  /* Restore react-day-picker styles that Tailwind Preflight strips */
+  .rdp-root {
+    color: #1f2937;
+    width: 100%;
+    --rdp-day-height: 2.75rem;
+    --rdp-day-width: 100%; /* let table-layout: fixed handle sizing */
+    --rdp-day_button-width: 2.5rem;
+    --rdp-day_button-height: 2.5rem;
+  }
+  .rdp-root .rdp-months {
+    width: 100%;
+    max-width: 100%; /* override fit-content */
+  }
+  .rdp-root .rdp-month {
+    width: 100%;
+  }
+  .rdp-root .rdp-month_grid {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+  }
+  .rdp-root button {
+    color: #1f2937;
+    background-color: transparent;
+    cursor: pointer;
+  }
 }
 
 @layer base {
@@ -188,4 +249,23 @@ body[data-lp-stage][data-lp-theme="dark"] .sb-header .sb-header-text:hover {
 body[data-lp-stage][data-lp-theme="dark"] .sb-header img[alt="logo"] {
   filter: invert(1) brightness(1.3);
   transition: filter 400ms ease;
+}
+
+/* Tailwind 4's preflight dropped v3's `cursor: pointer` on buttons; keep v3 behaviour. */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/* Tailwind 4's preflight makes form controls `background-color: transparent`; v3 left the
+   browser default (the `Field` system colour, white in light mode). Inputs without an
+   explicit bg-* utility would otherwise show the page colour through (cream in the user app). */
+@layer base {
+  input:where(:not([type='button'], [type='reset'], [type='submit'], [type='image'], [type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'])),
+  textarea,
+  select {
+    background-color: Field;
+  }
 }

@@ -73,7 +73,7 @@ function CustomBrandControls({ site }: { site: SiteRow }) {
             setReason(resolve(enabled, next))
           })
         }}
-        className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none focus:border-gray-500 disabled:opacity-40"
+        className="bg-gray-900 border border-gray-700 rounded-sm px-2 py-1 text-xs text-gray-300 focus:outline-hidden focus:border-gray-500 disabled:opacity-40"
       >
         <option value="">— none —</option>
         {BRAND_KEYS.map((key) => (
@@ -141,7 +141,7 @@ function ProviderSelect({ site }: { site: SiteRow }) {
         value={value}
         disabled={saving}
         onChange={(e) => handleChange(e.target.value)}
-        className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none focus:border-gray-500 disabled:opacity-40"
+        className="bg-gray-900 border border-gray-700 rounded-sm px-2 py-1 text-xs text-gray-300 focus:outline-hidden focus:border-gray-500 disabled:opacity-40"
       >
         {(['mollie', 'viva', 'stripe'] as const).map((p) => (
           <option key={p} value={p} disabled={!site.readiness[p]}>

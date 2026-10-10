@@ -65,7 +65,7 @@ function PaymentPanel({
           </p>
         ) : (
           <div className="flex items-start gap-3 rounded-xl bg-cream-light px-4 py-3 ring-1 ring-brand-ink/[0.07]">
-            <svg className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-ink/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <svg className="mt-0.5 h-4 w-4 shrink-0 text-brand-ink/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>

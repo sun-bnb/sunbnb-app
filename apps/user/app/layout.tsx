@@ -9,6 +9,7 @@ import App from './app'
 import NextAuthProvider from './nextauth'
 import { GlobalCookieConsent } from '@/components/global-cookie-consent'
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v16-appRouter'
+import GlobalStyles from '@mui/material/GlobalStyles'
 import { FlagsProvider } from '@repo/ui/flags'
 import { getClientFlags } from './flags'
 import { auth } from './auth'
@@ -74,7 +75,11 @@ export default async function RootLayout({
         <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-cream min-h-screen ${isImpersonating ? 'pt-10' : ''}`}>
           {/* Collects Emotion's styles into <head> via useServerInsertedHTML; without
               it MUI's SSR <style> tags render inline and every page fails hydration. */}
-          <AppRouterCacheProvider>
+          <AppRouterCacheProvider options={{ enableCssLayer: true }}>
+            {/* Emitted by Emotion ahead of every MUI rule, so the layer order is fixed even
+                when Emotion's <style> lands before globals.css (otherwise `mui` is declared
+                first, ranks lowest, and Tailwind's preflight strips MUI components). */}
+            <GlobalStyles styles="@layer theme, base, mui, components, utilities;" />
             {isImpersonating && <ImpersonationBanner email={impersonatingUser?.email} />}
             <FlagsProvider value={flags}>
               <NextAuthProvider>

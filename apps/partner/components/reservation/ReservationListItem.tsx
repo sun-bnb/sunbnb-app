@@ -47,7 +47,7 @@ export default function ReservationListItem({ reservation }: { reservation: Rese
         }
       </div>
       <div className="flex mt-[6px]">
-        <div className="text-gray-400 mr-1 -mt-[1px]">
+        <div className="text-gray-400 mr-1 -mt-px">
           <MailOutlineIcon />
         </div>
         <div>{ reservation.user.email }</div>
@@ -62,7 +62,7 @@ export default function ReservationListItem({ reservation }: { reservation: Rese
     reservationElem = (
       <div className="pt-1 mb-2 pb-2">
         <div className="flex justify-between align-center pb-1">
-          <div className="flex -mt-[7px]">
+          <div className="flex mt-[-7px]">
             <div className="mr-4">{formattedDate}</div>
             <div className="flex text-gray-600">
               <div className="mr-1">{timeRangeFrom}</div>
@@ -85,7 +85,7 @@ export default function ReservationListItem({ reservation }: { reservation: Rese
     reservationElem = (
       <div className="mb-2 pb-2 pt-1">
         <div className="flex justify-between align-center pb-1">
-          <div className="-mt-[7px]">
+          <div className="mt-[-7px]">
             <div className="flex">
               <div className="mr-1">{dateRangeFrom}</div>
               <div>-</div>

@@ -157,7 +157,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
     illustration: <Image src={inAdvance} alt="Illustration of reserving beach chairs in advance" className="h-auto w-[200px] max-w-full object-contain drop-shadow-[0_18px_32px_rgba(15,16,19,0.25)]" />,
     content: (
       <div className="flex flex-col gap-4">
-        <div className="rounded-2xl bg-white/70 p-3 text-base leading-relaxed text-slate-600 lg:text-lg">
+        <div className="rounded-2xl bg-white/70 p-3 text-base leading-relaxed text-slate-600 lg:text-lg lg:leading-7">
           <p>
             Choose a beach from anywhere in the world, pick the exact chairs you want, and lock them in before you even
             pack your bags.
@@ -204,7 +204,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
     content: (
       <div className="relative flex flex-col gap-4">
         <div className="absolute -top-16 right-4 z-10 flex w-[220px] flex-col items-center gap-4 rounded-3xl border border-[#f6ddad] bg-[#fffaf0] p-4 text-center shadow-[0_18px_36px_-28px_rgba(15,16,19,0.35)] rotate-3">
-          <span className="pointer-events-none absolute -top-3 left-1/2 h-3 w-16 -translate-x-1/2 rounded bg-[#f6ddad]/70 shadow-[0_4px_8px_-6px_rgba(15,16,19,0.45)]" />
+          <span className="pointer-events-none absolute -top-3 left-1/2 h-3 w-16 -translate-x-1/2 rounded-sm bg-[#f6ddad]/70 shadow-[0_4px_8px_-6px_rgba(15,16,19,0.45)]" />
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Try it yourself</p>
           <div className="relative flex items-center justify-center rounded-2xl bg-white p-3 shadow-inner">
             <img src={DIRECT_QR_CODE_SRC} alt="Direct QR reservation link" className="h-[160px] w-[160px] rounded-xl bg-white object-contain" />
@@ -212,7 +212,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
           <p className="text-xs leading-tight text-slate-500">Scan this code with your phone to jump into the live booking flow.</p>
         </div>
 
-        <div className="rounded-2xl bg-white/70 p-3 text-base leading-relaxed text-slate-600 lg:text-lg">
+        <div className="rounded-2xl bg-white/70 p-3 text-base leading-relaxed text-slate-600 lg:text-lg lg:leading-7">
           <p>
             Spot an empty chair, scan the QR on its arm, and it is yours. No cash, no lines, <br/>all done in a few taps.
           </p>
@@ -258,14 +258,14 @@ const DEMO_SCENARIOS: DemoScenario[] = [
     content: (
       <div className="relative flex flex-col gap-4">
         <div className="absolute -top-16 right-4 z-10 flex w-[220px] flex-col items-center gap-4 rounded-3xl border border-[#f6ddad] bg-[#fffaf0] p-4 text-center shadow-[0_18px_36px_-28px_rgba(15,16,19,0.35)] -rotate-2">
-          <span className="pointer-events-none absolute -top-3 left-1/2 h-3 w-16 -translate-x-1/2 rounded bg-[#f6ddad]/70 shadow-[0_4px_8px_-6px_rgba(15,16,19,0.45)]" />
+          <span className="pointer-events-none absolute -top-3 left-1/2 h-3 w-16 -translate-x-1/2 rounded-sm bg-[#f6ddad]/70 shadow-[0_4px_8px_-6px_rgba(15,16,19,0.45)]" />
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Try it yourself</p>
           <div className="relative flex items-center justify-center rounded-2xl bg-white p-3 shadow-inner">
             <img src={REMOTE_QR_CODE_SRC} alt="Remote QR reservation link" className="h-[160px] w-[160px] rounded-xl bg-white object-contain" />
           </div>
           <p className="text-xs leading-tight text-slate-500">Scan this code with your phone to open the remote reservation flow.</p>
         </div>
-        <div className="rounded-2xl bg-white/70 p-3 text-base leading-relaxed text-slate-600 lg:text-lg">
+        <div className="rounded-2xl bg-white/70 p-3 text-base leading-relaxed text-slate-600 lg:text-lg lg:leading-7">
           <p>
             See a poster in a hotel lobby, beach bar, or city ad. Scan the QR to jump straight into<br/> that venue’s chair map
             and claim your spot before you walk over.
@@ -352,12 +352,12 @@ export default function DemoPage() {
   }, [])
 
   return (
-    <div className="flex h-[1080px] w-full flex-col overflow-hidden bg-[#fff5e1] text-slate-900 lg:flex-row lg:justify-between">
+    <div className="flex h-[1080px] w-full flex-col overflow-hidden bg-cream text-slate-900 lg:flex-row lg:justify-between">
       <section className="flex flex-1 flex-col gap-6 px-8 py-8 lg:px-14">
         <div className="flex flex-col gap-3">
           <span className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Sunbnb mission</span>
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900 lg:text-4xl">Beach time, booked in seconds.</h1>
-          <p className="max-w-2xl text-base leading-relaxed text-slate-700 lg:text-lg">
+          <p className="max-w-2xl text-base leading-relaxed text-slate-700 lg:text-lg lg:leading-7">
             Sunbnb makes every lounger, cabana, and beach bed easy to find and easier to book. Pick a demo below to see
             how we help guests relax faster, keep staff focused on service, and make every venue smarter.
           </p>
@@ -369,7 +369,7 @@ export default function DemoPage() {
               <IconSun className="h-7 w-7 text-slate-900" />
               <figcaption className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">Guests</figcaption>
             </div>
-            <p className="text-sm leading-relaxed lg:text-base">
+            <p className="text-sm leading-relaxed lg:text-base lg:leading-6">
               Tap, map, and book from home, the hotel lobby, or right on the sand.
             </p>
           </figure>
@@ -378,7 +378,7 @@ export default function DemoPage() {
               <IconDashboard className="h-7 w-7 text-slate-900" />
               <figcaption className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">Venues</figcaption>
             </div>
-            <p className="text-sm leading-relaxed lg:text-base">
+            <p className="text-sm leading-relaxed lg:text-base lg:leading-6">
               Real-time chair availability, fewer cash payments, and happier teams.
             </p>
           </figure>
@@ -387,7 +387,7 @@ export default function DemoPage() {
               <IconMapPin className="h-7 w-7 text-slate-900" />
               <figcaption className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">Operations</figcaption>
             </div>
-            <p className="text-sm leading-relaxed lg:text-base">
+            <p className="text-sm leading-relaxed lg:text-base lg:leading-6">
               QR codes, live dashboards, and instant confirmations keep the beach running smooth.
             </p>
           </figure>
@@ -402,9 +402,9 @@ export default function DemoPage() {
                 type="button"
                 onClick={() => setSelectedDemoId(demo.id)}
                 aria-pressed={isActive}
-                className={`rounded-full border px-5 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 focus:ring-offset-[#fff5e1] ${
+                className={`rounded-full border px-5 py-2 text-sm font-medium transition-colors focus:outline-hidden focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 focus:ring-offset-cream ${
                   isActive
-                    ? 'border-slate-900 bg-slate-900 text-[#fff5e1]'
+                    ? 'border-slate-900 bg-slate-900 text-cream'
                     : 'border-slate-300 bg-white/70 text-slate-700 hover:border-slate-900/60 hover:bg-white'
                 }`}
               >
@@ -427,13 +427,13 @@ export default function DemoPage() {
         </article>
       </section>
 
-      <aside className="flex flex-col items-center justify-start bg-[#fff5e1] lg:sticky lg:top-0 lg:ml-auto lg:h-full lg:flex-none">
+      <aside className="flex flex-col items-center justify-start bg-cream lg:sticky lg:top-0 lg:ml-auto lg:h-full lg:flex-none">
         {activeDemo.introVideo && !videoFinished ? (
           <div
             className="flex items-center justify-center"
             style={{ height: `${PHONE_HEIGHT}px`, width: `${PHONE_WIDTH}px` }}
           >
-            <div className="relative h-full w-full overflow-hidden rounded-[2.4rem] bg-[#fff5e1] drop-shadow-[0_26px_48px_-32px_rgba(15,16,19,0.35)]">
+            <div className="relative h-full w-full overflow-hidden rounded-[2.4rem] bg-cream drop-shadow-[0_26px_48px_-32px_rgba(15,16,19,0.35)]">
               <video
                 key={`${activeDemo.id}-intro`}
                 src={activeDemo.introVideo}
@@ -465,8 +465,8 @@ export default function DemoPage() {
                 muted
                 playsInline
               />
-              <div className="pointer-events-none absolute left-0 right-0 top-0 h-[84px] bg-[#fff5e1]" />
-              <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[86px] bg-[#fff5e1]" />
+              <div className="pointer-events-none absolute left-0 right-0 top-0 h-[84px] bg-cream" />
+              <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[86px] bg-cream" />
             </div>
           </div>
         ) : (
@@ -475,7 +475,7 @@ export default function DemoPage() {
             style={{ height: `${PHONE_HEIGHT}px`, width: `${PHONE_WIDTH}px` }}
           >
             <div
-              className="relative flex h-full w-full flex-col items-center overflow-hidden rounded-[2.8rem] bg-gradient-to-br from-[#0f1013] to-[#1b1c20] shadow-[0_40px_80px_-32px_rgba(0,0,0,0.7),0_0_0_2px_rgba(255,255,255,0.04)]"
+              className="relative flex h-full w-full flex-col items-center overflow-hidden rounded-[2.8rem] bg-linear-to-br from-[#0f1013] to-[#1b1c20] shadow-[0_40px_80px_-32px_rgba(0,0,0,0.7),0_0_0_2px_rgba(255,255,255,0.04)]"
               style={{ padding: `${PHONE_VERTICAL_BEZEL}px ${PHONE_HORIZONTAL_BEZEL}px` }}
             >
               <div className="pointer-events-none absolute left-1/2 top-[22px] flex h-[30px] w-[42%] -translate-x-1/2 items-center justify-center gap-[14px] rounded-[1.25rem] bg-black">

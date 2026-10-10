@@ -9,11 +9,11 @@ export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 // Raw utility strings (this shared package can't see the partner app's
 // component classes) — kept aligned with .claude/rules/ui.md by hand.
 const INPUT =
-  'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900'
+  'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-gray-900'
 const LABEL = 'block text-xs font-medium text-gray-700 mb-1.5'
 const HELPER = 'mt-1 block text-xs text-gray-500'
 const HEADING = 'text-sm font-medium text-gray-700 mb-3'
-const CARD = 'rounded-xl border border-gray-200 bg-white p-5 shadow-sm'
+const CARD = 'rounded-xl border border-gray-200 bg-white p-5 shadow-xs'
 
 const PRICE_OPTIONS: Array<{ value: number | null; label: string }> = [
   { value: null, label: '—' },
@@ -236,7 +236,7 @@ export function RestaurantSettingsForm({
                     setValues((s) => ({ ...s, priceRange: opt.value }))
                     void save({ priceRange: opt.value })
                   }}
-                  className={`min-w-[2.5rem] rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  className={`min-w-10 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                     active ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'
                   }`}
                 >

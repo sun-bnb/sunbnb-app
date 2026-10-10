@@ -67,7 +67,7 @@ function SourceBadge({ source }: { source: PreferenceAdminRow['source'] }) {
   }
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${styles[source]}`}
+      className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium ${styles[source]}`}
     >
       {label[source]}
     </span>
@@ -233,7 +233,7 @@ function DevicePolicyCard({
                 setSaved(false)
                 setError(null)
               }}
-              className="w-40 flex-shrink-0 px-2 py-1.5 rounded bg-gray-950 border border-gray-700 text-sm text-gray-200"
+              className="w-40 shrink-0 px-2 py-1.5 rounded-sm bg-gray-950 border border-gray-700 text-sm text-gray-200"
             >
               {(modeRow.options ?? []).map((o) => (
                 <option key={o.value} value={o.value}>
@@ -262,7 +262,7 @@ function DevicePolicyCard({
               </label>
               <p className="text-sm text-gray-400 mt-1">{intervalRow.description}</p>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
               <input
                 id="device-poll-interval-input"
                 type="number"
@@ -340,7 +340,7 @@ function DevicePolicyCard({
               disabled={pending || !dirty || invalid !== null}
               onClick={handleSave}
               title={invalid ?? undefined}
-              className="px-3 py-1.5 rounded text-sm font-medium border border-green-700 text-green-300 hover:bg-green-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-3 py-1.5 rounded-sm text-sm font-medium border border-green-700 text-green-300 hover:bg-green-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Save policy
             </button>
@@ -348,7 +348,7 @@ function DevicePolicyCard({
               type="button"
               disabled={pending || !hasOverride}
               onClick={handleReset}
-              className="px-3 py-1.5 rounded text-sm font-medium border border-gray-700 text-gray-300 hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-3 py-1.5 rounded-sm text-sm font-medium border border-gray-700 text-gray-300 hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Reset both
             </button>
@@ -489,7 +489,7 @@ function DeviceWifiCard({ onResync }: { onResync: () => void }) {
         </p>
       </div>
 
-      <div className="rounded border border-amber-900/60 bg-amber-950/30 px-3 py-2">
+      <div className="rounded-sm border border-amber-900/60 bg-amber-950/30 px-3 py-2">
         <p className="text-xs text-amber-200">
           The device poll endpoint has <span className="font-semibold">no authentication</span>,
           and device codes are printed on the stickers. While a broadcast is open, anyone
@@ -544,13 +544,13 @@ function DeviceWifiCard({ onResync }: { onResync: () => void }) {
                 setSaved(false)
                 setError(null)
               }}
-              className="flex-1 px-2 py-1.5 rounded bg-gray-950 border border-gray-700 text-sm text-gray-200 disabled:opacity-40"
+              className="flex-1 px-2 py-1.5 rounded-sm bg-gray-950 border border-gray-700 text-sm text-gray-200 disabled:opacity-40"
             />
             <button
               type="button"
               onClick={() => setRevealPassword((v) => !v)}
               disabled={openNetwork || password === ''}
-              className="px-2 py-1.5 rounded text-xs border border-gray-700 text-gray-300 hover:bg-gray-800 disabled:opacity-40"
+              className="px-2 py-1.5 rounded-sm text-xs border border-gray-700 text-gray-300 hover:bg-gray-800 disabled:opacity-40"
             >
               {revealPassword ? 'Hide' : 'Show'}
             </button>
@@ -591,7 +591,7 @@ function DeviceWifiCard({ onResync }: { onResync: () => void }) {
           type="button"
           disabled={pending || invalid !== null}
           onClick={handleSave}
-          className="px-3 py-1.5 rounded text-sm font-medium border border-green-700 text-green-300 hover:bg-green-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="px-3 py-1.5 rounded-sm text-sm font-medium border border-green-700 text-green-300 hover:bg-green-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Save credentials
         </button>
@@ -619,7 +619,7 @@ function DeviceWifiCard({ onResync }: { onResync: () => void }) {
               type="button"
               disabled={pending}
               onClick={handleStop}
-              className="px-3 py-1.5 rounded text-sm font-medium border border-red-800 text-red-300 hover:bg-red-950/40 disabled:opacity-40"
+              className="px-3 py-1.5 rounded-sm text-sm font-medium border border-red-800 text-red-300 hover:bg-red-950/40 disabled:opacity-40"
             >
               Stop broadcasting
             </button>
@@ -637,7 +637,7 @@ function DeviceWifiCard({ onResync }: { onResync: () => void }) {
                 type="button"
                 disabled={pending}
                 onClick={handleBroadcast}
-                className="px-3 py-1.5 rounded text-sm font-medium border border-amber-600 text-amber-200 hover:bg-amber-900/30 disabled:opacity-40"
+                className="px-3 py-1.5 rounded-sm text-sm font-medium border border-amber-600 text-amber-200 hover:bg-amber-900/30 disabled:opacity-40"
               >
                 Confirm broadcast
               </button>
@@ -645,7 +645,7 @@ function DeviceWifiCard({ onResync }: { onResync: () => void }) {
                 type="button"
                 disabled={pending}
                 onClick={() => setConfirming(false)}
-                className="px-3 py-1.5 rounded text-sm font-medium border border-gray-700 text-gray-300 hover:bg-gray-800 disabled:opacity-40"
+                className="px-3 py-1.5 rounded-sm text-sm font-medium border border-gray-700 text-gray-300 hover:bg-gray-800 disabled:opacity-40"
               >
                 Cancel
               </button>
@@ -658,7 +658,7 @@ function DeviceWifiCard({ onResync }: { onResync: () => void }) {
               disabled={pending || !(status?.ready ?? false)}
               onClick={() => setConfirming(true)}
               title={status?.ready ? undefined : 'Save a valid SSID and password first'}
-              className="px-3 py-1.5 rounded text-sm font-medium border border-amber-700 text-amber-300 hover:bg-amber-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-3 py-1.5 rounded-sm text-sm font-medium border border-amber-700 text-amber-300 hover:bg-amber-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Broadcast to fleet
             </button>
@@ -788,12 +788,12 @@ function PreferenceRow({
         {saved && !error && <p className="text-xs text-green-400 mt-1">Saved.</p>}
       </div>
 
-      <div className="flex items-center gap-2 flex-shrink-0">
+      <div className="flex items-center gap-2 shrink-0">
         {row.type === 'enum' && row.options ? (
           <select
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            className="w-36 px-2 py-1.5 rounded bg-gray-950 border border-gray-700 text-sm text-gray-200"
+            className="w-36 px-2 py-1.5 rounded-sm bg-gray-950 border border-gray-700 text-sm text-gray-200"
           >
             {row.options.map((o) => (
               <option key={o.value} value={o.value}>
@@ -805,7 +805,7 @@ function PreferenceRow({
           <select
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            className="w-28 px-2 py-1.5 rounded bg-gray-950 border border-gray-700 text-sm text-gray-200"
+            className="w-28 px-2 py-1.5 rounded-sm bg-gray-950 border border-gray-700 text-sm text-gray-200"
           >
             <option value="true">true</option>
             <option value="false">false</option>
@@ -818,14 +818,14 @@ function PreferenceRow({
             max={row.max ?? undefined}
             maxLength={row.maxLength ?? undefined}
             onChange={(e) => setDraft(e.target.value)}
-            className="w-28 px-2 py-1.5 rounded bg-gray-950 border border-gray-700 text-sm text-gray-200"
+            className="w-28 px-2 py-1.5 rounded-sm bg-gray-950 border border-gray-700 text-sm text-gray-200"
           />
         )}
         <button
           type="button"
           disabled={pending || !dirty}
           onClick={handleSave}
-          className="px-3 py-1.5 rounded text-sm font-medium border border-green-700 text-green-300 hover:bg-green-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="px-3 py-1.5 rounded-sm text-sm font-medium border border-green-700 text-green-300 hover:bg-green-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Save
         </button>
@@ -833,7 +833,7 @@ function PreferenceRow({
           type="button"
           disabled={pending || row.dbValue === null}
           onClick={handleReset}
-          className="px-3 py-1.5 rounded text-sm font-medium border border-gray-700 text-gray-300 hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="px-3 py-1.5 rounded-sm text-sm font-medium border border-gray-700 text-gray-300 hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Reset
         </button>
@@ -905,7 +905,7 @@ export default function PreferencesView({
 
         return (
           <div key={group} className="space-y-3">
-            <h2 className="text-sm font-semibold text-gray-300 mb-2">{group}</h2>
+            <h2 className="text-sm font-semibold text-gray-300">{group}</h2>
             {showCoupled && coupled && (
               <DevicePolicyCard
                 modeRow={coupled.modeRow}
