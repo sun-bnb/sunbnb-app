@@ -6,6 +6,7 @@ import { getBusinessEntity } from '@repo/data/business-entity'
 import App from './app'
 import NextAuthProvider from './nextauth'
 import StoreProvider from './StoreProvider'
+import { AppRouterCacheProvider } from '@mui/material-nextjs/v16-appRouter'
 import { CookieConsent } from '@repo/ui/cookie-consent'
 import { FlagsProvider } from '@repo/ui/flags'
 import { getClientFlags } from './flags'
@@ -82,17 +83,21 @@ export default async function RootLayout({
           // 40px overflow that lets content pan under the fixed banner on iOS.
           style={{ ['--impersonation-offset' as string]: isImpersonating ? '2.5rem' : '0px' }}
         >
-          {isImpersonating && <ImpersonationBanner email={impersonatingUser?.email} />}
-          <FlagsProvider value={flags}>
-            <NextAuthProvider>
-              <NextIntlClientProvider messages={messages}>
-                <App businessEntity={businessEntity}>
-                  {children}
-                </App>
-                <CookieConsent />
-              </NextIntlClientProvider>
-            </NextAuthProvider>
-          </FlagsProvider>
+          {/* Collects Emotion's styles into <head> via useServerInsertedHTML; without
+              it MUI's SSR <style> tags render inline and every page fails hydration. */}
+          <AppRouterCacheProvider>
+            {isImpersonating && <ImpersonationBanner email={impersonatingUser?.email} />}
+            <FlagsProvider value={flags}>
+              <NextAuthProvider>
+                <NextIntlClientProvider messages={messages}>
+                  <App businessEntity={businessEntity}>
+                    {children}
+                  </App>
+                  <CookieConsent />
+                </NextIntlClientProvider>
+              </NextAuthProvider>
+            </FlagsProvider>
+          </AppRouterCacheProvider>
         </body>
       </StoreProvider>
     </html>
