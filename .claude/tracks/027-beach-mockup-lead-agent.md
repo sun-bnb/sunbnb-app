@@ -3,7 +3,7 @@ id: 027-beach-mockup-lead-agent
 title: Beach mockup lead agent — marketing landing page that builds a prospect's beach
 status: active
 created: 2026-10-04
-updated: 2026-10-05
+updated: 2026-10-09
 worktree: null
 ---
 
@@ -253,7 +253,10 @@ pure layout generator (location TBD — see Q2)
   see") — never writes real reservations. Additive `Lead` migration in `packages/data`
   (expand-only; `migrate:local` → `migrate:test` before pushing `main`). Consent + privacy
   notice on the form; retention period decided (Q4). Rate limit + bot check on the form.
-- ◐ **P4 — Production wiring for both paths.** Live path BUILT 2026-10-04 (route, caps, kill switch, privacy); remaining: Anthropic key + spend limit in Vercel/Console (user ops), background path with P0b. Original scope: Live: Anthropic key in Vercel env, prompt
+- ✅ **P4 — Production wiring (live path).** DONE: route, caps, kill switch, privacy (2026-10-04);
+  `ANTHROPIC_API_KEY` set in Vercel (production + preview); the spend limit is the in-code global
+  daily AI budget (`MARKETING_AI_DAILY_TURNS`, default 2000, commit `120ce48`) since the key has no
+  provider-side cap. The background (local-model batch) path moved to P0b. Original scope: Live: Anthropic key in Vercel env, prompt
   caching on the fact-sheet system prompt, per-session turn/token caps, spend alert, DPA +
   privacy-notice line. Background: the batch host from Q3 running the local pick on a schedule
   over new transcripts; nothing user-facing depends on it being up.
@@ -270,6 +273,13 @@ pure layout generator (location TBD — see Q2)
   offer/promise slots (null = hidden) + guard test; "no invented claims" copy test; sticky CTA.
   **Deferred to P9:** the real-app hero poster image (needs the app-faithful map capture) and the
   Lighthouse LCP measurement.
+- ✅ **P8b — Full tracking stack.** DONE + deployed to production 2026-10-09 (`92a71d0`):
+  Meta Pixel, Google Ads (3 conversions) + GA4 behind Consent Mode v2, PostHog EU (replay with
+  inputs masked, canvas capture, via `/ingest` proxy), all consent-gated in `lib/marketing-tags.ts`
+  with routing in `lib/tracking-plan.ts`; previously-unfired funnel events wired + `scroll_depth` /
+  `section_view` / Web Vitals; consent + privacy re-versioned `2026-10-09`. Production and preview
+  use separate Meta pixels and GA4 properties; Ads is production-only; PostHog is one shared
+  project (free plan) with `environment` + an inclusive test-account filter. IDs: see log.
 - ✅ **P9 — Journey + app-faithful map** (BUILT 2026-10-05, uncommitted, browser-verified mobile +
   desktop): app sprites (`scripts/build-sprites.mjs` → `public/app/*.webp`, `lib/app-sprites.ts`
   mirrors `SunbedSelection.tsx` layer for layer), `SunbedOverlay` sprite canvas + pop-in + LOD +
@@ -313,15 +323,17 @@ pure layout generator (location TBD — see Q2)
 
 ## Resume here
 
-- **State 2026-10-06:** P0–P6, P8–P10 and the coastline DB are committed and deployed to test and
-  production. Next: **P13 claim flow**. It spans three surfaces (marketing → partner → data), so it
+- **State 2026-10-09:** P0–P6, P8–P10 (+ P8b tracking stack) and the coastline DB are committed
+  and deployed to test and production. Tracking verified on trytest (test pixel, test GA4 with
+  `gcs=G111`, PostHog via `/ingest`). Next: **P13 claim flow**. It spans three surfaces (marketing → partner → data), so it
   needs an architecture pass and the founder's go-ahead before any code. Other candidates:
   P0b (AI lead summary), P15 (inland water).
 - **Open with the founder:** "QR is true", but the knowledge base says staff look guests up rather
   than scan. Confirm whether a staff scanner exists before the agent claims it. The cancellation
   page says Sunbnb España SL processes refunds, while venues refund through their own Mollie.
 - **Before production:** founder review of the new EN/ES/FI copy (Journey, Missions, Hero),
-  `/privacy`, the founder promise wording; Meta Pixel / Google Ads IDs in Vercel; Viva zero-ISV
+  `/privacy` (now also naming GA4 + PostHog), the founder promise wording; before running ads:
+  billing on the Google Ads account and share the Meta pixel with the ad account; Viva zero-ISV
   answer (track 024) before Viva goes live; a production deploy activates `CRON_SECRET` on
   user/partner/admin.
 - **Local dev gotcha:** if the marketing page renders unstyled, its `.next` went stale (every
@@ -351,6 +363,24 @@ pure layout generator (location TBD — see Q2)
   session turn/token caps on the API path (they now also cap spend).
 
 ## Log
+
+- **2026-10-09** — **P8b tracking stack shipped to production** (`92a71d0`, promoted + deployed
+  the same day). Accounts and IDs (all public/browser IDs, set in Vercel env, none in code):
+  - Meta (business portfolio "Sunbnb"): prod pixel `1137291152067737`, test pixel
+    `2386198708854158` (preview). Auto advanced matching / auto events / code-free tracking OFF;
+    the portfolio-wide "Conversions API via Meta" left unticked (P14 does CAPI ourselves).
+  - Google Ads "Refactory DX Oy" (498-484-2609, under vladimir@refactory.fi; Refactory RX Oy is
+    dissolved): `AW-18502764587`, conversions Demo requested (primary), Partner signup (primary),
+    Mockup created (secondary, count one). Enhanced conversions OFF. Production only — Ads only
+    counts ad-click visitors, so no test account. No billing yet, €0 budget, no campaigns.
+  - GA4 account "Sunbnb": prod property `G-RFWPTRYKF1` (558211380, 14-month retention, linked to
+    Ads), test property `G-100MTN1FR6` (558200600, preview). Consumer app stays in PROP1.
+  - PostHog EU project 299564 "Sunbnb – try.sunbnb.app" (free plan = 1 project): key on prod +
+    preview, events carry `environment` (`NEXT_PUBLIC_APP_ENV`), project test-account filter
+    `environment = production`. Replay: inputs masked, canvas capture on, request bodies OFF.
+  - Also: `NEXT_PUBLIC_PARTNER_URL` = partnertest for all previews (was `test` branch only).
+- **2026-10-09** — P4 closed: the key was already in Vercel and the spend limit is the in-code
+  daily budget from `120ce48`; the roadmap line had simply not been updated.
 
 - **2026-10-08** — D8 follow-through: the guest app's seat-map art went vector (geo map +
   schematic: green ring free, blue + check selected, red ring + towel reserved, pills below
