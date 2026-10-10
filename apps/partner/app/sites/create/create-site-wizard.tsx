@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import { trackOnce } from '@/components/Analytics'
 import Stepper from '@mui/material/Stepper'
 import Step from '@mui/material/Step'
 import StepLabel from '@mui/material/StepLabel'
@@ -225,6 +226,7 @@ function CreateButton({
       }
 
       update({ siteId: result.siteId || null })
+      if (result.siteId) trackOnce(`site_created:${result.siteId}`, 'site_created')
       onDone()
     } catch (e) {
       console.error(e)

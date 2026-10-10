@@ -13,6 +13,7 @@ import { RootState } from '@/store/store'
 import { useDispatch, useSelector } from 'react-redux'
 import { useGetAutocompleteSuggestionsQuery } from '@/store/features/autocomplete/autocompleteSlice'
 import { useRouter } from 'next/navigation'
+import { trackSearch } from '@/app/analytics/track'
 
 export default function SearchBar({ className }: { className?: string } = {}) {
 
@@ -83,6 +84,7 @@ export default function SearchBar({ className }: { className?: string } = {}) {
                           mainText: suggestion.structured_formatting.main_text
                         }
                       }))
+                      trackSearch(suggestion.structured_formatting.main_text)
                       router.push('/sites')
                     }}
                   >

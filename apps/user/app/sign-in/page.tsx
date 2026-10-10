@@ -5,6 +5,7 @@ import { signIn } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { SignInLayout, OAuthButton, CredentialsForm, SignInError, SignInDivider } from '@repo/ui/sign-in'
+import { markPendingLogin } from '@/app/analytics/track'
 import sunbnbLogo from '@/app/sunbnb-horizontal-black.png'
 
 function UserBrandingPanel() {
@@ -64,6 +65,7 @@ function SignInContent() {
   const errorParam = codeParam && codeParam !== 'credentials' ? codeParam : searchParams.get('error')
 
   const handleCredentialsSignIn = async (email: string, password: string) => {
+    markPendingLogin('credentials')
     await signIn('credentials', { email, password, callbackUrl, redirect: true })
   }
 
@@ -83,7 +85,7 @@ function SignInContent() {
 
       {/* OAuth providers */}
       <div className="mt-8 space-y-3">
-        <OAuthButton provider="google" onClick={() => signIn('google', { callbackUrl })} className="bg-cream-light border-cream-dark hover:bg-cream-muted" />
+        <OAuthButton provider="google" onClick={() => { markPendingLogin('google'); signIn('google', { callbackUrl }) }} className="bg-cream-light border-cream-dark hover:bg-cream-muted" />
       </div>
 
       <div className="mt-6">

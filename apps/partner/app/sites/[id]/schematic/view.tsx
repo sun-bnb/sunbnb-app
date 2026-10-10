@@ -1,5 +1,6 @@
 'use client'
 
+import { trackOnce } from '@/components/Analytics'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useSite } from '@/app/sites/site-context'
@@ -428,6 +429,7 @@ export default function SchematicView() {
       }
       setParcelConfig(newConfig)
       await syncChairsWithLayout(siteId, newConfig, 'create')
+      trackOnce(`inventory_saved:${siteId}`, 'inventory_saved')
       const updated = await getSite(siteId)
       if (updated) {
         setSite(updated)
@@ -449,6 +451,7 @@ export default function SchematicView() {
     if (editorMode === 'create-chair') {
       const result = await createInventoryItem({ siteId })
       if (result.status === 'ok' && result.item) {
+        trackOnce(`inventory_saved:${siteId}`, 'inventory_saved')
         await saveInventoryItemSchematicLocation(result.item.id, x, y)
         const updated = await getSite(siteId)
         if (updated) setSite(updated)

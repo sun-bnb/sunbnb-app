@@ -7,6 +7,7 @@ import { headers } from 'next/headers';
 import prisma from '@repo/data/PrismaCient';
 import { validateOrCreateUser } from '@repo/data/auth';
 import { consumeImpersonationToken } from '@repo/data/impersonation';
+import { markNewUser, consumeNewUser, isFreshNewUser } from './new-user-signal';
 
 const nextAuthResult: NextAuthResult = NextAuth({
   adapter: PrismaAdapter(prisma),
@@ -45,12 +46,16 @@ const nextAuthResult: NextAuthResult = NextAuth({
         };
 
         const { email, password } = credentials;
+        // validateOrCreateUser creates silently; remember whether this email was new so GA4
+        // sign_up can be told apart from login (one-shot, see new-user-signal.ts).
+        const existed = !!(await prisma.user.findUnique({ where: { email }, select: { id: true } }));
         const user = await validateOrCreateUser(email, password, credentials);
         if (!user) {
           const error = new CredentialsSignin();
           error.code = credentials.loginError || 'CredentialsSignin';
           throw error;
         }
+        if (!existed && !credentials.loginError) markNewUser(user.email ?? email);
         return user;
       },
     }),
@@ -98,6 +103,7 @@ const nextAuthResult: NextAuthResult = NextAuth({
     async session({ session, token }) {
       // 'user' is typically undefined here if using JWT strategy
       session.user.id = token.id as string;
+      if (isFreshNewUser(token.newUserAt)) (session.user as any).isNewUser = true;
       if (token.impersonating) {
         (session.user as any).impersonating = true;
         (session.user as any).impersonatorId = token.impersonatorId;
@@ -137,6 +143,7 @@ const nextAuthResult: NextAuthResult = NextAuth({
             image: user?.image
           }
         })
+        markNewUser(email)
       }
 
       return true // Sign in is allowed
@@ -152,6 +159,9 @@ const nextAuthResult: NextAuthResult = NextAuth({
         token.id = u.id;
         token.name = u.name;
         token.email = u.email;
+        // First token of a sign-in that created the account (one-shot).
+        if (consumeNewUser(u.email)) token.newUserAt = Date.now();
+        else delete token.newUserAt;
         if (u.impersonating) {
           token.impersonating = true;
           token.impersonatorId = u.impersonatorId;

@@ -9,6 +9,8 @@ import StoreProvider from './StoreProvider'
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v16-appRouter'
 import GlobalStyles from '@mui/material/GlobalStyles'
 import { CookieConsent } from '@repo/ui/cookie-consent'
+import { GoogleAnalytics } from '@repo/ui/google-analytics'
+import { AuthEvents } from '@/components/Analytics'
 import { FlagsProvider } from '@repo/ui/flags'
 import { getClientFlags } from './flags'
 import { auth } from './auth'
@@ -98,7 +100,9 @@ export default async function RootLayout({
                   <App businessEntity={businessEntity}>
                     {children}
                   </App>
-                  <CookieConsent />
+                  <CookieConsent hasAnalytics privacyHref="/legal/privacy" />
+                  <GoogleAnalytics measurementId={process.env.NEXT_PUBLIC_GA4_ID} />
+                  <AuthEvents />
                 </NextIntlClientProvider>
               </NextAuthProvider>
             </FlagsProvider>

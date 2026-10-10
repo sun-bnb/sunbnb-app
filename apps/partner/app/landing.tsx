@@ -4,6 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import sunbnbLogo from '@/app/sunbnb-logo.svg'
+import { gaEvent } from '@repo/ui/google-analytics'
 import { marketingCtaUrl } from '@/lib/marketing-cta'
 import { PRICING_TIERS, PRICING_TIER_ORDER, FEATURED_TIER } from '@repo/data/pricing-tiers'
 
@@ -44,9 +45,27 @@ const BEACH: Seat[][] = [
   [F, F, B, F, F, F, B, F],
 ]
 
-function SignInLink({ className, children }: { className: string; children: React.ReactNode }) {
+/**
+ * GA4: CTA clicks. Sign-up intent (hero / pricing / start) is a `generate_lead`; the nav sign-in
+ * (mostly returning partners) and plain outbound links are `select_content`. `cta` names the spot.
+ */
+function trackCta(cta: string, event: 'generate_lead' | 'select_content' = 'select_content') {
+  gaEvent(event, event === 'generate_lead' ? { cta } : { content_type: 'cta', content_id: cta, cta })
+}
+
+function SignInLink({
+  className,
+  children,
+  cta,
+  lead = true,
+}: {
+  className: string
+  children: React.ReactNode
+  cta: string
+  lead?: boolean
+}) {
   return (
-    <Link href="/sign-in" className={className}>
+    <Link href="/sign-in" className={className} onClick={() => trackCta(cta, lead ? 'generate_lead' : 'select_content')}>
       {children}
     </Link>
   )
@@ -153,7 +172,7 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
               {t('nav.badge')}
             </span>
           </div>
-          <SignInLink className="btn-ghost">{t('nav.signIn')}</SignInLink>
+          <SignInLink className="btn-ghost" cta="nav-sign-in" lead={false}>{t('nav.signIn')}</SignInLink>
         </div>
       </header>
 
@@ -167,8 +186,8 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
           </h1>
           <p className="mt-5 max-w-xl text-lg leading-relaxed text-gray-600">{t('hero.body')}</p>
           <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
-            <SignInLink className="btn-primary px-5 py-2.5">{t('hero.cta')}</SignInLink>
-            <a href={marketingCtaUrl(process.env.NEXT_PUBLIC_MARKETING_URL)} className="btn-ghost underline underline-offset-4">
+            <SignInLink className="btn-primary px-5 py-2.5" cta="hero-sign-up">{t('hero.cta')}</SignInLink>
+            <a href={marketingCtaUrl(process.env.NEXT_PUBLIC_MARKETING_URL)} onClick={() => trackCta('hero-see-your-beach')} className="btn-ghost underline underline-offset-4">
               {t('hero.seeYourBeach')}
             </a>
           </div>
@@ -264,6 +283,7 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
                 ))}
               </ul>
               <SignInLink
+                cta={`pricing-${p.tier.toLowerCase()}`}
                 className={`mt-6 w-full text-center ${
                   p.featured ? 'btn-primary' : 'rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium transition-colors hover:bg-gray-50'
                 }`}
@@ -289,10 +309,10 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
             ))}
           </ol>
           <div className="mt-12 flex flex-wrap items-center gap-x-6 gap-y-3">
-            <SignInLink className="btn-primary px-5 py-2.5">{t('start.cta')}</SignInLink>
+            <SignInLink className="btn-primary px-5 py-2.5" cta="start-sign-up">{t('start.cta')}</SignInLink>
             <span className="text-sm text-gray-500">
               {t('start.questions')}{' '}
-              <a href="mailto:partners@sunbnb.app" className="font-medium text-gray-900 underline underline-offset-4">
+              <a href="mailto:partners@sunbnb.app" onClick={() => trackCta('start-email', 'generate_lead')} className="font-medium text-gray-900 underline underline-offset-4">
                 partners@sunbnb.app
               </a>
             </span>
@@ -312,7 +332,8 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
               <a href="/legal/onboarding" className="transition-colors hover:text-gray-600">{t('footer.onboarding')}</a>
               <a href="/legal/merchant-agreement" className="transition-colors hover:text-gray-600">{t('footer.merchantAgreement')}</a>
               <a href="/legal/verifactu" className="transition-colors hover:text-gray-600">{t('footer.verifactu')}</a>
-              <a href="mailto:partners@sunbnb.app" className="transition-colors hover:text-gray-600">{t('footer.contact')}</a>
+              <a href="/legal/privacy" className="transition-colors hover:text-gray-600">{t('footer.privacy')}</a>
+              <a href="mailto:partners@sunbnb.app" onClick={() => trackCta('footer-email', 'generate_lead')} className="transition-colors hover:text-gray-600">{t('footer.contact')}</a>
             </div>
           </div>
           <p className="mt-4 text-[10px] text-gray-400">

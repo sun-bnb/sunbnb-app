@@ -1,5 +1,6 @@
 import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
+import { round } from '@repo/data/payment'
 import RentalCompletePage from './RentalCompletePage'
 
 interface SearchParams {
@@ -47,5 +48,17 @@ export default async function RentalComplete({ searchParams }: SearchParams) {
     return <div>Not authorized</div>
   }
 
-  return <RentalCompletePage bookingId={booking.id} initialStatus={booking.status} />
+  // GA4 purchase payload: a multi-item cart pays ONE payment across sibling bookings (same
+  // paymentRef), so sum the stored amounts server-side instead of trusting the client.
+  const siblings = booking.paymentRef
+    ? await prisma.rentalBooking.findMany({ where: { paymentRef: booking.paymentRef }, select: { paymentAmount: true, totalPrice: true } })
+    : [booking]
+  const analytics = {
+    siteId: booking.siteId,
+    siteName: booking.site?.name ?? null,
+    amount: round(siblings.reduce((sum, b) => sum + (b.paymentAmount ?? b.totalPrice ?? 0), 0)),
+    quantity: siblings.length,
+  }
+
+  return <RentalCompletePage bookingId={booking.id} initialStatus={booking.status} analytics={analytics} />
 }

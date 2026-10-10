@@ -3,6 +3,7 @@
 Consumer-facing booking app — site discovery, sunbed reservations, F&B ordering, equipment rentals.
 
 Port 3002 (`https://local.sunbnb.app:3002`). Run: `cd apps/user && source .env.local && npm run dev`
+**Analytics:** GA4 via `<GoogleAnalytics measurementId={process.env.NEXT_PUBLIC_GA4_ID} />` (`@repo/ui/google-analytics`, consent-gated, Consent Mode v2) in `app/layout.tsx`; no id = no tag. Set `NEXT_PUBLIC_GA4_ID` per environment (prod `G-Y6CN4PSJX1`, preview a test property). Funnel events live in `app/analytics/` (pure builders + once-per-transaction guard in `funnel.ts`, client wrappers in `track.ts`); never pass email/name/anonId/user ids as params.
 
 ## Auth Model
 

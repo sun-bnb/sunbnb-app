@@ -9,6 +9,7 @@ import { validateOrCreateUser } from '@repo/data/auth'
 import { consumeImpersonationToken } from '@repo/data/impersonation'
 import { resolveMissingMollieScopes } from '@/app/api/_lib/mollie-permissions'
 import { SiteProps } from '@/types/shared'
+import { gaAuthEventFor } from '@/lib/analytics'
 
 const nextAuthResult: NextAuthResult = NextAuth({
   adapter: PrismaAdapter(prisma),
@@ -98,6 +99,8 @@ const nextAuthResult: NextAuthResult = NextAuth({
       // Computed once at sign-in; the app shell reads it to decide whether to
       // show the "reconnect Mollie" notification.
       ;(session.user as any).missingMollieScopes = token.missingMollieScopes ?? []
+      // GA4 sign_up/login stamp for the client (AuthEvents); carries no identifier.
+      if (token.ga) (session as any).ga = token.ga
       if (token.impersonating) {
         (session.user as any).impersonating = true
         ;(session.user as any).impersonatorId = token.impersonatorId
@@ -115,7 +118,7 @@ const nextAuthResult: NextAuthResult = NextAuth({
       }
       return true
     },
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user, account, trigger }) {
       if (user) {
         const u = user as any
         if (u.impersonating) {
@@ -135,6 +138,8 @@ const nextAuthResult: NextAuthResult = NextAuth({
           token.id = dbUser?.id ?? user.id
           token.name = user.name
           token.email = user.email
+          // GA4: a User row created moments ago means THIS sign-in created the account.
+          token.ga = gaAuthEventFor(dbUser?.createdAt, account?.provider) ?? undefined
         }
 
         // Sign-in only (`user` is undefined on subsequent session reads), so

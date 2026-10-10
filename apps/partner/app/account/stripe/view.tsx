@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
+import { trackOnce } from "@/components/Analytics";
 import type { AccountSnapshot, BusinessProfileInput } from "@repo/data/stripe";
 import {
   acceptStripeTerms,
@@ -224,6 +225,8 @@ export default function StripeView({
     setSnapshot(r.snapshot);
     setSubmitted(r.snapshot.detailsSubmitted);
     setStatus(r.snapshot.status);
+    // GA4: the moment onboarding completes (observed transition, not merely visiting a complete account).
+    if (r.snapshot.status === "complete") trackOnce("payments_connected:stripe", "payments_connected", { provider: "stripe" });
     setOpenOverride(null);
     after?.();
   }

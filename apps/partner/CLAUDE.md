@@ -117,3 +117,7 @@ Full per-file inventory, the meta-guard detail and mocking patterns: **`apps/par
   an informed one.
 - Image upload: Vercel Blob `put()` in server actions; remote patterns whitelisted in `next.config.mjs`
 - UI / design system: see **`apps/partner/UI.md`** (partner design-system layer) + the general **`.claude/rules/ui.md`**; prime UI work with `/ui partner`.
+
+## Analytics (GA4)
+
+`NEXT_PUBLIC_GA4_ID` (shared property with try.sunbnb.app; unset = no tag). `<GoogleAnalytics>` + `<CookieConsent hasAnalytics>` are in `app/layout.tsx`; nothing loads until the visitor accepts. Events go through `trackOnce(onceKey, name, params)` / `<TrackEvent>` in `components/Analytics.tsx` (waits for the late-loading tag, once per key per browser); pure rules in `lib/analytics.ts`. Events: `sign_up`/`login` (stamped in the `jwt` callback in `app/auth.ts`, fired by `<AuthEvents>`), `generate_lead`/`select_content` (landing CTAs), `site_created`, `inventory_saved`, `site_published`, `payments_connected` (provider), `purchase` (subscription Checkout return, `/account/subscription?checkout=success&session_id=`, re-read from Stripe server-side). Never put email/name/user ids in params.

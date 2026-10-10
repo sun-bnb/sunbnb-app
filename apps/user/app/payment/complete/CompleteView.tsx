@@ -6,6 +6,9 @@ import { useGetReservationByIdQuery } from '@/store/features/api/apiSlice'
 import { Reservation } from '@/app/sites/types'
 import ReservationConfirmationView from '@/components/reservation/confirmation/view'
 import { useSession } from 'next-auth/react'
+import { trackPurchase } from '@/app/analytics/track'
+import { isPaidPurchase } from '@/app/analytics/funnel'
+import { reservationFunnelInput } from '@/app/analytics/reservation'
 import { RESERVATION_PROCESSING, RESERVATION_COMPLETE } from '@repo/data/reservation-status'
 
 
@@ -52,6 +55,9 @@ export default function CompleteView({
     if (finalReservation?.status) {
       setStatus(finalReservation.status);
       if (finalReservation.status === RESERVATION_COMPLETE) {
+        // GA4 purchase: confirmed payment only (complete + paymentRef), once per reservation.
+        const funnel = reservationFunnelInput(finalReservation)
+        if (funnel && isPaidPurchase(finalReservation, RESERVATION_COMPLETE)) trackPurchase({ ...funnel, transactionId: finalReservation.id })
         router.push(`/reservations/${finalReservation.id}?terms=true${anonId ? `&anonId=${anonId}` : ''}`)
       }
     }

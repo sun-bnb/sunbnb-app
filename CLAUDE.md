@@ -195,6 +195,7 @@ Vercel-managed via git branches: `main` → preview, `test` → test.sunbnb.app,
 - `ALLOWED_ORIGINS` — Comma-separated origins for password reset email links
 - `RESEND_API_KEY` — Resend email service
 - `CRON_SECRET` — Protects `/api/cron/send-reminders` (Vercel Cron sends as `Authorization: Bearer`)
+- `NEXT_PUBLIC_GA4_ID` — GA4 measurement id (`G-…`) per app and environment, read via `@repo/ui/google-analytics` (consent-gated; unset = no tag). User app → property "Sunbnb – sunbnb.app"; partner app → the try.sunbnb.app property (one B2B funnel); previews → the matching "(test)" property
 - `NEXT_PUBLIC_DEMO_MODE` — Enables demo payment mode (server-controlled)
 
 ## Architecture

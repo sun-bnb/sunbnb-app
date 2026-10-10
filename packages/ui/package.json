@@ -9,6 +9,7 @@
     "./code": "./src/code.tsx",
     "./sign-in": "./src/sign-in/index.ts",
     "./cookie-consent": "./src/cookie-consent.tsx",
+    "./google-analytics": "./src/google-analytics.tsx",
     "./flags": "./src/flags.tsx"
   },
   "scripts": {

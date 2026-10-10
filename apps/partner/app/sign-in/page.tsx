@@ -110,7 +110,7 @@ function SignInContent() {
         By signing in, you agree to our{' '}
         <a href="/tos" className="underline hover:text-gray-600 transition-colors">Terms of Service</a>
         {' '}and{' '}
-        <a href="/privacy" className="underline hover:text-gray-600 transition-colors">Privacy Policy</a>.
+        <a href="/legal/privacy" className="underline hover:text-gray-600 transition-colors">Privacy Policy</a>.
       </p>
 
       <div className="mt-10 pt-6 border-t border-gray-100 text-center">

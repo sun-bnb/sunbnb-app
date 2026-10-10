@@ -7,6 +7,8 @@ import Button from '@mui/material/Button'
 import { useTranslations } from 'next-intl'
 import ReservationItem from './ReservationItem'
 import { Reservation } from '../sites/types'
+import { trackBeginCheckout } from '../analytics/track'
+import { reservationFunnelInput } from '../analytics/reservation'
 
 export function DemoCheckoutForm({
   reservation,
@@ -36,6 +38,8 @@ export function DemoCheckoutForm({
         <div className="text-[#1976d2] text-[15px] font-bold">{t('Demo mode — click Pay now to simulate payment')}</div>
         <div className="mt-[18px]">
           <Button variant="contained" fullWidth={true} onClick={() => {
+            const funnel = reservation && reservationFunnelInput(reservation)
+            if (funnel) trackBeginCheckout(funnel)
             const returnUrl = `${process.env.NEXT_PUBLIC_APP_URL}${completeUrl || '/payment/complete'}`
             const payment_intent = reservation?.paymentRef || 'pi_demo12345'
             const payment_intent_client_secret = 'pi_client_secret_demo_12345_secret_67890'

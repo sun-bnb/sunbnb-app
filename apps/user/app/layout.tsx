@@ -1,7 +1,8 @@
 import logger from '@/utils/logger'
 
 import type { Metadata } from 'next'
-import { ConsentAwareAnalytics } from '@/components/consent-analytics'
+import { GoogleAnalytics } from '@repo/ui/google-analytics'
+import AuthAnalytics from './analytics/AuthAnalytics'
 import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages } from 'next-intl/server'
 import localFont from 'next/font/local'
@@ -88,7 +89,8 @@ export default async function RootLayout({
                     {children}
                   </App>
                   <GlobalCookieConsent />
-                  <ConsentAwareAnalytics />
+                  <GoogleAnalytics measurementId={process.env.NEXT_PUBLIC_GA4_ID} />
+                  <AuthAnalytics />
                 </NextIntlClientProvider>
               </NextAuthProvider>
             </FlagsProvider>

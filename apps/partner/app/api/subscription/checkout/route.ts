@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
     customer: stripeCustomerId,
     mode: 'subscription',
     line_items: [{ price: plan.stripePriceId, quantity: 1 }],
-    success_url: `${appUrl}/account/subscription?checkout=success`,
+    success_url: `${appUrl}/account/subscription?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${appUrl}/account/subscription?checkout=canceled`,
     metadata: {
       partnerAccountId: userId,

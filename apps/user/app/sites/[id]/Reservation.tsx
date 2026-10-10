@@ -32,6 +32,7 @@ import {
 import dayjs from 'dayjs'
 import SunbedSelection from '@/components/reservation/SunbedSelection'
 import EquipmentSelection from '@/components/reservation/EquipmentSelection'
+import { trackBeginCheckout, trackPurchase, trackReservationCreated } from '@/app/analytics/track'
 import { saveReservationForMultipleItems, saveRentalBooking } from './actions'
 import { deleteReservation } from '@/app/reservations/[id]/actions'
 import PaymentView from '@/app/payment/Payment'
@@ -259,6 +260,7 @@ function ReservationButton({
     if (saveResult?.status === 'ok' && saveResult.id) {
       logger.debug('Site type', site.type)
       if (site.type !== 'paid') {
+        trackReservationCreated({ kind: 'sunbed', siteId: site.id!, transactionId: saveResult.id })
         const suffix = opts.anonId ? `?anonId=${opts.anonId}` : ''
         router.push(`/reservations/${saveResult.id}${suffix}`)
       } else {
@@ -522,6 +524,7 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
           setShowConfirmation(false)
           setBookingComplete(true)
           setCart([])
+          trackReservationCreated({ kind: 'rental', siteId: site.id!, transactionId: result.bookingIds![0]! })
           setTimeout(() => {
             setBookingComplete(false)
             const anonSuffix = anonId ? `?anonId=${anonId}` : ''
@@ -544,6 +547,10 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
     setRentalPaymentLoading(true)
     setRentalPaymentError(null)
 
+    // GA4: amount is the total the confirmation screen just showed the guest.
+    const funnel = { kind: 'rental' as const, siteId: site.id!, siteName: site.name, value: confirmationTotal, quantity: confirmationCart.length || undefined }
+    trackBeginCheckout(funnel)
+
     // Read anonId for anonymous ownership verification throughout the payment flow
     const anonId = typeof window !== 'undefined'
       ? localStorage.getItem('sunbnb-anonId') ?? undefined
@@ -553,6 +560,8 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
       if (DEMO_MODE) {
         const result = await initiateDemoRentalPayment(bookingIds, anonId)
         if (result.status === 'ok') {
+          // Demo payment settles inline (no return page), so the purchase fires here.
+          trackPurchase({ ...funnel, transactionId: bookingIds[0]! })
           setShowConfirmation(false)
           setBookingComplete(true)
           setCart([])

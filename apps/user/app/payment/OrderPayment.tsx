@@ -24,6 +24,12 @@ import { useTranslations } from 'next-intl'
 import { initiateDemoOrderPayment } from './actions'
 import { usesLegacyMollieEndpoint, neutralCheckoutBody } from './checkout-endpoint'
 import { Order } from '@/app/types/types'
+import { trackBeginCheckout } from '../analytics/track'
+
+/** GA4 begin_checkout for an F&B order, at the amount the pay button shows. */
+function trackOrderCheckout(order: Order) {
+  if (order.siteId) trackBeginCheckout({ kind: 'fnb', siteId: order.siteId, value: order.totalPrice })
+}
 
 const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
 
@@ -129,6 +135,7 @@ export function DemoOrderPayment({
       disabled={!ready}
       error={null}
       onPay={() => {
+        trackOrderCheckout(order)
         setLeaving(true)
         window.location.assign(withParam(completeUrl || '/payment/complete', 'orderId', order.id))
       }}
@@ -155,6 +162,7 @@ export function MollieOrderPayment({
   const handlePay = async () => {
     setIsLoading(true)
     setError(null)
+    trackOrderCheckout(order)
 
     try {
       const anonId = typeof window !== 'undefined'

@@ -41,6 +41,7 @@ import { useSite } from '@/app/sites/site-context'
 import { ServiceFee } from '@/types/shared'
 import { PROVIDER_LABELS } from '@repo/data/payment-providers/availability'
 import type { ReadinessStatus } from '@repo/data/payment-providers/readiness'
+import { trackOnce } from '@/components/Analytics'
 import MapHandler from '@/components/maps/map-handler'
 import { CustomMapControl } from '@/components/maps/map-control'
 import {
@@ -769,6 +770,7 @@ export default function GeneralView() {
               const result = await setSiteStatus(site.id!, newStatus)
               if (result.status === 'ok') {
                 setSiteStatusLocal(newStatus)
+                if (newStatus === 'active') trackOnce(`site_published:${site.id}`, 'site_published')
               }
             }}
             color="success"

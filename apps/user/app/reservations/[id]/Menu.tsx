@@ -17,6 +17,7 @@ import { useGetOrderByIdQuery } from '@/store/features/api/apiSlice'
 import OrderPaymentView from '@/app/payment/OrderPayment'
 import { ORDER_PROCESSING } from '@repo/data/reservation-status'
 import Orders from './Orders'
+import { trackReservationCreated } from '@/app/analytics/track'
 import { useTranslations } from 'next-intl'
 
 const MAX_ITEM_QTY = 99
@@ -154,6 +155,7 @@ export default function Menu({
         // without it the action refuses ('Authentication required') and the
         // order stays pending, invisible to the kitchen.
         await completeUnpaidOrder(result.id, anonId)
+        trackReservationCreated({ kind: 'fnb', siteId, transactionId: result.id })
         // Refresh orders list, clear basket, close drawer, show confirmation
         getOrders({ reservationId }).then(r => { if (Array.isArray(r)) setCurrentOrders(r) })
         setBasket([])

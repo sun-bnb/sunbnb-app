@@ -1,5 +1,6 @@
 'use client'
 
+import { trackOnce } from '@/components/Analytics'
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
@@ -449,6 +450,7 @@ export default function InventoryView() {
       }
       setParcelConfig(newConfig)
       syncChairsWithLayout(siteId, newConfig, 'create').then(async () => {
+        trackOnce(`inventory_saved:${siteId}`, 'inventory_saved')
         const updatedSite = await getSite(siteId)
         if (updatedSite) {
           setSite(updatedSite)
@@ -479,6 +481,7 @@ export default function InventoryView() {
         locationLat: lat.toString(),
         locationLng: lng.toString(),
       }).then(async (result) => {
+        if (result.status === 'ok') trackOnce(`inventory_saved:${siteId}`, 'inventory_saved')
         const newItem = result.item as InventoryItem
         const updatedSite = await getSite(siteId)
         if (updatedSite) setSite(updatedSite)

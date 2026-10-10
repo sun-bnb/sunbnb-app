@@ -99,7 +99,7 @@ export default async function Privacy() {
       <section className="mb-8">
         <h2 className="text-base font-semibold text-gray-900 mb-2">8. Cookies</h2>
         <p>
-          We only use essential cookies that are necessary for the operation of our website. You can set your browser to block or alert you about these cookies, but some parts of the site may not function properly.
+          We use essential cookies that are necessary for the operation of our website. With your consent (via the cookie banner) we also use Google Analytics 4, which sets cookies and collects usage data such as pages viewed, searches, and booking and purchase events, to understand and improve the service. This data does not include your name or email address. If you choose essential cookies only, Google Analytics is not loaded. You can withdraw consent at any time by clearing your cookies, and you can set your browser to block or alert you about cookies, but some parts of the site may not function properly.
         </p>
       </section>
 

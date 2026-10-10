@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useGetRentalBookingByIdQuery } from '@/store/features/api/apiSlice'
 import CircularProgress from '@mui/material/CircularProgress'
 import { useTranslations } from 'next-intl'
+import { trackPurchase } from '@/app/analytics/track'
+import { isPaidPurchase } from '@/app/analytics/funnel'
 import {
   RENTAL_PROCESSING,
   RENTAL_COMPLETE,
@@ -14,9 +16,12 @@ import {
 export default function RentalCompletePage({
   bookingId,
   initialStatus,
+  analytics,
 }: {
   bookingId: string
   initialStatus: string
+  /** Server-computed purchase payload (site + summed paid amount) for GA4. */
+  analytics?: { siteId: string; siteName: string | null; amount: number; quantity: number }
 }) {
   const [status, setStatus] = useState(initialStatus)
   const router = useRouter()
@@ -31,6 +36,9 @@ export default function RentalCompletePage({
     if (fetchedBooking?.status) {
       setStatus(fetchedBooking.status)
       if (fetchedBooking.status === RENTAL_COMPLETE) {
+        if (analytics && isPaidPurchase(fetchedBooking, RENTAL_COMPLETE)) {
+          trackPurchase({ kind: 'rental', transactionId: bookingId, siteId: analytics.siteId, siteName: analytics.siteName, value: analytics.amount, quantity: analytics.quantity })
+        }
         router.push(`/reservations/rental/${bookingId}`)
       }
     }

@@ -25,6 +25,8 @@ import {
 import BookingSurface from '@/components/booking/BookingSurface'
 import { useRouter, usePathname } from 'next/navigation'
 import { CookieConsent } from '@repo/ui/cookie-consent'
+import { trackViewItem } from '@/app/analytics/track'
+import { siteCategory } from '@/app/analytics/funnel'
 
 const serviceIcons: {
   [key: string]: React.ReactElement
@@ -54,6 +56,11 @@ export default function SiteView({ site, apiKey, brand, initialAvailableCount }:
   const sitesState = useSelector((state: RootState) => state.sites)
 
   const [ weekDaysOpen, setWeekDaysOpen ] = useState<boolean>(false)
+
+  // GA4 view_item: one per site page view (no-op until cookie consent).
+  useEffect(() => {
+    trackViewItem({ id: site.id, name: site.name }, siteCategory(site.features))
+  }, [site.id])
 
   // The booking funnel — drawer state, the on-mount bootstrap and the peek
   // arithmetic — lives in BookingSurface (track 023 P2). This component is the

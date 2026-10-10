@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
+import { TrackEvent } from '@/components/Analytics'
 import { connectViva, refreshVivaStatus, disconnectViva } from './actions'
 
 // Plain string column, not a Prisma enum (repo convention) — normalise defensively at render time.
@@ -95,6 +96,7 @@ export default function VivaView({
         <p className="text-sm text-gray-500 mt-0.5">{t('subtitle')}</p>
       </div>
 
+      {connected && <TrackEvent name="payments_connected" params={{ provider: 'viva' }} onceKey="payments_connected:viva" />}
       {connected && (
         <div className="mb-6 bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
           <svg className="w-5 h-5 text-green-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

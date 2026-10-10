@@ -25,6 +25,8 @@ import { RESERVATION_COMPLETE } from '@repo/data/reservation-status'
 import CheckoutForm from './CheckoutForm'
 import ReservationItem from './ReservationItem'
 import { Reservation } from '../sites/types'
+import { trackBeginCheckout } from '../analytics/track'
+import { reservationFunnelInput } from '../analytics/reservation'
 
 const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
 
@@ -94,6 +96,9 @@ export function MolliePayment({
   const handlePay = async () => {
     setIsLoading(true)
     setError(null)
+
+    const funnel = reservationFunnelInput(reservation)
+    if (funnel) trackBeginCheckout(funnel)
 
     try {
       const anonId = typeof window !== 'undefined'

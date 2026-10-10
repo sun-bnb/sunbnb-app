@@ -10,6 +10,8 @@ import TermsES from '@/app/tos/reservation/TermsES'
 import Link from 'next/link'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import { useTranslations } from 'next-intl'
+import { trackPurchase } from '@/app/analytics/track'
+import { isPaidPurchase } from '@/app/analytics/funnel'
 import { RESERVATION_PROCESSING, RESERVATION_COMPLETE, ORDER_COMPLETE, ORDER_PROCESSING } from '@repo/data/reservation-status'
 
 interface ReservationViewProps {
@@ -81,6 +83,17 @@ export default function ReservationView({ serviceFee, siteType, orderPaymentType
   useEffect(() => {
     if (finalOrder?.status) {
       setOrderStatus(finalOrder.status);
+      // GA4 purchase for a paid F&B order returning from checkout (once per order id).
+      // Only when the page was opened with the order (payment redirect); unpaid orders have no amount.
+      if (order && isPaidPurchase(finalOrder, ORDER_COMPLETE) && finalOrder.siteId) {
+        trackPurchase({
+          kind: 'fnb',
+          siteId: finalOrder.siteId,
+          transactionId: finalOrder.id,
+          value: finalOrder.paymentAmount ?? 0,
+          quantity: finalOrder.orderItems?.length || undefined,
+        })
+      }
     }
   }, [finalOrder?.status])
 
