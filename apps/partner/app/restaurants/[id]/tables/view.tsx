@@ -159,7 +159,7 @@ export default function TablesView({
       seatLeft: t('seatLeft'),
       seatLayoutAuto: t('seatLayoutAuto'),
       seatLayoutResetAuto: t('seatLayoutResetAuto'),
-      seatLayoutSumMismatch: t('seatLayoutSumMismatch'),
+      seatLayoutSumMismatch: t.raw('seatLayoutSumMismatch') as string, // raw template: TableForm fills {sum}/{capacity}
       deleteTable: t('deleteTable'),
       close: t('close'),
     },
@@ -226,7 +226,7 @@ export default function TablesView({
     capacity: t('combinationsCapacity'),
     tablesHeading: t('combinationsTables'),
     tablesNoneSelected: t('combinationsTablesNoneSelected'),
-    tableLabel: t('combinationsTableLabel'),
+    tableLabel: t.raw('combinationsTableLabel') as string, // raw template: CombinationsEditor fills {n}
     save: t('combinationsSave'),
     saving: t('saving'),
     cancel: t('cancel'),

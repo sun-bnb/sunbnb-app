@@ -6,7 +6,6 @@ import { MapBounds, SiteProps } from '@/app/sites/types'
 import { RootState } from '@/store/store'
 import { useSelector } from 'react-redux'
 import { 
-  useGetAvailabilityBySiteAndTimeRangeQuery,
   useGetReservationByIdQuery,
   useGetSiteByIdQuery
 } from '@/store/features/api/apiSlice'
@@ -24,19 +23,17 @@ export default function PosView({ site, apiKey }: { site: SiteProps, apiKey: str
   // endOfDay.setHours(23, 59, 59, 999);
 
   let availabilityFrom = startOfDay.toISOString()
-  let availabilityTo = startOfDay.toISOString() // The time is adjusted in the server action
+  // Same instant as `from` on purpose: for a 'days' booking the server action re-anchors
+  // both ends to the venue's civil day (sites/[id]/actions.ts). Availability for the map is
+  // fetched by SunbedSelection with its own full-day window, not here.
+  let availabilityTo = startOfDay.toISOString()
 
-  const { data: availabilityResponse, refetch: refetchAvailability } = useGetAvailabilityBySiteAndTimeRangeQuery({ 
-    siteId: site.id,
-    from: availabilityFrom,
-    to: availabilityTo
-  })
   
 
   const { data: fetchedSite, refetch: refetchSite } = useGetSiteByIdQuery({ id: site.id })
   
   const displaySite = fetchedSite || site
-  logger.debug('Site view POS', displaySite, availabilityResponse)
+  logger.debug('Site view POS', displaySite)
 
   let inventoryItems = displaySite.inventoryItems
   
