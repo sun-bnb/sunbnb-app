@@ -61,9 +61,10 @@ async function getSite(idOrSlug: string, userId: string) {
 
 }
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params
   const site = await prisma.site.findFirst({
-    where: { OR: [{ id: params.id }, { slug: params.id }] },
+    where: { OR: [{ id }, { slug: id }] },
     select: { name: true, description: true, image: true },
   })
 
@@ -88,9 +89,10 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   }
 }
 
-export default async function Site({ params }: { params: { id: string }}) {
+export default async function Site({ params }: { params: Promise<{ id: string }> }) {
 
-  logger.debug('Site page params', params)
+  const { id } = await params
+  logger.debug('Site page params', { id })
   
   const session = await auth()
 
@@ -99,7 +101,7 @@ export default async function Site({ params }: { params: { id: string }}) {
 
   const appUrl = process.env.APP_URL as string
 
-  const site = await getSite(params.id, session?.user?.id)
+  const site = await getSite(id, session?.user?.id)
   if (!site) return <ErrorCard title="Beach not found" message={`We couldn't find the beach you're looking for.`} showHomeLink />
 
   // Compute today's canonical availability count server-side so the header has

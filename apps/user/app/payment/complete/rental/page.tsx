@@ -3,7 +3,7 @@ import { auth } from '@/app/auth'
 import RentalCompletePage from './RentalCompletePage'
 
 interface SearchParams {
-  searchParams: { [key: string]: string }
+  searchParams: Promise<{ [key: string]: string }>
 }
 
 /**
@@ -25,7 +25,7 @@ function verifyRentalOwner(
 }
 
 export default async function RentalComplete({ searchParams }: SearchParams) {
-  const { rentalBookingId, anonId } = searchParams
+  const { rentalBookingId, anonId } = await searchParams
 
   if (!rentalBookingId) {
     return <div>Missing booking reference</div>

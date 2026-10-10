@@ -10,7 +10,7 @@ import { isFlagEnabled } from '@/app/flags'
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   if (!(await isFlagEnabled('restaurants'))) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -39,8 +39,9 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid party size' }, { status: 400 })
   }
   // The engine interprets the civil date in the restaurant's timezone.
+  const { id } = await params
   const result = await getRestaurantAvailability({
-    restaurantId: params.id,
+    restaurantId: id,
     dateISO: dateStr,
     partySize,
   })

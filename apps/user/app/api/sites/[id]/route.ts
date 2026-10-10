@@ -10,9 +10,9 @@ import { NextRequest } from 'next/server'
 import { auth } from '@/app/auth'
 import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 
-export async function GET(request: NextRequest, { params } : { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
 
-  const { id } = params
+  const { id } = await params
   if (!isValidEntityId(id)) {
     return Response.json({ error: 'Invalid ID format' }, { status: 400 })
   }

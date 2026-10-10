@@ -58,7 +58,7 @@ describe('TablePage', () => {
     })
 
     await expect(
-      TablePage({ params: { tableId: TABLE_ID } }),
+      TablePage({ params: Promise.resolve({ tableId: TABLE_ID }) }),
     ).rejects.toThrow('NEXT_NOT_FOUND')
 
     expect(mockNotFound).toHaveBeenCalled()
@@ -71,7 +71,7 @@ describe('TablePage', () => {
     })
 
     await expect(
-      TablePage({ params: { tableId: TABLE_ID } }),
+      TablePage({ params: Promise.resolve({ tableId: TABLE_ID }) }),
     ).rejects.toThrow('NEXT_NOT_FOUND')
 
     expect(mockNotFound).toHaveBeenCalled()
@@ -81,7 +81,7 @@ describe('TablePage', () => {
     const context = makeContext()
     mockGetDineContext.mockResolvedValue({ status: 'ok', context })
 
-    const el: any = await TablePage({ params: { tableId: TABLE_ID } })
+    const el: any = await TablePage({ params: Promise.resolve({ tableId: TABLE_ID }) })
 
     expect(mockNotFound).not.toHaveBeenCalled()
     expect(el.props.context).toBe(context)
@@ -91,7 +91,7 @@ describe('TablePage', () => {
   it('invokes getDineContext with the tableId from params', async () => {
     mockGetDineContext.mockResolvedValue({ status: 'ok', context: makeContext() })
 
-    await TablePage({ params: { tableId: TABLE_ID } })
+    await TablePage({ params: Promise.resolve({ tableId: TABLE_ID }) })
 
     expect(mockGetDineContext).toHaveBeenCalledWith(TABLE_ID)
   })

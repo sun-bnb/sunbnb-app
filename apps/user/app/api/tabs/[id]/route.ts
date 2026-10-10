@@ -26,9 +26,9 @@ import { TAB_PENDING_PAYMENT } from '@repo/data/reservation-status'
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = params
+  const { id } = await params
 
   if (!isValidEntityId(id)) {
     return Response.json({ error: 'Invalid ID format' }, { status: 400 })

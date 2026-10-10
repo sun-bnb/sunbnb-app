@@ -24,7 +24,7 @@ beforeEach(() => {
 
 describe('/q/[site]', () => {
   it('renders the venue map for a known code', async () => {
-    const result = await QrVenuePage({ params: { site: 'S-K7M2X9' } })
+    const result = await QrVenuePage({ params: Promise.resolve({ site: 'S-K7M2X9' }) })
 
     expect(result.type).toBe(PosView)
     expect(result.props.site).toBe(SITE)
@@ -33,13 +33,13 @@ describe('/q/[site]', () => {
   it('looks the site up by the FOLDED code', async () => {
     // A card read aloud and typed in arrives lowercase and often without the
     // prefix; querying that verbatim would miss a site that is right there.
-    await QrVenuePage({ params: { site: 'k7m2x9' } })
+    await QrVenuePage({ params: Promise.resolve({ site: 'k7m2x9' }) })
 
     expect(mockGetSite).toHaveBeenCalledWith({ code: 'S-K7M2X9' })
   })
 
   it('declines a malformed code without touching the database', async () => {
-    const result = await QrVenuePage({ params: { site: 'not-a-code' } })
+    const result = await QrVenuePage({ params: Promise.resolve({ site: 'not-a-code' }) })
 
     expect(result.type).toBe(ErrorCard)
     expect(mockGetSite).not.toHaveBeenCalled()
@@ -48,7 +48,7 @@ describe('/q/[site]', () => {
   it('shows the not-found card for a well-formed but unknown code', async () => {
     mockGetSite.mockResolvedValue(null as never)
 
-    const result = await QrVenuePage({ params: { site: 'S-ZZZZZZ' } })
+    const result = await QrVenuePage({ params: Promise.resolve({ site: 'S-ZZZZZZ' }) })
 
     expect(result.type).toBe(ErrorCard)
   })

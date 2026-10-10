@@ -13,9 +13,10 @@ async function getReservation(id: string) {
   return reservation
 }
 
-export default async function Pass({ params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string } }) {
+export default async function Pass({ params, searchParams }: { params: Promise<{ id: string }>, searchParams: Promise<{ [key: string]: string }> }) {
 
-  const reservation = await getReservation(params.id)
+  const { id } = await params
+  const reservation = await getReservation(id)
 
   if (!reservation) {
     console.error('Reservation not found')
@@ -29,7 +30,7 @@ export default async function Pass({ params, searchParams }: { params: { id: str
       return <div>Not authorized</div>
     }
   } else {
-    const { anonId } = searchParams
+    const { anonId } = await searchParams
     if (!anonId || reservation.anonId !== anonId) {
       return <div>Not authorized</div>
     }

@@ -13,8 +13,8 @@ const MAX_RANGE_MS = 90 * 24 * 60 * 60 * 1000
  * considering all overlapping RentalBookings (hourly and daily).
  * Public endpoint — anonymous users need availability before booking.
  */
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  const { id } = params
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   if (!isValidEntityId(id)) {
     return Response.json({ error: 'Invalid ID format' }, { status: 400 })
   }

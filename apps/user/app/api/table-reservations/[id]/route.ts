@@ -35,13 +35,13 @@ import { isFlagEnabled } from '@/app/flags'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   if (!(await isFlagEnabled('restaurants'))) {
     return Response.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const { id } = params
+  const { id } = await params
   if (!isValidEntityId(id)) {
     return Response.json({ error: 'Invalid ID format' }, { status: 400 })
   }

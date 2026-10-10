@@ -105,7 +105,7 @@ function makeRequest(code = CODE, headers: Record<string, string> = {}): NextReq
 }
 
 function makeParams(code = CODE) {
-  return { params: { code } }
+  return { params: Promise.resolve({ code }) }
 }
 
 beforeEach(() => {

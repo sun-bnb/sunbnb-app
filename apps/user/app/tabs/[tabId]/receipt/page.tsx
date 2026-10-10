@@ -14,8 +14,9 @@ import ReceiptPage from '@/app/reservations/[id]/receipt/ReceiptPage'
  * opened the tab is routinely not the person who pays, and gating the receipt
  * on the opener would lock out the payer for their own meal.
  */
-export default async function TabReceipt({ params }: { params: { tabId: string } }) {
-  const result = await buildTabReceipt(params.tabId)
+export default async function TabReceipt({ params }: { params: Promise<{ tabId: string }> }) {
+  const { tabId } = await params
+  const result = await buildTabReceipt(tabId)
 
   if (result.status === 'not-found') return <div>Tab not found</div>
   if (result.status === 'no-invoice') return <div>Receipt is not ready yet</div>

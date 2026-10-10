@@ -26,7 +26,7 @@ describe('EmbedBookingPage', () => {
   it('404s when the restaurants flag is off', async () => {
     mockFlag.mockResolvedValue(false)
     await expect(
-      EmbedBookingPage({ params: { restaurantId: 'r1' }, searchParams: {} }),
+      EmbedBookingPage({ params: Promise.resolve({ restaurantId: 'r1' }), searchParams: Promise.resolve({}) }),
     ).rejects.toThrow('NEXT_NOT_FOUND')
     expect(mockNotFound).toHaveBeenCalled()
     expect(prisma.restaurant.findUnique).not.toHaveBeenCalled()
@@ -35,7 +35,7 @@ describe('EmbedBookingPage', () => {
   it('404s when the restaurant does not exist', async () => {
     vi.mocked(prisma.restaurant.findUnique).mockResolvedValue(null as any)
     await expect(
-      EmbedBookingPage({ params: { restaurantId: 'missing' }, searchParams: {} }),
+      EmbedBookingPage({ params: Promise.resolve({ restaurantId: 'missing' }), searchParams: Promise.resolve({}) }),
     ).rejects.toThrow('NEXT_NOT_FOUND')
     expect(mockNotFound).toHaveBeenCalled()
   })
@@ -49,8 +49,8 @@ describe('EmbedBookingPage', () => {
     } as any)
 
     const el: any = await EmbedBookingPage({
-      params: { restaurantId: 'r1' },
-      searchParams: { date: '2026-08-01', partySize: '4' },
+      params: Promise.resolve({ restaurantId: 'r1' }),
+      searchParams: Promise.resolve({ date: '2026-08-01', partySize: '4' }),
     })
 
     expect(mockNotFound).not.toHaveBeenCalled()

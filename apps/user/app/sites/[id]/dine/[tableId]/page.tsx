@@ -6,15 +6,17 @@ import { redirect } from 'next/navigation'
  * point here — redirect to the canonical restaurant-anchored
  * `/tables/[tableId]` route, preserving every query param.
  */
-export default function LegacyDinePage({
+export default async function LegacyDinePage({
   params,
   searchParams,
 }: {
-  params: { id: string; tableId: string }
-  searchParams: Record<string, string | string[] | undefined>
+  params: Promise<{ id: string; tableId: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const { tableId } = await params
+  const search = await searchParams
   const qs = new URLSearchParams()
-  for (const [key, value] of Object.entries(searchParams)) {
+  for (const [key, value] of Object.entries(search)) {
     if (value === undefined) continue
     if (Array.isArray(value)) {
       for (const v of value) qs.append(key, v)
@@ -24,5 +26,5 @@ export default function LegacyDinePage({
   }
   const query = qs.toString()
 
-  redirect(`/tables/${params.tableId}${query ? `?${query}` : ''}`)
+  redirect(`/tables/${tableId}${query ? `?${query}` : ''}`)
 }

@@ -16,15 +16,16 @@ export default async function RentalBookingPage({
   params,
   searchParams,
 }: {
-  params: { id: string }
-  searchParams: { [key: string]: string }
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ [key: string]: string }>
 }) {
+  const { id } = await params
   const session = await auth()
   const signedIn = !!(session?.user)
 
-  const { anonId } = searchParams
+  const { anonId } = await searchParams
 
-  const booking = await getRentalBooking(params.id)
+  const booking = await getRentalBooking(id)
   if (!booking) {
     return <div className="h-screen flex items-center justify-center text-neutral-500">Booking not found</div>
   }

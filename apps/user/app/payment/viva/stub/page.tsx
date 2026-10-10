@@ -7,9 +7,10 @@ import StubButtons from './StubButtons'
  * in-process module state: it works because the create route and this page run in the SAME Next
  * server process in dev (it would not across serverless instances). 404s unless VIVA_MODE=stub.
  */
-export default function VivaStubPage({ searchParams }: { searchParams: { ref?: string } }) {
+export default async function VivaStubPage({ searchParams }: { searchParams: Promise<{ ref?: string }> }) {
   if (process.env.VIVA_MODE !== 'stub') notFound()
-  const ref = searchParams.ref ?? ''
+  const { ref: refParam } = await searchParams
+  const ref = refParam ?? ''
   const order = /^\d{10,20}$/.test(ref) ? checkoutStubState.get(ref) : undefined
 
   return (

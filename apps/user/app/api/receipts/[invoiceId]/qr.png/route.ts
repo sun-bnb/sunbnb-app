@@ -45,7 +45,7 @@ const ID_PATTERN = /^[a-z0-9]{20,32}$|^[0-9a-f-]{36}$/i
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { invoiceId: string } },
+  { params }: { params: Promise<{ invoiceId: string }> },
 ) {
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
   const rl = rateLimit(`receipt-qr:${ip}`, { maxAttempts: 120, windowMs: 60 * 1000 })
@@ -53,7 +53,7 @@ export async function GET(
     return new NextResponse('Too many requests', { status: 429 })
   }
 
-  const invoiceId = params.invoiceId
+  const { invoiceId } = await params
   if (!ID_PATTERN.test(invoiceId)) {
     return new NextResponse('Not found', { status: 404 })
   }

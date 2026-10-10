@@ -50,32 +50,32 @@ beforeEach(() => {
 describe('GET /api/table-reservations/[id]', () => {
   it('returns 404 when the restaurants flag is off', async () => {
     mockFlag.mockResolvedValue(false)
-    const res = await GET(req('tr-1'), { params: { id: 'tr-1' } })
+    const res = await GET(req('tr-1'), { params: Promise.resolve({ id: 'tr-1' }) })
     expect(res.status).toBe(404)
   })
 
   it('returns 400 on an invalid id', async () => {
     mockValidId.mockReturnValue(false)
-    const res = await GET(req('bad'), { params: { id: 'bad' } })
+    const res = await GET(req('bad'), { params: Promise.resolve({ id: 'bad' }) })
     expect(res.status).toBe(400)
   })
 
   it('returns 401 when not authenticated', async () => {
-    const res = await GET(req('tr-1'), { params: { id: 'tr-1' } })
+    const res = await GET(req('tr-1'), { params: Promise.resolve({ id: 'tr-1' }) })
     expect(res.status).toBe(401)
   })
 
   it('returns 404 when the reservation is not found', async () => {
     mockAuth.mockResolvedValue({ user: { id: 'u1' } })
     mockFindUnique.mockResolvedValue(null)
-    const res = await GET(req('tr-1'), { params: { id: 'tr-1' } })
+    const res = await GET(req('tr-1'), { params: Promise.resolve({ id: 'tr-1' }) })
     expect(res.status).toBe(404)
   })
 
   it('returns 403 when the caller does not own it', async () => {
     mockAuth.mockResolvedValue({ user: { id: 'u1' } })
     mockFindUnique.mockResolvedValue({ id: 'tr-1', userId: 'u2', anonId: null, status: 'confirmed' } as any)
-    const res = await GET(req('tr-1'), { params: { id: 'tr-1' } })
+    const res = await GET(req('tr-1'), { params: Promise.resolve({ id: 'tr-1' }) })
     expect(res.status).toBe(403)
   })
 
@@ -94,7 +94,7 @@ describe('GET /api/table-reservations/[id]', () => {
         depositStatus: DEPOSIT_STATUS.HELD,
         paymentRef: 'pi_demo_123',
       } as any)
-    const res = await GET(req('tr-1'), { params: { id: 'tr-1' } })
+    const res = await GET(req('tr-1'), { params: Promise.resolve({ id: 'tr-1' }) })
     expect(res.status).toBe(200)
     expect(mockMarkHeld).toHaveBeenCalledWith('tr-1', 'pi_demo_123')
   })
@@ -111,7 +111,7 @@ describe('GET /api/table-reservations/[id]', () => {
         paymentRef: 'tr_abc',
       } as any)
       .mockResolvedValueOnce({ id: 'tr-1', userId: 'u1', anonId: null, status: TABLE_RESERVATION_STATUS.CONFIRMED } as any)
-    const res = await GET(req('tr-1'), { params: { id: 'tr-1' } })
+    const res = await GET(req('tr-1'), { params: Promise.resolve({ id: 'tr-1' }) })
     expect(res.status).toBe(200)
     expect(mockMarkHeld).toHaveBeenCalledWith('tr-1', 'tr_abc')
   })
@@ -124,7 +124,7 @@ describe('GET /api/table-reservations/[id]', () => {
       depositStatus: DEPOSIT_STATUS.HELD,
       paymentRef: 'tr_abc',
     } as any)
-    const res = await GET(req('tr-1'), { params: { id: 'tr-1' } })
+    const res = await GET(req('tr-1'), { params: Promise.resolve({ id: 'tr-1' }) })
     expect(res.status).toBe(200)
     expect(mockMarkHeld).not.toHaveBeenCalled()
   })

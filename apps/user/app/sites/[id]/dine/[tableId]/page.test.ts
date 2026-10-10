@@ -14,28 +14,28 @@ beforeEach(() => {
 })
 
 describe('legacy /sites/[id]/dine/[tableId] alias', () => {
-  it('redirects to /tables/[tableId] with no query params', () => {
-    LegacyDinePage({
-      params: { id: 'site-1', tableId: 'table-1' },
-      searchParams: {},
+  it('redirects to /tables/[tableId] with no query params', async () => {
+    await LegacyDinePage({
+      params: Promise.resolve({ id: 'site-1', tableId: 'table-1' }),
+      searchParams: Promise.resolve({}),
     })
 
     expect(mockRedirect).toHaveBeenCalledWith('/tables/table-1')
   })
 
-  it('preserves query params (e.g. mid-flight Mollie return ?tabReturn=)', () => {
-    LegacyDinePage({
-      params: { id: 'site-1', tableId: 'table-1' },
-      searchParams: { tabReturn: 'tab-abc123' },
+  it('preserves query params (e.g. mid-flight Mollie return ?tabReturn=)', async () => {
+    await LegacyDinePage({
+      params: Promise.resolve({ id: 'site-1', tableId: 'table-1' }),
+      searchParams: Promise.resolve({ tabReturn: 'tab-abc123' }),
     })
 
     expect(mockRedirect).toHaveBeenCalledWith('/tables/table-1?tabReturn=tab-abc123')
   })
 
-  it('preserves multiple query params', () => {
-    LegacyDinePage({
-      params: { id: 'site-1', tableId: 'table-1' },
-      searchParams: { tabReturn: 'tab-abc123', foo: 'bar' },
+  it('preserves multiple query params', async () => {
+    await LegacyDinePage({
+      params: Promise.resolve({ id: 'site-1', tableId: 'table-1' }),
+      searchParams: Promise.resolve({ tabReturn: 'tab-abc123', foo: 'bar' }),
     })
 
     const calledWith = mockRedirect.mock.calls[0][0] as string
@@ -45,19 +45,19 @@ describe('legacy /sites/[id]/dine/[tableId] alias', () => {
     expect(url.searchParams.get('foo')).toBe('bar')
   })
 
-  it('ignores undefined searchParams values', () => {
-    LegacyDinePage({
-      params: { id: 'site-1', tableId: 'table-1' },
-      searchParams: { tabReturn: undefined },
+  it('ignores undefined searchParams values', async () => {
+    await LegacyDinePage({
+      params: Promise.resolve({ id: 'site-1', tableId: 'table-1' }),
+      searchParams: Promise.resolve({ tabReturn: undefined }),
     })
 
     expect(mockRedirect).toHaveBeenCalledWith('/tables/table-1')
   })
 
-  it('supports array-valued query params (repeated keys)', () => {
-    LegacyDinePage({
-      params: { id: 'site-1', tableId: 'table-1' },
-      searchParams: { tag: ['a', 'b'] },
+  it('supports array-valued query params (repeated keys)', async () => {
+    await LegacyDinePage({
+      params: Promise.resolve({ id: 'site-1', tableId: 'table-1' }),
+      searchParams: Promise.resolve({ tag: ['a', 'b'] }),
     })
 
     const calledWith = mockRedirect.mock.calls[0][0] as string
@@ -65,10 +65,10 @@ describe('legacy /sites/[id]/dine/[tableId] alias', () => {
     expect(url.searchParams.getAll('tag')).toEqual(['a', 'b'])
   })
 
-  it('routes on the tableId param, independent of the legacy siteId', () => {
-    LegacyDinePage({
-      params: { id: 'some-other-site', tableId: 'table-9' },
-      searchParams: {},
+  it('routes on the tableId param, independent of the legacy siteId', async () => {
+    await LegacyDinePage({
+      params: Promise.resolve({ id: 'some-other-site', tableId: 'table-9' }),
+      searchParams: Promise.resolve({}),
     })
 
     expect(mockRedirect).toHaveBeenCalledWith('/tables/table-9')

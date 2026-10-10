@@ -11,13 +11,14 @@ import DineView from './view'
 export default async function TablePage({
   params,
 }: {
-  params: { tableId: string }
+  params: Promise<{ tableId: string }>
 }) {
-  const result = await getDineContext(params.tableId)
+  const { tableId } = await params
+  const result = await getDineContext(tableId)
 
   if (result.status === 'error') {
     notFound()
   }
 
-  return <DineView context={result.context} tableId={params.tableId} />
+  return <DineView context={result.context} tableId={tableId} />
 }

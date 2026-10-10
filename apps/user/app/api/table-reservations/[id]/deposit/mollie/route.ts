@@ -27,13 +27,13 @@ import { isFlagEnabled } from '@/app/flags'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   if (!(await isFlagEnabled('restaurants'))) {
     return Response.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const tableReservationId = params.id
+  const { id: tableReservationId } = await params
 
   if (!isValidEntityId(tableReservationId)) {
     return Response.json({ error: 'Invalid reservation id' }, { status: 400 })

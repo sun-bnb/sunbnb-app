@@ -89,8 +89,9 @@ export const dynamic = 'force-dynamic'
 
 // ─── route ───────────────────────────────────────────────────────────────────
 
-export async function GET(request: NextRequest, { params }: { params: { code: string } }) {
-  const screened = await screenDeviceRequest(request, params.code)
+export async function GET(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
+  const { code: deviceCode } = await params
+  const screened = await screenDeviceRequest(request, deviceCode)
   if (!screened.ok) return screened.response
   const { code, assignment } = screened
   if (!assignment) return unavailable()

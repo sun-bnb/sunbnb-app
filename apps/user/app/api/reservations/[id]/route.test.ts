@@ -45,7 +45,7 @@ beforeEach(() => {
 
 describe('GET /api/reservations/[id]', () => {
   it('returns 401 when not authenticated', async () => {
-    const res = await GET(makeRequest('res-1'), { params: { id: 'res-1' } })
+    const res = await GET(makeRequest('res-1'), { params: Promise.resolve({ id: 'res-1' }) })
     expect(res.status).toBe(401)
   })
 
@@ -53,7 +53,7 @@ describe('GET /api/reservations/[id]', () => {
     mockAuth.mockResolvedValue({ user: { id: 'user-1' } })
     mockFindUnique.mockResolvedValue(null)
 
-    const res = await GET(makeRequest('res-1'), { params: { id: 'res-1' } })
+    const res = await GET(makeRequest('res-1'), { params: Promise.resolve({ id: 'res-1' }) })
     expect(res.status).toBe(404)
   })
 
@@ -66,7 +66,7 @@ describe('GET /api/reservations/[id]', () => {
       status: 'complete',
     } as any)
 
-    const res = await GET(makeRequest('res-1'), { params: { id: 'res-1' } })
+    const res = await GET(makeRequest('res-1'), { params: Promise.resolve({ id: 'res-1' }) })
     expect(res.status).toBe(403)
   })
 
@@ -81,7 +81,7 @@ describe('GET /api/reservations/[id]', () => {
     }
     mockFindUnique.mockResolvedValue(reservation as any)
 
-    const res = await GET(makeRequest('res-1'), { params: { id: 'res-1' } })
+    const res = await GET(makeRequest('res-1'), { params: Promise.resolve({ id: 'res-1' }) })
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.id).toBe('res-1')
@@ -99,7 +99,7 @@ describe('GET /api/reservations/[id]', () => {
     mockFindUnique.mockResolvedValue(reservation as any)
 
     const res = await GET(makeRequest('res-1', anonId), {
-      params: { id: 'res-1' },
+      params: Promise.resolve({ id: 'res-1' }),
     })
     expect(res.status).toBe(200)
   })
@@ -117,7 +117,7 @@ describe('GET /api/reservations/[id]', () => {
       .mockResolvedValueOnce(reservation as any)
       .mockResolvedValueOnce({ ...reservation, status: 'complete' } as any)
 
-    const res = await GET(makeRequest('res-1'), { params: { id: 'res-1' } })
+    const res = await GET(makeRequest('res-1'), { params: Promise.resolve({ id: 'res-1' }) })
     expect(res.status).toBe(200)
     expect(mockProcessReservation).toHaveBeenCalledWith('res-1')
   })
@@ -137,7 +137,7 @@ describe('GET /api/reservations/[id]', () => {
     mockIsPaymentSucceeded.mockReturnValue(true)
     mockIsPaymentFailed.mockReturnValue(false)
 
-    const res = await GET(makeRequest('res-1'), { params: { id: 'res-1' } })
+    const res = await GET(makeRequest('res-1'), { params: Promise.resolve({ id: 'res-1' }) })
     expect(res.status).toBe(200)
     expect(mockProcessReservation).toHaveBeenCalledWith('res-1')
   })
@@ -159,7 +159,7 @@ describe('GET /api/reservations/[id]', () => {
     mockGetPaymentStatus.mockResolvedValue('canceled')
     mockIsPaymentSucceeded.mockReturnValue(false)
     mockIsPaymentFailed.mockReturnValue(true)
-    const res = await GET(makeRequest('res-1'), { params: { id: 'res-1' } })
+    const res = await GET(makeRequest('res-1'), { params: Promise.resolve({ id: 'res-1' }) })
     expect(res.status).toBe(200)
     // Machine pay.fail (track 018) — revert is state-derived in the interpreter.
     expect(vi.mocked(applyTransition)).toHaveBeenCalledWith('res-1', 'pay.fail')
@@ -180,7 +180,7 @@ describe('GET /api/reservations/[id]', () => {
     mockIsPaymentSucceeded.mockReturnValue(false)
     mockIsPaymentFailed.mockReturnValue(false)
 
-    const res = await GET(makeRequest('res-1'), { params: { id: 'res-1' } })
+    const res = await GET(makeRequest('res-1'), { params: Promise.resolve({ id: 'res-1' }) })
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.status).toBe('processing')

@@ -12,12 +12,13 @@ import { resolveQrTarget } from '@/app/q/resolve'
  * spot rather than to a seat row that inventory editing can delete out from
  * under it (track 022 D1, [[track:021]]'s paradigm).
  */
-export default async function QrSeatPage({ params }: { params: { site: string; unit: string }}) {
+export default async function QrSeatPage({ params }: { params: Promise<{ site: string; unit: string }> }) {
+  const { site, unit } = await params
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY
     || process.env.GOOGLE_MAPS_API_KEY as string
 
-  const target = await resolveQrTarget(params.site, params.unit)
+  const target = await resolveQrTarget(site, unit)
 
   if (!target) return <ErrorCard title="Sunbed not found" message="We couldn't find the sunbed you're looking for." />
 

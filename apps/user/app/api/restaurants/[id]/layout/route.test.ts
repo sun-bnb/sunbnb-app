@@ -57,34 +57,34 @@ beforeEach(() => {
 describe('GET /api/restaurants/[id]/layout', () => {
   it('returns 404 when the restaurants flag is off', async () => {
     mockIsFlagEnabled.mockResolvedValue(false)
-    const res = await GET(req('https://test/api/restaurants/r1/layout'), { params: { id: 'r1' } })
+    const res = await GET(req('https://test/api/restaurants/r1/layout'), { params: Promise.resolve({ id: 'r1' }) })
     expect(res.status).toBe(404)
     expect(mockLayout).not.toHaveBeenCalled()
   })
 
   it('returns 429 when rate-limited', async () => {
     mockRate.mockReturnValue({ allowed: false } as any)
-    const res = await GET(req('https://test/api/restaurants/r1/layout'), { params: { id: 'r1' } })
+    const res = await GET(req('https://test/api/restaurants/r1/layout'), { params: Promise.resolve({ id: 'r1' }) })
     expect(res.status).toBe(429)
   })
 
   it('returns 404 when the restaurant is missing', async () => {
     mockLayout.mockResolvedValue(null as any)
     const res = await GET(req('https://test/api/restaurants/missing/layout'), {
-      params: { id: 'missing' },
+      params: Promise.resolve({ id: 'missing' }),
     })
     expect(res.status).toBe(404)
   })
 
   it('returns 404 when guest selection is disabled for the venue', async () => {
     mockLayout.mockResolvedValue({ ...layout, guestSelectionEnabled: false } as any)
-    const res = await GET(req('https://test/api/restaurants/r1/layout'), { params: { id: 'r1' } })
+    const res = await GET(req('https://test/api/restaurants/r1/layout'), { params: Promise.resolve({ id: 'r1' }) })
     expect(res.status).toBe(404)
   })
 
   it('returns the sanitized layout when guest selection is enabled', async () => {
     mockLayout.mockResolvedValue(layout as any)
-    const res = await GET(req('https://test/api/restaurants/r1/layout'), { params: { id: 'r1' } })
+    const res = await GET(req('https://test/api/restaurants/r1/layout'), { params: Promise.resolve({ id: 'r1' }) })
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.guestSelectionEnabled).toBe(true)

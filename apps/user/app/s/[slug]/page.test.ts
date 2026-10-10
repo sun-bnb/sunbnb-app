@@ -46,14 +46,14 @@ beforeEach(() => {
 
 describe('/s/[slug] brand fork', () => {
   it('mounts the bespoke module when a real key is assigned and the switch is on', async () => {
-    const result = await BrandedSitePage({ params: { slug: 'brisa-marina' } })
+    const result = await BrandedSitePage({ params: Promise.resolve({ slug: 'brisa-marina' }) })
 
     expect(result.type).toBe(BrandMount)
     expect(result.props.brandKey).toBe('reference')
   })
 
   it('hands the mount the same data the standard page would have used', async () => {
-    const result = await BrandedSitePage({ params: { slug: 'brisa-marina' } })
+    const result = await BrandedSitePage({ params: Promise.resolve({ slug: 'brisa-marina' }) })
 
     expect(result.props.site.id).toBe('site-1')
     expect(result.props.initialAvailableCount).toBe(7)
@@ -65,7 +65,7 @@ describe('/s/[slug] brand fork', () => {
     // approved it yet. Loading it anyway would waste the work the gate exists for.
     findFirst.mockResolvedValue(site({ customBrandEnabled: false }) as never)
 
-    const result = await BrandedSitePage({ params: { slug: 'brisa-marina' } })
+    const result = await BrandedSitePage({ params: Promise.resolve({ slug: 'brisa-marina' }) })
 
     expect(result.type).toBe(BrandedSiteView)
   })
@@ -74,7 +74,7 @@ describe('/s/[slug] brand fork', () => {
     // A typo in admin, or a module deleted while a site still points at it.
     findFirst.mockResolvedValue(site({ customBrandKey: 'ghost-brand' }) as never)
 
-    const result = await BrandedSitePage({ params: { slug: 'brisa-marina' } })
+    const result = await BrandedSitePage({ params: Promise.resolve({ slug: 'brisa-marina' }) })
 
     expect(result.type).toBe(BrandedSiteView)
   })
@@ -82,7 +82,7 @@ describe('/s/[slug] brand fork', () => {
   it('renders the standard page when no key is assigned at all', async () => {
     findFirst.mockResolvedValue(site({ customBrandKey: null }) as never)
 
-    const result = await BrandedSitePage({ params: { slug: 'brisa-marina' } })
+    const result = await BrandedSitePage({ params: Promise.resolve({ slug: 'brisa-marina' }) })
 
     expect(result.type).toBe(BrandedSiteView)
   })
@@ -90,7 +90,7 @@ describe('/s/[slug] brand fork', () => {
   it('still reports an unknown slug rather than reaching the brand fork', async () => {
     findFirst.mockResolvedValue(null as never)
 
-    const result = await BrandedSitePage({ params: { slug: 'nope' } })
+    const result = await BrandedSitePage({ params: Promise.resolve({ slug: 'nope' }) })
 
     expect(result.type).toBe('div')
   })
@@ -106,7 +106,7 @@ describe('/s/[slug] brand fork', () => {
  */
 describe('/s/[slug] metadata', () => {
   it('takes the title and description from the module when a bespoke page is live', async () => {
-    const meta = await generateMetadata({ params: { slug: 'brisa-marina' } })
+    const meta = await generateMetadata({ params: Promise.resolve({ slug: 'brisa-marina' }) })
 
     // 'reference' is the key the mocked site row carries.
     expect(meta.title).toBe('Reference brand module')
@@ -120,7 +120,7 @@ describe('/s/[slug] metadata', () => {
       site({ customBrandEnabled: false, brand: { brandName: 'Brisa Marina', tagline: 'Premium beach' } }) as never,
     )
 
-    const meta = await generateMetadata({ params: { slug: 'brisa-marina' } })
+    const meta = await generateMetadata({ params: Promise.resolve({ slug: 'brisa-marina' }) })
 
     expect(meta.title).toBe('Brisa Marina')
     expect(meta.description).toBe('Premium beach')
@@ -129,7 +129,7 @@ describe('/s/[slug] metadata', () => {
   it('keeps the OPERATOR cover as the shared image, whoever writes the words', async () => {
     findFirst.mockResolvedValue(site({ image: 'https://blob/cover.jpg' }) as never)
 
-    const meta = await generateMetadata({ params: { slug: 'brisa-marina' } })
+    const meta = await generateMetadata({ params: Promise.resolve({ slug: 'brisa-marina' }) })
 
     expect(meta.openGraph?.images).toEqual([{ url: 'https://blob/cover.jpg' }])
     expect(meta.title).toBe('Reference brand module')
@@ -138,6 +138,6 @@ describe('/s/[slug] metadata', () => {
   it('still titles an unknown slug rather than throwing', async () => {
     findFirst.mockResolvedValue(null as never)
 
-    await expect(generateMetadata({ params: { slug: 'nope' } })).resolves.toMatchObject({ title: 'Book' })
+    await expect(generateMetadata({ params: Promise.resolve({ slug: 'nope' }) })).resolves.toMatchObject({ title: 'Book' })
   })
 })

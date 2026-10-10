@@ -34,8 +34,9 @@ import { recordDeviceReport, reportFromBody } from '../device-report'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(request: NextRequest, { params }: { params: { code: string } }) {
-  const screened = await screenDeviceRequest(request, params.code, {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
+  const { code: deviceCode } = await params
+  const screened = await screenDeviceRequest(request, deviceCode, {
     requireBinding: false,
     track: false,
   })

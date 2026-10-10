@@ -12,16 +12,17 @@ import { getPosSite } from '@/app/sites/[id]/pos/queries'
  * The code is validated before the query. Malformed input here is a scanner or
  * a crawler, and it should cost a regex.
  */
-export default async function QrVenuePage({ params }: { params: { site: string }}) {
+export default async function QrVenuePage({ params }: { params: Promise<{ site: string }> }) {
+  const { site: siteCode } = await params
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY
     || process.env.GOOGLE_MAPS_API_KEY as string
 
   const notFound = <ErrorCard title="Beach not found" message="We couldn't find the beach you're looking for." />
 
-  if (!isValidSiteCode(params.site)) return notFound
+  if (!isValidSiteCode(siteCode)) return notFound
 
-  const site = await getPosSite({ code: normalizeSiteCode(params.site) })
+  const site = await getPosSite({ code: normalizeSiteCode(siteCode) })
 
   if (!site) return notFound
 

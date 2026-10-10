@@ -38,7 +38,7 @@ function makeRequest(id: string): NextRequest {
 }
 
 function makeParams(id: string) {
-  return { params: { id } }
+  return { params: Promise.resolve({ id }) }
 }
 
 beforeEach(() => {

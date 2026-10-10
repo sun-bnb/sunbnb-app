@@ -51,7 +51,7 @@ beforeEach(() => {
 
 describe('GET /api/rental-bookings/[id]', () => {
   it('returns 401 when not authenticated and no anonId', async () => {
-    const res = await GET(makeRequest('rb-1'), { params: { id: 'rb-1' } })
+    const res = await GET(makeRequest('rb-1'), { params: Promise.resolve({ id: 'rb-1' }) })
     expect(res.status).toBe(401)
   })
 
@@ -59,7 +59,7 @@ describe('GET /api/rental-bookings/[id]', () => {
     mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
     mockFindUnique.mockResolvedValue(null)
 
-    const res = await GET(makeRequest('rb-1'), { params: { id: 'rb-1' } })
+    const res = await GET(makeRequest('rb-1'), { params: Promise.resolve({ id: 'rb-1' }) })
     expect(res.status).toBe(404)
   })
 
@@ -72,7 +72,7 @@ describe('GET /api/rental-bookings/[id]', () => {
       status: 'complete',
     } as any)
 
-    const res = await GET(makeRequest('rb-1'), { params: { id: 'rb-1' } })
+    const res = await GET(makeRequest('rb-1'), { params: Promise.resolve({ id: 'rb-1' }) })
     expect(res.status).toBe(403)
   })
 
@@ -87,7 +87,7 @@ describe('GET /api/rental-bookings/[id]', () => {
     }
     mockFindUnique.mockResolvedValue(booking as any)
 
-    const res = await GET(makeRequest('rb-1'), { params: { id: 'rb-1' } })
+    const res = await GET(makeRequest('rb-1'), { params: Promise.resolve({ id: 'rb-1' }) })
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.id).toBe('rb-1')
@@ -108,7 +108,7 @@ describe('GET /api/rental-bookings/[id]', () => {
     }
     mockFindUnique.mockResolvedValue(booking as any)
 
-    const res = await GET(makeRequest('rb-1', anonId), { params: { id: 'rb-1' } })
+    const res = await GET(makeRequest('rb-1', anonId), { params: Promise.resolve({ id: 'rb-1' }) })
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.id).toBe('rb-1')
@@ -131,14 +131,14 @@ describe('GET /api/rental-bookings/[id]', () => {
     mockFindUnique.mockResolvedValue(booking as any)
 
     // Request uses a different (foreign) anonId
-    const res = await GET(makeRequest('rb-1', foreignAnonId), { params: { id: 'rb-1' } })
+    const res = await GET(makeRequest('rb-1', foreignAnonId), { params: Promise.resolve({ id: 'rb-1' }) })
     expect(res.status).toBe(403)
   })
 
   it('returns 403 when no identity can be established (unauthenticated, no anonId)', async () => {
     mockAuth.mockResolvedValue(null)
     // No anonId in the URL either
-    const res = await GET(makeRequest('rb-1'), { params: { id: 'rb-1' } })
+    const res = await GET(makeRequest('rb-1'), { params: Promise.resolve({ id: 'rb-1' }) })
     expect(res.status).toBe(401)
   })
 
@@ -155,7 +155,7 @@ describe('GET /api/rental-bookings/[id]', () => {
       .mockResolvedValueOnce(booking as any)
       .mockResolvedValueOnce({ ...booking, status: 'complete' } as any)
 
-    const res = await GET(makeRequest('rb-1'), { params: { id: 'rb-1' } })
+    const res = await GET(makeRequest('rb-1'), { params: Promise.resolve({ id: 'rb-1' }) })
     expect(res.status).toBe(200)
     expect(mockProcessRentalBooking).toHaveBeenCalledWith('pi_demo_123')
   })
@@ -176,7 +176,7 @@ describe('GET /api/rental-bookings/[id]', () => {
     mockIsPaymentSucceeded.mockReturnValue(true)
     mockIsPaymentFailed.mockReturnValue(false)
 
-    const res = await GET(makeRequest('rb-1'), { params: { id: 'rb-1' } })
+    const res = await GET(makeRequest('rb-1'), { params: Promise.resolve({ id: 'rb-1' }) })
     expect(res.status).toBe(200)
     expect(mockProcessRentalBooking).toHaveBeenCalledWith('tr_real_abc')
   })
@@ -198,7 +198,7 @@ describe('GET /api/rental-bookings/[id]', () => {
     mockIsPaymentFailed.mockReturnValue(true)
     mockUpdateMany.mockResolvedValue({ count: 1 } as any)
 
-    const res = await GET(makeRequest('rb-1'), { params: { id: 'rb-1' } })
+    const res = await GET(makeRequest('rb-1'), { params: Promise.resolve({ id: 'rb-1' }) })
     expect(res.status).toBe(200)
     expect(mockUpdateMany).toHaveBeenCalledWith({
       where: { paymentRef: 'tr_real_abc' },

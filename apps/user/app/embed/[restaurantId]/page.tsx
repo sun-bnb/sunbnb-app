@@ -14,13 +14,15 @@ export default async function EmbedBookingPage({
   params,
   searchParams,
 }: {
-  params: { restaurantId: string }
-  searchParams: { date?: string; partySize?: string }
+  params: Promise<{ restaurantId: string }>
+  searchParams: Promise<{ date?: string; partySize?: string }>
 }) {
+  const { restaurantId } = await params
+  const { date, partySize } = await searchParams
   if (!(await isFlagEnabled('restaurants'))) notFound()
 
   const restaurant = await prisma.restaurant.findUnique({
-    where: { id: params.restaurantId },
+    where: { id: restaurantId },
     select: { id: true, name: true, reservationWindow: true, siteId: true, guestSelectionEnabled: true },
   })
   if (!restaurant) notFound()
@@ -34,8 +36,8 @@ export default async function EmbedBookingPage({
         siteId: restaurant.siteId,
         guestSelectionEnabled: restaurant.guestSelectionEnabled,
       }}
-      initialDate={searchParams.date}
-      initialPartySize={searchParams.partySize ? Number(searchParams.partySize) : undefined}
+      initialDate={date}
+      initialPartySize={partySize ? Number(partySize) : undefined}
     />
   )
 }

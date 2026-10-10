@@ -22,7 +22,8 @@ async function getSiteAndReservations(slug: string, userId: string) {
   return { site, reservations }
 }
 
-export default async function BrandedReservationsPage({ params }: { params: { slug: string } }) {
+export default async function BrandedReservationsPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params
   const session = await auth()
   if (!session?.user?.id) {
     return (
@@ -32,7 +33,7 @@ export default async function BrandedReservationsPage({ params }: { params: { sl
     )
   }
 
-  const data = await getSiteAndReservations(params.slug, session.user.id)
+  const data = await getSiteAndReservations(slug, session.user.id)
   if (!data) {
     return (
       <div className="flex items-center justify-center min-h-screen text-gray-500">
@@ -43,7 +44,7 @@ export default async function BrandedReservationsPage({ params }: { params: { sl
 
   return (
     <BrandedReservationsView
-      slug={params.slug}
+      slug={slug}
       site={data.site}
       brand={data.site.brand}
       reservations={data.reservations}

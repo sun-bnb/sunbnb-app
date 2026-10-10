@@ -33,7 +33,7 @@ describe('feature flag gate', () => {
     mockIsFlagEnabled.mockResolvedValue(false)
     const res = await GET(
       req('http://test/api/restaurants/r1/availability?date=2026-05-13&partySize=2'),
-      { params: { id: 'r1' } },
+      { params: Promise.resolve({ id: 'r1' }) },
     )
     expect(res.status).toBe(404)
     expect(mockAvailability).not.toHaveBeenCalled()
@@ -55,7 +55,7 @@ describe('GET /api/restaurants/[id]/availability', () => {
 
     const res = await GET(
       req('https://local.test/api/restaurants/r1/availability?date=2026-05-01&partySize=2'),
-      { params: { id: 'r1' } },
+      { params: Promise.resolve({ id: 'r1' }) },
     )
     expect(res.status).toBe(200)
     const body = await res.json()
@@ -68,7 +68,7 @@ describe('GET /api/restaurants/[id]/availability', () => {
   it('rejects an invalid date', async () => {
     const res = await GET(
       req('https://local.test/api/restaurants/r1/availability?date=bad&partySize=2'),
-      { params: { id: 'r1' } },
+      { params: Promise.resolve({ id: 'r1' }) },
     )
     expect(res.status).toBe(400)
   })
@@ -76,7 +76,7 @@ describe('GET /api/restaurants/[id]/availability', () => {
   it('rejects an invalid party size', async () => {
     const res = await GET(
       req('https://local.test/api/restaurants/r1/availability?date=2026-05-01&partySize=0'),
-      { params: { id: 'r1' } },
+      { params: Promise.resolve({ id: 'r1' }) },
     )
     expect(res.status).toBe(400)
   })
@@ -85,7 +85,7 @@ describe('GET /api/restaurants/[id]/availability', () => {
     mockRate.mockReturnValue({ allowed: false } as any)
     const res = await GET(
       req('https://local.test/api/restaurants/r1/availability?date=2026-05-01&partySize=2'),
-      { params: { id: 'r1' } },
+      { params: Promise.resolve({ id: 'r1' }) },
     )
     expect(res.status).toBe(429)
   })

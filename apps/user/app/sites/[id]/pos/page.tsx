@@ -5,14 +5,16 @@ import { getPosSite } from './queries'
 import { preserveQuery } from '@/app/q/preserve-query'
 
 export default async function SitePos({ params, searchParams }: {
-  params: { id: string },
-  searchParams: Record<string, string | string[] | undefined>
+  params: Promise<{ id: string }>,
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const { id } = await params
+  const query = await searchParams
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY
     || process.env.GOOGLE_MAPS_API_KEY as string
 
-  const site = await getPosSite({ OR: [{ id: params.id }, { slug: params.id }] })
+  const site = await getPosSite({ OR: [{ id }, { slug: id }] })
 
   if (!site) return <ErrorCard title="Beach not found" message="We couldn't find the beach you're looking for." />
 
@@ -20,7 +22,7 @@ export default async function SitePos({ params, searchParams }: {
   // whose code has not been backfilled yet would otherwise redirect to `/q/null`
   // and take every printed card at that venue down with it. Rendering here is
   // the fallback, not a second implementation — both paths use `getPosSite`.
-  if (site.code) redirect(`/q/${site.code}${preserveQuery(searchParams)}`)
+  if (site.code) redirect(`/q/${site.code}${preserveQuery(query)}`)
 
   return <PosView site={site} apiKey={apiKey}/>
 

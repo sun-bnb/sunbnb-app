@@ -30,20 +30,20 @@ beforeEach(() => {
 describe('legacy /sites/[id]/pos', () => {
   it('redirects a known site to its short code-keyed URL', async () => {
     await expect(
-      SitePos({ params: { id: 'site-1' }, searchParams: {} }),
+      SitePos({ params: Promise.resolve({ id: 'site-1' }), searchParams: Promise.resolve({}) }),
     ).rejects.toThrow('NEXT_REDIRECT:/q/S-K7M2X9')
   })
 
   it('preserves query params across the redirect', async () => {
     await expect(
-      SitePos({ params: { id: 'site-1' }, searchParams: { anonId: 'anon-9' } }),
+      SitePos({ params: Promise.resolve({ id: 'site-1' }), searchParams: Promise.resolve({ anonId: 'anon-9' }) }),
     ).rejects.toThrow('NEXT_REDIRECT:/q/S-K7M2X9?anonId=anon-9')
   })
 
   it('still accepts the branded slug as the legacy key', async () => {
     // The old route matched id OR slug, and printed material may carry either.
     await expect(
-      SitePos({ params: { id: 'brisa-marina' }, searchParams: {} }),
+      SitePos({ params: Promise.resolve({ id: 'brisa-marina' }), searchParams: Promise.resolve({}) }),
     ).rejects.toThrow()
 
     expect(mockGetSite).toHaveBeenCalledWith({
@@ -54,7 +54,7 @@ describe('legacy /sites/[id]/pos', () => {
   it('RENDERS instead of redirecting when the site has no code yet', async () => {
     mockGetSite.mockResolvedValue({ id: 'site-1', code: null } as never)
 
-    const result = await SitePos({ params: { id: 'site-1' }, searchParams: {} })
+    const result = await SitePos({ params: Promise.resolve({ id: 'site-1' }), searchParams: Promise.resolve({}) })
 
     expect(mockRedirect).not.toHaveBeenCalled()
     expect(result.type).toBe(PosView)
@@ -63,7 +63,7 @@ describe('legacy /sites/[id]/pos', () => {
   it('shows the not-found card for an unknown site', async () => {
     mockGetSite.mockResolvedValue(null as never)
 
-    const result = await SitePos({ params: { id: 'nope' }, searchParams: {} })
+    const result = await SitePos({ params: Promise.resolve({ id: 'nope' }), searchParams: Promise.resolve({}) })
 
     expect(result.type).toBe(ErrorCard)
     expect(mockRedirect).not.toHaveBeenCalled()

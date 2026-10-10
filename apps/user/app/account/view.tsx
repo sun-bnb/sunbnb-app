@@ -2,7 +2,8 @@
 
 import { TextField } from '@repo/ui/TextField'
 import { submitForm } from './actions'
-import { useFormState, useFormStatus } from 'react-dom'
+import { useActionState } from 'react'
+import { useFormStatus } from 'react-dom'
 import { useTranslations } from 'next-intl'
 import { signOut } from 'next-auth/react'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
@@ -21,7 +22,7 @@ export interface AccountProps {
 
 export default function AccountView({ account, userImage } : { account: AccountProps, userImage?: string | null }) {
 
-  const [formState, formAction] = useFormState(submitForm, { status: '' })
+  const [formState, formAction] = useActionState(submitForm, { status: '' })
 
   const t = useTranslations('Account')
 

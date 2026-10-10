@@ -53,7 +53,7 @@ function makeRequest(
 }
 
 function makeParams(code = CODE) {
-  return { params: { code } }
+  return { params: Promise.resolve({ code }) }
 }
 
 beforeEach(() => {

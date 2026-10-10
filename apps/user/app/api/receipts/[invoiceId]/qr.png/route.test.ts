@@ -27,7 +27,7 @@ function request(id = ID) {
 }
 
 async function call(id = ID) {
-  return GET(request(id), { params: { invoiceId: id } })
+  return GET(request(id), { params: Promise.resolve({ invoiceId: id }) })
 }
 
 describe('GET /api/receipts/[invoiceId]/qr.png', () => {
@@ -56,7 +56,7 @@ describe('GET /api/receipts/[invoiceId]/qr.png', () => {
         `http://localhost:3002/api/receipts/${ID}/qr.png?nif=X9999999X&importe=99999`,
         { method: 'GET' },
       ),
-      { params: { invoiceId: ID } },
+      { params: Promise.resolve({ invoiceId: ID }) },
     )
     expect(res.status).toBe(200)
     // The only inputs the handler read were the id and the row it fetched.

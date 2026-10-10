@@ -44,20 +44,22 @@ async function getServiceFee(siteId: string): Promise<{
   return fee
 }
 
-export default async function ReservationPage({ params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string } }) {
+export default async function ReservationPage({ params, searchParams }: { params: Promise<{ id: string }>, searchParams: Promise<{ [key: string]: string }> }) {
+
+  const { id } = await params
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY
     || process.env.GOOGLE_MAPS_API_KEY as string
 
-  const { payment_intent, payment_intent_client_secret, redirect_status, anonId, terms, orderId } = searchParams
+  const { payment_intent, payment_intent_client_secret, redirect_status, anonId, terms, orderId } = await searchParams
   
   const session = await auth()
   const signedIn = !!(session?.user)
   //if (!session?.user) return null
 
-  const reservation = await getReservation(params.id)
+  const reservation = await getReservation(id)
 
-  if (!reservation) return <div className="h-screen flex items-center justify-center">Reservation {params.id} not found</div>
+  if (!reservation) return <div className="h-screen flex items-center justify-center">Reservation {id} not found</div>
 
   if (signedIn) {
     if(reservation?.userId !== session?.user?.id) {

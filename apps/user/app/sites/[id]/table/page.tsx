@@ -7,12 +7,14 @@ export default async function TableBookingPage({
   params,
   searchParams,
 }: {
-  params: { id: string }
-  searchParams: { date?: string; partySize?: string }
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ date?: string; partySize?: string }>
 }) {
+  const { id } = await params
+  const { date, partySize } = await searchParams
   if (!(await isFlagEnabled('restaurants'))) notFound()
   const site = await prisma.site.findFirst({
-    where: { OR: [{ id: params.id }, { slug: params.id }] },
+    where: { OR: [{ id }, { slug: id }] },
     select: {
       id: true,
       name: true,
@@ -55,8 +57,8 @@ export default async function TableBookingPage({
         reservationWindow: restaurant.reservationWindow,
         guestSelectionEnabled: restaurant.guestSelectionEnabled,
       }}
-      initialDate={searchParams.date}
-      initialPartySize={searchParams.partySize ? Number(searchParams.partySize) : undefined}
+      initialDate={date}
+      initialPartySize={partySize ? Number(partySize) : undefined}
     />
   )
 }

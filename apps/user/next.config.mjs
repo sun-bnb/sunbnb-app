@@ -4,6 +4,9 @@ const withNextIntl = createNextIntlPlugin()
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Dev is served over mkcert HTTPS on this host (server.js); Next 16 blocks
+  // cross-origin /_next/* dev requests unless the origin is listed.
+  allowedDevOrigins: ['local.sunbnb.app'],
   reactStrictMode: false,
   images: {
     remotePatterns: [

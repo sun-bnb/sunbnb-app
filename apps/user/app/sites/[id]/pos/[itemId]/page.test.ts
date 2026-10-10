@@ -51,19 +51,19 @@ beforeEach(() => {
 describe('legacy /sites/[id]/pos/[itemId]', () => {
   it('redirects a scanned old card to its short address-keyed URL', async () => {
     await expect(
-      Pos({ params: { itemId: 'item-1' }, searchParams: {} }),
+      Pos({ params: Promise.resolve({ itemId: 'item-1' }), searchParams: Promise.resolve({}) }),
     ).rejects.toThrow('NEXT_REDIRECT:/q/S-K7M2X9/1-1-1')
   })
 
   it('preserves query params across the redirect', async () => {
     await expect(
-      Pos({ params: { itemId: 'item-1' }, searchParams: { anonId: 'anon-9' } }),
+      Pos({ params: Promise.resolve({ itemId: 'item-1' }), searchParams: Promise.resolve({ anonId: 'anon-9' }) }),
     ).rejects.toThrow('NEXT_REDIRECT:/q/S-K7M2X9/1-1-1?anonId=anon-9')
   })
 
   it('never spends the availability query on a request it is redirecting', async () => {
     await expect(
-      Pos({ params: { itemId: 'item-1' }, searchParams: {} }),
+      Pos({ params: Promise.resolve({ itemId: 'item-1' }), searchParams: Promise.resolve({}) }),
     ).rejects.toThrow()
 
     expect(mockAvailability).not.toHaveBeenCalled()
@@ -74,7 +74,7 @@ describe('legacy /sites/[id]/pos/[itemId]', () => {
     // environment. Every card at the venue goes through here during it.
     mockLoad.mockResolvedValue(unit({ site: { id: 'site-1', code: null } }) as never)
 
-    const result = await Pos({ params: { itemId: 'item-1' }, searchParams: {} })
+    const result = await Pos({ params: Promise.resolve({ itemId: 'item-1' }), searchParams: Promise.resolve({}) })
 
     expect(mockRedirect).not.toHaveBeenCalled()
     expect(result.type).toBe(PosView)
@@ -86,7 +86,7 @@ describe('legacy /sites/[id]/pos/[itemId]', () => {
     // there answers null here until it does.
     mockLoad.mockResolvedValue(unit({ address: null }) as never)
 
-    const result = await Pos({ params: { itemId: 'item-1' }, searchParams: {} })
+    const result = await Pos({ params: Promise.resolve({ itemId: 'item-1' }), searchParams: Promise.resolve({}) })
 
     expect(mockRedirect).not.toHaveBeenCalled()
     expect(result.type).toBe(PosView)
@@ -95,7 +95,7 @@ describe('legacy /sites/[id]/pos/[itemId]', () => {
   it('shows the not-found card for an unknown item, and does not redirect', async () => {
     mockLoad.mockResolvedValue(null)
 
-    const result = await Pos({ params: { itemId: 'nope' }, searchParams: {} })
+    const result = await Pos({ params: Promise.resolve({ itemId: 'nope' }), searchParams: Promise.resolve({}) })
 
     expect(result.type).toBe(ErrorCard)
     expect(mockRedirect).not.toHaveBeenCalled()

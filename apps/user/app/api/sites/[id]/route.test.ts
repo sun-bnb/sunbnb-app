@@ -29,7 +29,7 @@ describe('GET /api/sites/[id]', () => {
   it('includes layoutElements in the Prisma query', async () => {
     mockFindUnique.mockResolvedValue({ id: 'site-1', layoutElements: [] } as any)
 
-    await GET(makeRequest('site-1'), { params: { id: 'site-1' } })
+    await GET(makeRequest('site-1'), { params: Promise.resolve({ id: 'site-1' }) })
 
     expect(mockFindUnique).toHaveBeenCalledTimes(1)
     const args = mockFindUnique.mock.calls[0][0] as any
@@ -42,7 +42,7 @@ describe('GET /api/sites/[id]', () => {
     ]
     mockFindUnique.mockResolvedValue({ id: 'site-1', layoutMode: 'schematic', layoutElements } as any)
 
-    const res = await GET(makeRequest('site-1'), { params: { id: 'site-1' } })
+    const res = await GET(makeRequest('site-1'), { params: Promise.resolve({ id: 'site-1' }) })
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.layoutMode).toBe('schematic')

@@ -26,9 +26,9 @@ import { ORDER_PROCESSING, ORDER_PAYMENT_FAILED } from '@repo/data/reservation-s
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = params
+  const { id } = await params
   if (!isValidEntityId(id)) {
     return Response.json({ error: 'Invalid ID format' }, { status: 400 })
   }

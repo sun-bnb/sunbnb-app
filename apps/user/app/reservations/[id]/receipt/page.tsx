@@ -15,15 +15,16 @@ export default async function Receipt({
   params,
   searchParams,
 }: {
-  params: { id: string }
-  searchParams: { [key: string]: string }
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ [key: string]: string }>
 }) {
-  const { orderId, anonId: anonIdParam } = searchParams
+  const { id } = await params
+  const { orderId, anonId: anonIdParam } = await searchParams
   const session = await auth()
 
   const result: ReceiptResult = orderId
     ? await buildOrderReceipt(orderId)
-    : await buildReservationReceipt(params.id)
+    : await buildReservationReceipt(id)
 
   if (result.status === 'not-found') {
     return <div>{orderId ? 'Order not found' : 'Reservation not found'}</div>

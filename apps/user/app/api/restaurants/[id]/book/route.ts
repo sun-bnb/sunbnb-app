@@ -30,7 +30,7 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS })
 }
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await isFlagEnabled('restaurants'))) {
     return NextResponse.json({ error: 'Not found' }, { status: 404, headers: CORS })
   }
@@ -62,7 +62,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     return NextResponse.json({ error: 'Invalid times' }, { status: 400, headers: CORS })
   }
 
-  const restaurant = await getRestaurantById(params.id)
+  const { id } = await params
+  const restaurant = await getRestaurantById(id)
   if (!restaurant) {
     return NextResponse.json({ error: 'Restaurant not found' }, { status: 404, headers: CORS })
   }

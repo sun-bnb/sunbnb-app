@@ -4,7 +4,7 @@ import CompletePage from './CompletePage'
 import ErrorCard from '@/components/ErrorCard'
 
 interface SearchParams {
-  searchParams: { [key: string]: string }
+  searchParams: Promise<{ [key: string]: string }>
 }
 
 async function getReservationByPaymentRef(paymentRef: string) {
@@ -47,7 +47,7 @@ function verifyOwner(
 
 export default async function Complete({ searchParams }: SearchParams) {
 
-  const { payment_intent, payment_intent_client_secret, reservationId, anonId } = searchParams
+  const { payment_intent, payment_intent_client_secret, reservationId, anonId } = await searchParams
 
   const session = await auth()
   const sessionUserId = session?.user?.id

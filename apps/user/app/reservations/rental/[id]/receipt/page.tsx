@@ -14,13 +14,14 @@ export default async function RentalReceipt({
   params,
   searchParams,
 }: {
-  params: { id: string }
-  searchParams: { [key: string]: string }
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ [key: string]: string }>
 }) {
-  const { anonId: anonIdParam } = searchParams
+  const { id } = await params
+  const { anonId: anonIdParam } = await searchParams
   const session = await auth()
 
-  const result = await buildRentalReceipt(params.id)
+  const result = await buildRentalReceipt(id)
 
   if (result.status === 'not-found') return <div>Rental not found</div>
   if (result.status === 'no-invoice') return <div>Receipt is not ready yet</div>

@@ -9,7 +9,7 @@ import { isFlagEnabled } from '@/app/flags'
  * Rate-limited per IP. Returns 404 when guest selection is off for the venue, so
  * the map never renders unless the partner opted in.
  */
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await isFlagEnabled('restaurants'))) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
@@ -22,7 +22,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
   }
 
-  const layout = await getPublicRestaurantLayout(params.id)
+  const { id } = await params
+  const layout = await getPublicRestaurantLayout(id)
   if (!layout || !layout.guestSelectionEnabled) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }

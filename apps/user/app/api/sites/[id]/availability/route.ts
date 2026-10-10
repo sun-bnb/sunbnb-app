@@ -5,11 +5,11 @@ import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 /** Max date range allowed (90 days) to prevent expensive queries. */
 const MAX_RANGE_MS = 90 * 24 * 60 * 60 * 1000
 
-export async function GET(request: NextRequest, { params } : { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
 
   // Intentionally public — anonymous users need availability data before booking
 
-  const { id } = params
+  const { id } = await params
   if (!isValidEntityId(id)) {
     return Response.json({ error: 'Invalid ID format' }, { status: 400 })
   }

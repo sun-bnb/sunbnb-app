@@ -41,9 +41,10 @@ async function getSiteBySlug(slug: string, userId?: string) {
   return site
 }
 
-export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params
   const site = await prisma.site.findFirst({
-    where: { slug: params.slug },
+    where: { slug },
     include: { brand: true },
   })
 
@@ -76,11 +77,12 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   }
 }
 
-export default async function BrandedSitePage({ params }: { params: { slug: string } }) {
+export default async function BrandedSitePage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params
 
   const session = await auth()
 
-  const site = await getSiteBySlug(params.slug, session?.user?.id)
+  const site = await getSiteBySlug(slug, session?.user?.id)
   if (!site) return <div className="flex items-center justify-center min-h-screen text-gray-500">Site not found</div>
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY

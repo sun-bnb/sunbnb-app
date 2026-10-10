@@ -141,7 +141,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
     it('returns 404 when restaurants flag is off', async () => {
       mockIsFlagEnabled.mockResolvedValue(false)
       const req = makeRequest({ redirectUrl: REDIRECT_URL })
-      const res = await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      const res = await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
       expect(res.status).toBe(404)
     })
   })
@@ -149,7 +149,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
   describe('id validation', () => {
     it('returns 400 for an invalid reservation id', async () => {
       const req = makeRequest({ redirectUrl: REDIRECT_URL }, 'not-a-valid-id')
-      const res = await POST(req, { params: { id: 'not-a-valid-id' } })
+      const res = await POST(req, { params: Promise.resolve({ id: 'not-a-valid-id' }) })
       expect(res.status).toBe(400)
       const body = await res.json()
       expect(body.error).toMatch(/invalid reservation id/i)
@@ -160,7 +160,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
     it('returns 400 when redirectUrl is missing', async () => {
       mockAuth.mockResolvedValue({ user: { id: VALID_USER_ID } })
       const req = makeRequest({})
-      const res = await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      const res = await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
       expect(res.status).toBe(400)
       const body = await res.json()
       expect(body.error).toMatch(/redirectUrl is required/i)
@@ -169,7 +169,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
     it('returns 400 when redirectUrl is on a different origin (open redirect protection)', async () => {
       mockAuth.mockResolvedValue({ user: { id: VALID_USER_ID } })
       const req = makeRequest({ redirectUrl: 'https://evil.example.com/steal' })
-      const res = await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      const res = await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
       expect(res.status).toBe(400)
       const body = await res.json()
       expect(body.error).toMatch(/invalid redirectUrl/i)
@@ -178,7 +178,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
     it('returns 400 when redirectUrl is not a valid URL', async () => {
       mockAuth.mockResolvedValue({ user: { id: VALID_USER_ID } })
       const req = makeRequest({ redirectUrl: 'not-a-url' })
-      const res = await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      const res = await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
       expect(res.status).toBe(400)
       const body = await res.json()
       expect(body.error).toMatch(/invalid redirectUrl/i)
@@ -189,7 +189,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
     it('returns 401 when no session and no anonId', async () => {
       // auth returns null (set in beforeEach), no anonId in body
       const req = makeRequest({ redirectUrl: REDIRECT_URL })
-      const res = await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      const res = await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
       expect(res.status).toBe(401)
       const body = await res.json()
       expect(body.error).toMatch(/authentication required/i)
@@ -197,7 +197,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
 
     it('returns 401 when anonId is not a valid UUID', async () => {
       const req = makeRequest({ redirectUrl: REDIRECT_URL, anonId: 'anon-123' })
-      const res = await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      const res = await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
       expect(res.status).toBe(401)
     })
 
@@ -208,7 +208,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
       )
 
       const req = makeRequest({ redirectUrl: REDIRECT_URL, anonId: VALID_ANON_ID })
-      const res = await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      const res = await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
 
       // Should not be 401 — anon path accepted
       expect(res.status).not.toBe(401)
@@ -221,7 +221,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
       vi.mocked(prisma.tableReservation.findUnique).mockResolvedValue(null)
 
       const req = makeRequest({ redirectUrl: REDIRECT_URL })
-      const res = await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      const res = await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
       expect(res.status).toBe(404)
     })
   })
@@ -234,7 +234,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
       )
 
       const req = makeRequest({ redirectUrl: REDIRECT_URL })
-      const res = await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      const res = await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
       expect(res.status).toBe(403)
       const body = await res.json()
       expect(body.error).toMatch(/not authorized/i)
@@ -250,7 +250,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
 
       const differentAnonId = '550e8400-e29b-41d4-a716-446655440001'
       const req = makeRequest({ redirectUrl: REDIRECT_URL, anonId: differentAnonId })
-      const res = await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      const res = await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
       expect(res.status).toBe(403)
     })
   })
@@ -263,7 +263,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
       )
 
       const req = makeRequest({ redirectUrl: REDIRECT_URL })
-      const res = await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      const res = await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
       expect(res.status).toBe(400)
       const body = await res.json()
       expect(body.error).toMatch(/not awaiting deposit payment/i)
@@ -276,7 +276,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
       )
 
       const req = makeRequest({ redirectUrl: REDIRECT_URL })
-      const res = await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      const res = await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
       expect(res.status).toBe(400)
       const body = await res.json()
       expect(body.error).toMatch(/deposit is not in pending state/i)
@@ -289,7 +289,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
       )
 
       const req = makeRequest({ redirectUrl: REDIRECT_URL })
-      const res = await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      const res = await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
       expect(res.status).toBe(400)
       const body = await res.json()
       expect(body.error).toMatch(/payment already created/i)
@@ -302,7 +302,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
       )
 
       const req = makeRequest({ redirectUrl: REDIRECT_URL })
-      const res = await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      const res = await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
       expect(res.status).toBe(400)
       const body = await res.json()
       expect(body.error).toMatch(/invalid deposit amount/i)
@@ -329,7 +329,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
       )
 
       const req = makeRequest({ redirectUrl: REDIRECT_URL })
-      const res = await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      const res = await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
       expect(res.status).toBe(400)
       const body = await res.json()
       expect(body.error).toMatch(/mollie account/i)
@@ -345,7 +345,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
       )
 
       const req = makeRequest({ redirectUrl: REDIRECT_URL })
-      const res = await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      const res = await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
       expect(res.status).toBe(401)
     })
   })
@@ -358,7 +358,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
       )
 
       const req = makeRequest({ redirectUrl: REDIRECT_URL })
-      const res = await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      const res = await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
 
       expect(res.status).toBe(200)
       const body = await res.json()
@@ -381,7 +381,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
       )
 
       const req = makeRequest({ redirectUrl: REDIRECT_URL })
-      await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
 
       expect(mockPaymentsCreate).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -397,7 +397,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
       )
 
       const req = makeRequest({ redirectUrl: REDIRECT_URL })
-      await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
 
       const createCall = mockPaymentsCreate.mock.calls[0]![0]
       const meta = JSON.parse(createCall.metadata)
@@ -423,7 +423,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
       )
 
       const req = makeRequest({ redirectUrl: REDIRECT_URL })
-      await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
 
       // profiles.page should NOT be called when we already have a profileId
       expect(mockProfilesPage).not.toHaveBeenCalled()
@@ -452,7 +452,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
       mockProfilesPage.mockResolvedValue([{ id: 'pfl_dynamic', status: 'verified' }])
 
       const req = makeRequest({ redirectUrl: REDIRECT_URL })
-      await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
 
       expect(mockProfilesPage).toHaveBeenCalled()
       expect(mockPaymentsCreate).toHaveBeenCalledWith(
@@ -467,7 +467,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
       )
 
       const req = makeRequest({ redirectUrl: REDIRECT_URL, anonId: VALID_ANON_ID })
-      const res = await POST(req, { params: { id: VALID_RESERVATION_ID } })
+      const res = await POST(req, { params: Promise.resolve({ id: VALID_RESERVATION_ID }) })
 
       expect(res.status).toBe(200)
       const body = await res.json()

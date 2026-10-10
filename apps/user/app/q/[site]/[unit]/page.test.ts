@@ -35,7 +35,7 @@ beforeEach(() => {
 
 describe('/q/[site]/[unit]', () => {
   it('renders the unit with the seats the canonical service reports free', async () => {
-    const result = await QrSeatPage({ params: { site: 'S-K7M2X9', unit: '1-1-1' } })
+    const result = await QrSeatPage({ params: Promise.resolve({ site: 'S-K7M2X9', unit: '1-1-1' }) })
 
     expect(result.type).toBe(PosView)
     expect(result.props.site).toBe(SITE)
@@ -48,7 +48,7 @@ describe('/q/[site]/[unit]', () => {
     // Folding a code and parsing an address happen in ONE place. A page that
     // "helpfully" uppercased or trimmed here would be a second opinion about
     // what the string on the card means.
-    await QrSeatPage({ params: { site: 's-k7m2x9', unit: ' 1-1-1-2 ' } })
+    await QrSeatPage({ params: Promise.resolve({ site: 's-k7m2x9', unit: ' 1-1-1-2 ' }) })
 
     expect(mockResolve).toHaveBeenCalledWith('s-k7m2x9', ' 1-1-1-2 ')
   })
@@ -56,7 +56,7 @@ describe('/q/[site]/[unit]', () => {
   it('shows the not-found card when nothing stands at that address', async () => {
     mockResolve.mockResolvedValue(null)
 
-    const result = await QrSeatPage({ params: { site: 'S-K7M2X9', unit: '9-9-9' } })
+    const result = await QrSeatPage({ params: Promise.resolve({ site: 'S-K7M2X9', unit: '9-9-9' }) })
 
     expect(result.type).toBe(ErrorCard)
   })
@@ -66,7 +66,7 @@ describe('/q/[site]/[unit]', () => {
     // for a crawler or a mistyped URL and must not reach it.
     mockResolve.mockResolvedValue(null)
 
-    await QrSeatPage({ params: { site: 'S-K7M2X9', unit: '9-9-9' } })
+    await QrSeatPage({ params: Promise.resolve({ site: 'S-K7M2X9', unit: '9-9-9' }) })
 
     expect(mockAvailability).not.toHaveBeenCalled()
   })
