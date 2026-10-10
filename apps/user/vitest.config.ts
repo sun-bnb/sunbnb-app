@@ -4,7 +4,8 @@ import path from 'path'
 export default defineConfig({
   // Match Next's automatic JSX runtime so transformed .tsx (e.g. server
   // components returning JSX) don't need an explicit `import React`.
-  esbuild: { jsx: 'automatic' },
+  // Vite 8 (vitest 4) transforms with oxc; the old `esbuild.jsx` key is ignored.
+  oxc: { jsx: { runtime: 'automatic' } },
   test: {
     include: ['app/**/*.test.ts', 'store/**/*.test.ts', 'brands/**/*.test.ts'],
     exclude: ['app/**/*.integration.test.ts', 'store/**/*.integration.test.ts', 'brands/**/*.integration.test.ts'],

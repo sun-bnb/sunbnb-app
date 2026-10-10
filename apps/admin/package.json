@@ -39,13 +39,13 @@
     "@types/node": "^20",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
-    "@vitest/coverage-istanbul": "^3.2.4",
+    "@vitest/coverage-istanbul": "^4.1.11",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.39.5",
     "postcss": "^8.4.40",
     "prisma": "^7",
     "tailwindcss": "^3.4.7",
     "typescript": "^5",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.11"
   }
 }

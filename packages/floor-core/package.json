@@ -34,7 +34,7 @@
     "@repo/typescript-config": "*",
     "eslint": "^9.39.5",
     "typescript": "^5.3.3",
-    "vitest": "^3"
+    "vitest": "^4.1.11"
   },
   "dependencies": {
     "@repo/data": "*"
