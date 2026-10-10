@@ -11,7 +11,7 @@ function sanitize(value: string | null, maxLength = 255): string {
 
 /** Basic email format validation. */
 function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 export async function submitForm(

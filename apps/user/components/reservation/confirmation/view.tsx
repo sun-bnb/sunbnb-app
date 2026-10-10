@@ -5,7 +5,7 @@ import logger from '@/utils/logger'
 import { requestReceipt } from '@/app/reservations/[id]/receipt/actions'
 
 import LaunchIcon from '@mui/icons-material/Launch'
-import MailOutlineIcon from '@mui/icons-material/MailOutline'
+import MailOutlineIcon from '@mui/icons-material/MailOutlined'
 import CircularProgress from '@mui/material/CircularProgress'
 import { useTranslations } from 'next-intl'
 import { Fraunces } from 'next/font/google'

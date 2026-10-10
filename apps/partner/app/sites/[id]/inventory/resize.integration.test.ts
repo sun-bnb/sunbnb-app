@@ -28,12 +28,18 @@ beforeAll(async () => { await cleanDatabase() })
 beforeEach(async () => { await cleanDatabase(); mockUserId = null })
 afterAll(async () => { await cleanDatabase(); await disconnectDatabase() })
 
-const config = (rows: number, seatsPerRow: number, pairSeats = false) => ({
-  group: 1, rows, seatsPerRow,
-  baseLat: 36.7213, baseLng: -4.4214,
-  horizontalGap: 1, verticalGap: 1.5, intraPairGap: 0.3,
-  rotation: 0, pairSeats,
-}) as never
+const config = (rows: number, seatsPerRow: number, pairSeats = false) => (({
+  group: 1,
+  rows,
+  seatsPerRow,
+  baseLat: 36.7213,
+  baseLng: -4.4214,
+  horizontalGap: 1,
+  verticalGap: 1.5,
+  intraPairGap: 0.3,
+  rotation: 0,
+  pairSeats
+}) as never)
 
 async function seedParcel(rows: number, seatsPerRow: number, pairSeats = false) {
   const user = await createTestUser()

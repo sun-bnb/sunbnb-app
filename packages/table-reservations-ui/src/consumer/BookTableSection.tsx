@@ -46,10 +46,11 @@ export function BookTableSection({
           label={labels.dateLabel}
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          InputLabelProps={{ shrink: true }}
-          inputProps={{ min: defaultDate, max: maxDate }}
           sx={{ minWidth: 180 }}
-        />
+          slotProps={{
+            htmlInput: { min: defaultDate, max: maxDate },
+            inputLabel: { shrink: true }
+          }} />
         <TextField
           size="small"
           type="number"
@@ -59,8 +60,10 @@ export function BookTableSection({
             const n = Number(e.target.value)
             if (Number.isFinite(n) && n >= 1 && n <= 50) setPartySize(n)
           }}
-          inputProps={{ min: 1, max: 50 }}
           sx={{ width: 140 }}
+          slotProps={{
+            htmlInput: { min: 1, max: 50 }
+          }}
         />
         <Button
           variant="contained"
@@ -72,7 +75,7 @@ export function BookTableSection({
         </Button>
       </div>
     </section>
-  )
+  );
 }
 
 function formatYmd(d: Date): string {

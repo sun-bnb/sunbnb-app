@@ -39,5 +39,5 @@ export default function StatusChanger({ id, current }: { id: string; current: st
         </span>
       )}
     </div>
-  )
+  );
 }

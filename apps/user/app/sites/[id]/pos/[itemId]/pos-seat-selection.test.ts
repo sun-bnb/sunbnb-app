@@ -24,7 +24,10 @@ function makeItem(id: string, price: number | null = null): InventoryItem {
 }
 
 const site = (over: Partial<SiteProps> = {}): SiteProps =>
-  ({ services: [], ...over }) as SiteProps
+  (({
+    services: [],
+    ...over
+  }) as SiteProps)
 
 // ────────────────────────────────────────────────────────────────────────────
 

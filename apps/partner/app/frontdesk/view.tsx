@@ -522,7 +522,6 @@ function BoardCard({ item, expanded, onToggle }: {
                     <TextField
                       value={notesValue}
                       onChange={e => setNotesValue(e.target.value)}
-                      inputProps={{ maxLength: 500 }}
                       multiline
                       rows={2}
                       size="small"
@@ -530,6 +529,9 @@ function BoardCard({ item, expanded, onToggle }: {
                       fullWidth
                       autoFocus
                       sx={{ '& .MuiInputBase-input': { fontSize: '0.75rem' } }}
+                      slotProps={{
+                        htmlInput: { maxLength: 500 }
+                      }}
                     />
                     <div className="flex gap-1.5 justify-end">
                       <Button
@@ -643,7 +645,7 @@ function BoardCard({ item, expanded, onToggle }: {
         </DialogActions>
       </Dialog>
     </>
-  )
+  );
 }
 
 /* ── Search helper ──────────────────────────────────────────── */
@@ -763,23 +765,25 @@ export default function TodayBoardView({ data }: { data: TodayBoardData }) {
               '& .MuiInputBase-root': { fontSize: '0.85rem', borderRadius: '8px' },
               '& .MuiInputBase-input::placeholder': { fontSize: '0.82rem' },
             }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon sx={{ fontSize: 18, color: '#9ca3af' }} />
-                </InputAdornment>
-              ),
-              endAdornment: searchInput ? (
-                <InputAdornment position="end">
-                  <IconButton
-                    size="small"
-                    onClick={() => { setSearchInput(''); setSearchQuery('') }}
-                    edge="end"
-                  >
-                    <ClearIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
-                </InputAdornment>
-              ) : null,
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ fontSize: 18, color: '#9ca3af' }} />
+                  </InputAdornment>
+                ),
+                endAdornment: searchInput ? (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      onClick={() => { setSearchInput(''); setSearchQuery('') }}
+                      edge="end"
+                    >
+                      <ClearIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </InputAdornment>
+                ) : null,
+              }
             }}
           />
 
@@ -921,5 +925,5 @@ export default function TodayBoardView({ data }: { data: TodayBoardData }) {
         </>
       )}
     </div>
-  )
+  );
 }

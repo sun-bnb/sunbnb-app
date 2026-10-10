@@ -14,7 +14,7 @@ import DialogContentText from '@mui/material/DialogContentText'
 import DialogActions from '@mui/material/DialogActions'
 import CircularProgress from '@mui/material/CircularProgress'
 import AddIcon from '@mui/icons-material/Add'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
 import SurfingIcon from '@mui/icons-material/Surfing'
 
@@ -297,8 +297,10 @@ export default function RentalsView() {
           disabled={!rentalsEnabled}
           size="small"
           sx={{ width: 100, flexShrink: 0 }}
-          InputProps={{
-            endAdornment: <InputAdornment position="end">%</InputAdornment>,
+          slotProps={{
+            input: {
+              endAdornment: <InputAdornment position="end">%</InputAdornment>,
+            }
           }}
         />
         <Switch
@@ -495,5 +497,5 @@ export default function RentalsView() {
         </DialogActions>
       </Dialog>
     </div>
-  )
+  );
 }

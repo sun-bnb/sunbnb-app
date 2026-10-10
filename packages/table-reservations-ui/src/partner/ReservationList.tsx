@@ -74,8 +74,10 @@ export function ReservationList({
           label={labels.dateLabel}
           value={date}
           onChange={(e) => onChangeDate(e.target.value)}
-          InputLabelProps={{ shrink: true }}
           sx={{ minWidth: 180 }}
+          slotProps={{
+            inputLabel: { shrink: true }
+          }}
         />
         <ToggleButtonGroup
           size="small"
@@ -115,5 +117,5 @@ export function ReservationList({
         </div>
       )}
     </div>
-  )
+  );
 }

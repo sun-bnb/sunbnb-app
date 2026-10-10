@@ -13,7 +13,7 @@ import DialogContentText from "@mui/material/DialogContentText"
 import DialogActions from "@mui/material/DialogActions"
 import CircularProgress from "@mui/material/CircularProgress"
 import EditIcon from "@mui/icons-material/Edit"
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline"
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined"
 import PercentIcon from "@mui/icons-material/Percent"
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney"
 import BusinessIcon from "@mui/icons-material/Business"
@@ -624,8 +624,10 @@ export default function PartnerDetailView({
             value={maxSitesInput}
             onChange={(e) => setMaxSitesInput(e.target.value)}
             placeholder={basePlanMaxSites != null ? String(basePlanMaxSites) : "base plan value"}
-            inputProps={{ min: 0, step: 1 }}
             sx={{ width: 180 }}
+            slotProps={{
+              htmlInput: { min: 0, step: 1 }
+            }}
           />
           <Button
             variant="contained"
@@ -718,7 +720,9 @@ export default function PartnerDetailView({
             value={taxRegionInput}
             onChange={(e) => setTaxRegionInput(e.target.value)}
             sx={{ width: 260 }}
-            SelectProps={{ MenuProps: { PaperProps: { sx: { maxHeight: 360 } } } }}
+            slotProps={{
+              select: { MenuProps: { slotProps: { paper: { sx: { maxHeight: 360 } } } } }
+            }}
           >
             <MenuItem value="">&mdash; Not set &mdash;</MenuItem>
             {ES_PROVINCES.map((p) => (
@@ -979,5 +983,5 @@ export default function PartnerDetailView({
         </DialogActions>
       </Dialog>
     </div>
-  )
+  );
 }

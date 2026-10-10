@@ -7,7 +7,7 @@ export const STATUS_STYLES: Record<string, string> = {
 }
 
 export function statusLabel(s: string) {
-  return s.replace(/_/g, ' ')
+  return s.replace(/_/g, ' ');
 }
 
 export function scoreStyle(score: number) {

@@ -33,7 +33,7 @@
   "peerDependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@mui/icons-material": "^5.15.14",
-    "@mui/material": "^5.15.14"
+    "@mui/icons-material": "^9.5.0",
+    "@mui/material": "^9.5.0"
   }
 }

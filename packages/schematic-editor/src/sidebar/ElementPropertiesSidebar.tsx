@@ -6,7 +6,7 @@ import MenuItem from '@mui/material/MenuItem'
 import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
 import CloseIcon from '@mui/icons-material/Close'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import type { LayoutElementDTO } from '@repo/schematic/types'
@@ -147,8 +147,10 @@ export function ElementPropertiesSidebar({
             setWidth(n)
             save({ width: n })
           }}
-          inputProps={{ min: 0.1, step: 0.1 }}
           fullWidth
+          slotProps={{
+            htmlInput: { min: 0.1, step: 0.1 }
+          }}
         />
         <TextField
           size="small"
@@ -161,8 +163,10 @@ export function ElementPropertiesSidebar({
             setHeight(n)
             save({ height: n })
           }}
-          inputProps={{ min: 0.1, step: 0.1 }}
           fullWidth
+          slotProps={{
+            htmlInput: { min: 0.1, step: 0.1 }
+          }}
         />
       </div>
 
@@ -177,7 +181,9 @@ export function ElementPropertiesSidebar({
           setRotation(n)
           save({ rotation: n })
         }}
-        inputProps={{ min: -360, max: 360, step: 5 }}
+        slotProps={{
+          htmlInput: { min: -360, max: 360, step: 5 }
+        }}
       />
 
       {shape === 'rect' && (
@@ -192,7 +198,9 @@ export function ElementPropertiesSidebar({
             setCornerRadius(n)
             save({ cornerRadius: n })
           }}
-          inputProps={{ min: 0, step: 0.1 }}
+          slotProps={{
+            htmlInput: { min: 0, step: 0.1 }
+          }}
         />
       )}
 
@@ -228,5 +236,5 @@ export function ElementPropertiesSidebar({
         </div>
       </div>
     </div>
-  )
+  );
 }

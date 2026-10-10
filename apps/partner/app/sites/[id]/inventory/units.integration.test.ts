@@ -29,12 +29,18 @@ beforeAll(async () => { await cleanDatabase() })
 beforeEach(async () => { await cleanDatabase(); mockUserId = null })
 afterAll(async () => { await cleanDatabase(); await disconnectDatabase() })
 
-const parcelConfig = (pairSeats: boolean) => ({
-  group: 1, rows: 2, seatsPerRow: 4,
-  baseLat: 36.7213, baseLng: -4.4214,
-  horizontalGap: 1, verticalGap: 1.5, intraPairGap: 0.3,
-  rotation: 0, pairSeats,
-}) as never
+const parcelConfig = (pairSeats: boolean) => (({
+  group: 1,
+  rows: 2,
+  seatsPerRow: 4,
+  baseLat: 36.7213,
+  baseLng: -4.4214,
+  horizontalGap: 1,
+  verticalGap: 1.5,
+  intraPairGap: 0.3,
+  rotation: 0,
+  pairSeats
+}) as never)
 
 describe('I1 — every placed seat has a unit', () => {
   it('a parcel created WITHOUT pairing still gives every seat a unit (the gap)', async () => {

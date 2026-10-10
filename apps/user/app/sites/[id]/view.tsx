@@ -262,6 +262,6 @@ export default function SiteView({ site, apiKey, brand, initialAvailableCount }:
         />
       </div>
     </div>
-  )
+  );
 
 }

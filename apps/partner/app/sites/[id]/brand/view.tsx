@@ -243,17 +243,19 @@ export default function BrandView() {
       error={slugStatus === 'taken' || slugStatus === 'too-short'}
       color={slugStatus === 'available' ? 'success' : undefined}
       size="small"
-      InputProps={{
-        endAdornment: (
-          <InputAdornment position="end">
-            {slugStatus === 'checking' && <CircularProgress size={16} />}
-            {slugStatus === 'available' && <CheckCircleIcon fontSize="small" sx={{ color: '#16a34a' }} />}
-            {slugStatus === 'taken' && <ErrorIcon fontSize="small" color="error" />}
-          </InputAdornment>
-        ),
-      }}
-      FormHelperTextProps={slugStatus === 'available' ? { sx: { color: '#16a34a' } } : undefined}
-    />
+      slotProps={{
+        input: {
+          endAdornment: (
+            <InputAdornment position="end">
+              {slugStatus === 'checking' && <CircularProgress size={16} />}
+              {slugStatus === 'available' && <CheckCircleIcon fontSize="small" sx={{ color: '#16a34a' }} />}
+              {slugStatus === 'taken' && <ErrorIcon fontSize="small" color="error" />}
+            </InputAdornment>
+          ),
+        },
+
+        formHelperText: slugStatus === 'available' ? { sx: { color: '#16a34a' } } : undefined
+      }} />
   )
 
   const previewLink = (
@@ -373,17 +375,19 @@ export default function BrandView() {
               error={slugStatus === 'taken' || slugStatus === 'too-short'}
               color={slugStatus === 'available' ? 'success' : undefined}
               size="small"
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    {slugStatus === 'checking' && <CircularProgress size={16} />}
-                    {slugStatus === 'available' && <CheckCircleIcon fontSize="small" sx={{ color: '#16a34a' }} />}
-                    {slugStatus === 'taken' && <ErrorIcon fontSize="small" color="error" />}
-                  </InputAdornment>
-                ),
-              }}
-              FormHelperTextProps={slugStatus === 'available' ? { sx: { color: '#16a34a' } } : undefined}
-            />
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      {slugStatus === 'checking' && <CircularProgress size={16} />}
+                      {slugStatus === 'available' && <CheckCircleIcon fontSize="small" sx={{ color: '#16a34a' }} />}
+                      {slugStatus === 'taken' && <ErrorIcon fontSize="small" color="error" />}
+                    </InputAdornment>
+                  ),
+                },
+
+                formHelperText: slugStatus === 'available' ? { sx: { color: '#16a34a' } } : undefined
+              }} />
             <TextField
               label="Tagline"
               fullWidth
@@ -513,5 +517,5 @@ export default function BrandView() {
         </section>
       </div>
     </div>
-  )
+  );
 }

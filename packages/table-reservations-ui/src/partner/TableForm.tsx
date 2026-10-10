@@ -10,7 +10,7 @@ import Switch from '@mui/material/Switch'
 import CloseIcon from '@mui/icons-material/Close'
 import RotateLeftIcon from '@mui/icons-material/RotateLeft'
 import RotateRightIcon from '@mui/icons-material/RotateRight'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import type { TableInput } from '@repo/table-reservations-core'
 
 export type TableFormShape = 'square' | 'round' | 'rect' | 'oval' | 'booth' | 'bar'
@@ -158,7 +158,9 @@ export function TableForm({ initial, labels, onChange, onDelete, onClose }: Tabl
           setValues((s) => ({ ...s, number: n }))
           save({ number: n })
         }}
-        inputProps={{ min: 1, max: 9999 }}
+        slotProps={{
+          htmlInput: { min: 1, max: 9999 }
+        }}
       />
       <TextField
         size="small"
@@ -181,7 +183,9 @@ export function TableForm({ initial, labels, onChange, onDelete, onClose }: Tabl
           setValues((s) => ({ ...s, capacity: n }))
           save({ capacity: n })
         }}
-        inputProps={{ min: 1, max: 50 }}
+        slotProps={{
+          htmlInput: { min: 1, max: 50 }
+        }}
       />
       <div className="flex gap-2">
         <TextField
@@ -195,8 +199,10 @@ export function TableForm({ initial, labels, onChange, onDelete, onClose }: Tabl
             setValues((s) => ({ ...s, minPartySize: n }))
             save({ minPartySize: n })
           }}
-          inputProps={{ min: 1, max: 50 }}
           fullWidth
+          slotProps={{
+            htmlInput: { min: 1, max: 50 }
+          }}
         />
         <TextField
           size="small"
@@ -210,8 +216,10 @@ export function TableForm({ initial, labels, onChange, onDelete, onClose }: Tabl
             setValues((s) => ({ ...s, maxPartySize: n }))
             save({ maxPartySize: n })
           }}
-          inputProps={{ min: 1, max: 50 }}
           fullWidth
+          slotProps={{
+            htmlInput: { min: 1, max: 50 }
+          }}
         />
       </div>
       <TextField
@@ -245,8 +253,10 @@ export function TableForm({ initial, labels, onChange, onDelete, onClose }: Tabl
             setValues((s) => ({ ...s, width: n }))
             save({ width: n })
           }}
-          inputProps={{ min: 0.3, max: 10, step: 0.1 }}
           fullWidth
+          slotProps={{
+            htmlInput: { min: 0.3, max: 10, step: 0.1 }
+          }}
         />
         <TextField
           size="small"
@@ -259,8 +269,10 @@ export function TableForm({ initial, labels, onChange, onDelete, onClose }: Tabl
             setValues((s) => ({ ...s, height: n }))
             save({ height: n })
           }}
-          inputProps={{ min: 0.3, max: 10, step: 0.1 }}
           fullWidth
+          slotProps={{
+            htmlInput: { min: 0.3, max: 10, step: 0.1 }
+          }}
         />
       </div>
 
@@ -284,7 +296,9 @@ export function TableForm({ initial, labels, onChange, onDelete, onClose }: Tabl
           setValues((s) => ({ ...s, zone: v }))
           save({ zone: v || null })
         }}
-        inputProps={{ maxLength: 50 }}
+        slotProps={{
+          htmlInput: { maxLength: 50 }
+        }}
       />
 
       <TextField
@@ -300,7 +314,9 @@ export function TableForm({ initial, labels, onChange, onDelete, onClose }: Tabl
           setValues((s) => ({ ...s, turnTimeMinutes: n }))
           save({ turnTimeMinutes: n })
         }}
-        inputProps={{ min: 15, max: 600, step: 15 }}
+        slotProps={{
+          htmlInput: { min: 15, max: 600, step: 15 }
+        }}
       />
 
       <TextField
@@ -315,7 +331,9 @@ export function TableForm({ initial, labels, onChange, onDelete, onClose }: Tabl
           setValues((s) => ({ ...s, staffNote: v }))
           save({ staffNote: v || null })
         }}
-        inputProps={{ maxLength: 500 }}
+        slotProps={{
+          htmlInput: { maxLength: 500 }
+        }}
       />
 
       <FormControlLabel
@@ -434,7 +452,9 @@ export function TableForm({ initial, labels, onChange, onDelete, onClose }: Tabl
             setValues((s) => ({ ...s, depositPerGuest: n }))
             save({ depositPerGuest: n })
           }}
-          inputProps={{ min: 0, max: 1000, step: 0.5 }}
+          slotProps={{
+            htmlInput: { min: 0, max: 1000, step: 0.5 }
+          }}
         />
       </div>
 
@@ -473,7 +493,7 @@ export function TableForm({ initial, labels, onChange, onDelete, onClose }: Tabl
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 interface SeatLayoutEditorProps {
@@ -515,8 +535,10 @@ function SeatLayoutEditor({ values, labels, onPatch }: SeatLayoutEditorProps) {
         if (n !== null && !Number.isFinite(n)) return
         onPatch({ [key]: n } as Partial<TableFormValues> & Partial<TableInput>)
       }}
-      inputProps={{ min: 0, max: 50 }}
       fullWidth
+      slotProps={{
+        htmlInput: { min: 0, max: 50 }
+      }}
     />
   )
 

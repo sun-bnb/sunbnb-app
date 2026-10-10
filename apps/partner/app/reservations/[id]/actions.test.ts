@@ -61,7 +61,12 @@ beforeEach(() => {
 // ─── State-machine mock helpers (track 018 P4 slice 2) ──────────────────────
 
 const rejected = (event: string, state: Record<string, unknown> = { kind: 'online', pay: 'complete', occ: 'present' }) =>
-  ({ outcome: 'rejected', state: { released: false, ...state }, event, reason: 'no matching transition (must-reject cell)' }) as any
+  (({
+    outcome: 'rejected',
+    state: { released: false, ...state },
+    event,
+    reason: 'no matching transition (must-reject cell)'
+  }) as any)
 
 // ─── Setup helpers ──────────────────────────────────────────────────────────
 

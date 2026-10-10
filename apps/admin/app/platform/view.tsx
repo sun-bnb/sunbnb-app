@@ -12,7 +12,7 @@ import DialogContentText from '@mui/material/DialogContentText'
 import DialogActions from '@mui/material/DialogActions'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import BusinessIcon from '@mui/icons-material/Business'
 import SettingsIcon from '@mui/icons-material/Settings'
 
@@ -273,7 +273,9 @@ export default function PlatformView({
                 onChange={(e) => setSForm({ ...sForm, country: e.target.value })}
                 placeholder="e.g. FI"
                 required
-                inputProps={{ maxLength: 3, style: { textTransform: 'uppercase' } }}
+                slotProps={{
+                  htmlInput: { maxLength: 3, style: { textTransform: 'uppercase' } }
+                }}
               />
               <TextField
                 label="Currency"
@@ -282,7 +284,9 @@ export default function PlatformView({
                 onChange={(e) => setSForm({ ...sForm, currency: e.target.value })}
                 placeholder="e.g. EUR"
                 required
-                inputProps={{ maxLength: 3, style: { textTransform: 'uppercase' } }}
+                slotProps={{
+                  htmlInput: { maxLength: 3, style: { textTransform: 'uppercase' } }
+                }}
               />
               <TextField
                 label="Tax rate (%)"
@@ -291,7 +295,9 @@ export default function PlatformView({
                 onChange={(e) => setSForm({ ...sForm, vat: e.target.value })}
                 placeholder="e.g. 25.5"
                 type="number"
-                inputProps={{ step: '0.1', min: '0', max: '100' }}
+                slotProps={{
+                  htmlInput: { step: '0.1', min: '0', max: '100' }
+                }}
               />
             </div>
 
@@ -441,5 +447,5 @@ export default function PlatformView({
         </Dialog>
       </div>
     </div>
-  )
+  );
 }

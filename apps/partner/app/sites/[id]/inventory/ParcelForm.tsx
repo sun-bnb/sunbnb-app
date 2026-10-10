@@ -8,7 +8,7 @@ import Switch from '@mui/material/Switch'
 import IconButton from '@mui/material/IconButton'
 import Divider from '@mui/material/Divider'
 import CloseIcon from '@mui/icons-material/Close'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import { useSite } from '@/app/sites/site-context'
 import { ChairConfig } from './chair-util'
 import { syncChairsWithLayout, setItemStatusByGroup, reverseParcelNumbering, reverseParcelOrientation } from './actions'
@@ -161,8 +161,10 @@ export default function ParcelFormView({
               <TextField
                 fullWidth size="small" type="number"
                 value={horizontalGapStr}
-                inputProps={{ step: 0.1 }}
                 onChange={(e) => { setHorizontalGapStr(e.target.value); if (e.target.value !== '') handleConfigChange('horizontalGap', Number(e.target.value)) }}
+                slotProps={{
+                  htmlInput: { step: 0.1 }
+                }}
               />
             </div>
             <div className="flex-1">
@@ -170,8 +172,10 @@ export default function ParcelFormView({
               <TextField
                 fullWidth size="small" type="number"
                 value={verticalGapStr}
-                inputProps={{ step: 0.5 }}
                 onChange={(e) => { setVerticalGapStr(e.target.value); if (e.target.value !== '') handleConfigChange('verticalGap', Number(e.target.value)) }}
+                slotProps={{
+                  htmlInput: { step: 0.5 }
+                }}
               />
             </div>
           </div>
@@ -185,8 +189,10 @@ export default function ParcelFormView({
               <TextField
                 fullWidth size="small" type="number"
                 value={intraPairGapStr}
-                inputProps={{ step: 0.1 }}
                 onChange={(e) => { setIntraPairGapStr(e.target.value); if (e.target.value !== '') handleConfigChange('intraPairGap', Number(e.target.value)) }}
+                slotProps={{
+                  htmlInput: { step: 0.1 }
+                }}
               />
             </div>
           )}
@@ -195,8 +201,10 @@ export default function ParcelFormView({
             <TextField
               fullWidth size="small" type="number"
               value={rotationStr}
-              inputProps={{ step: 5 }}
               onChange={(e) => { setRotationStr(e.target.value); if (e.target.value !== '') handleConfigChange('rotation', Number(e.target.value)) }}
+              slotProps={{
+                htmlInput: { step: 5 }
+              }}
             />
           </div>
         </div>
@@ -348,5 +356,5 @@ export default function ParcelFormView({
         )}
       </div>
     </div>
-  )
+  );
 }

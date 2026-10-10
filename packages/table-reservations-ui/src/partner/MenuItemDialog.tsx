@@ -127,8 +127,10 @@ export function MenuItemDialog({
                 if (!Number.isFinite(n)) return
                 setTotalPrice(n)
               }}
-              inputProps={{ min: 0, step: 0.1 }}
               className="basis-1/4 min-w-0"
+              slotProps={{
+                htmlInput: { min: 0, step: 0.1 }
+              }}
             />
             <TextField
               size="small"
@@ -140,8 +142,10 @@ export function MenuItemDialog({
                 if (!Number.isFinite(n)) return
                 setTax(n)
               }}
-              inputProps={{ min: 0, max: 100, step: 1 }}
               className="basis-1/4 min-w-0"
+              slotProps={{
+                htmlInput: { min: 0, max: 100, step: 1 }
+              }}
             />
             <TextField
               size="small"
@@ -231,5 +235,5 @@ export function MenuItemDialog({
         </Button>
       </DialogActions>
     </Dialog>
-  )
+  );
 }

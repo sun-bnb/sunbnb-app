@@ -252,10 +252,11 @@ export default function EmbedBookingView({ restaurant, initialDate, initialParty
           label={t('dateLabel')}
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          InputLabelProps={{ shrink: true }}
-          inputProps={{ min: today, max: maxDate }}
           sx={{ minWidth: 170 }}
-        />
+          slotProps={{
+            htmlInput: { min: today, max: maxDate },
+            inputLabel: { shrink: true }
+          }} />
         <TextField
           size="small"
           type="number"
@@ -265,8 +266,10 @@ export default function EmbedBookingView({ restaurant, initialDate, initialParty
             const n = Number(e.target.value)
             if (Number.isFinite(n) && n >= 1 && n <= 50) setPartySize(n)
           }}
-          inputProps={{ min: 1, max: 50 }}
           sx={{ width: 130 }}
+          slotProps={{
+            htmlInput: { min: 1, max: 50 }
+          }}
         />
       </div>
 
@@ -356,7 +359,7 @@ export default function EmbedBookingView({ restaurant, initialDate, initialParty
         </section>
       ) : null}
     </Shell>
-  )
+  );
 }
 
 // forwardRef so the height-reporting effect can measure the rendered tree.

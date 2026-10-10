@@ -269,7 +269,10 @@ describe('reconcile — rentals, tabs, deposits', () => {
     vi.mocked(prisma.tableReservation.findMany).mockResolvedValue([
       { id: 'td-1', paymentRef: 'tr_c' } as any,
     ])
-    mockFindEntity.mockImplementation(async (ref) => ({ type: ref === 'tr_c' ? 'table-deposit' : 'tab', entityId: ref }) as any)
+    mockFindEntity.mockImplementation(async (ref) => (({
+      type: ref === 'tr_c' ? 'table-deposit' : 'tab',
+      entityId: ref
+    }) as any))
     mockOnState.mockRejectedValueOnce(new Error('boom'))
 
     const body = await (await POST(makeRequest('test-secret'))).json()

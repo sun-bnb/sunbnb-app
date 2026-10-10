@@ -166,7 +166,7 @@ Vercel-managed via git branches: `main` → preview, `test` → test.sunbnb.app,
 | Auth | NextAuth v5 (beta) — JWT strategy |
 | Payments | Mollie for Platforms · Stripe Connect · Viva (online + Cloud Terminal) · Stripe Tap to Pay (+ demo mode); Stripe Billing for subscriptions |
 | State | Redux Toolkit + RTK Query (user app) |
-| Styling | Tailwind CSS 4 (CSS-first `@theme` in each app's `app/globals.css`) + MUI 5 (progressive migration to pure Tailwind) |
+| Styling | Tailwind CSS 4 (CSS-first `@theme` in each app's `app/globals.css`) + MUI 9 (progressive migration to pure Tailwind) |
 | i18n | next-intl (EN, ES, FI) |
 | Maps | Google Maps (`@vis.gl/react-google-maps`) |
 | PDF | @react-pdf/renderer |

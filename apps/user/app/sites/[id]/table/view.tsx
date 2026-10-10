@@ -245,10 +245,11 @@ export default function TableBookingView({
           label={t('dateLabel')}
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          InputLabelProps={{ shrink: true }}
-          inputProps={{ min: today, max: maxDate }}
           sx={{ minWidth: 180 }}
-        />
+          slotProps={{
+            htmlInput: { min: today, max: maxDate },
+            inputLabel: { shrink: true }
+          }} />
         <TextField
           size="small"
           type="number"
@@ -258,8 +259,10 @@ export default function TableBookingView({
             const n = Number(e.target.value)
             if (Number.isFinite(n) && n >= 1 && n <= 50) setPartySize(n)
           }}
-          inputProps={{ min: 1, max: 50 }}
           sx={{ width: 140 }}
+          slotProps={{
+            htmlInput: { min: 1, max: 50 }
+          }}
         />
       </section>
 
@@ -452,7 +455,7 @@ export default function TableBookingView({
         </section>
       ) : null}
     </div>
-  )
+  );
 }
 
 // ── Deposit pay-step sub-components ──────────────────────────────────────────

@@ -315,7 +315,9 @@ describe('saveReservationForMultipleItems', () => {
   })
 
   it('returns error when items array exceeds 20', async () => {
-    const items = Array.from({ length: 21 }, (_, i) => ({ id: `item-${i}` }) as any)
+    const items = Array.from({ length: 21 }, (_, i) => (({
+      id: `item-${i}`
+    }) as any))
 
     const res = await saveReservationForMultipleItems({
       siteId: 'site-1',

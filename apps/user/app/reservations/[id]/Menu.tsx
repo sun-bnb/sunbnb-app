@@ -430,13 +430,15 @@ export default function Menu({
         anchor="bottom"
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        PaperProps={{ sx: { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '85dvh' } }}
+        slotProps={{
+          paper: { sx: { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '85dvh' } }
+        }}
       >
         <div className="mx-auto mt-2.5 mb-1 h-1 w-10 rounded-full bg-brand-ink/15" aria-hidden="true" />
         {drawerContent === 'new-order' ? paymentContent : <Orders orders={currentOrders} reservationId={reservationId} />}
       </Drawer>
     </div>
-  )
+  );
 }
 
 /** Item count on an icon — replaces MUI Badge (whose palette colours clashed). */

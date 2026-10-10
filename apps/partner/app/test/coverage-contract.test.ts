@@ -45,7 +45,7 @@ const GATED_ACTIONS_FILE = path.resolve(__dirname, 'gated-actions.ts')
 /** Resolve an @/ alias path to an absolute file path */
 function resolveAlias(aliasPath: string): string {
   // @/ → apps/partner/  (the PARTNER_ROOT, not APP_ROOT)
-  return path.resolve(PARTNER_ROOT, aliasPath.replace(/^@\//, '') + '.ts')
+  return path.resolve(PARTNER_ROOT, aliasPath.replace(/^@\//, '') + '.ts');
 }
 
 /**
@@ -138,7 +138,7 @@ function hasUseServerDirective(filePath: string): boolean {
   const src = fs.readFileSync(filePath, 'utf-8')
   // Check first 400 chars — directive is always near the top
   const head = src.slice(0, 400)
-  return /['"]use server['"]/.test(head)
+  return /['"]use server['"]/.test(head);
 }
 
 /**

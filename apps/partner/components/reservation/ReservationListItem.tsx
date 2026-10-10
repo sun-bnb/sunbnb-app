@@ -2,7 +2,7 @@ import { cancelReservation } from '@/actions/reservations'
 import { Reservation } from '@/types/shared'
 import Chip from '@mui/material/Chip'
 import Button from '@mui/material/Button'
-import MailOutlineIcon from '@mui/icons-material/MailOutline'
+import MailOutlineIcon from '@mui/icons-material/MailOutlined'
 import dayjs, { Dayjs } from 'dayjs'
 import {
   RESERVATION_PENDING,

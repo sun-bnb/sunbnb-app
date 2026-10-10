@@ -242,7 +242,9 @@ export default function ProductsView() {
                   required
                   value={totalPrice}
                   onChange={(e) => setTotalPrice(e.target.value)}
-                  inputProps={{ step: '0.01' }}
+                  slotProps={{
+                    htmlInput: { step: '0.01' }
+                  }}
                 />
                 <TextField
                   name="tax"
@@ -252,7 +254,9 @@ export default function ProductsView() {
                   required
                   value={tax}
                   onChange={(e) => setTax(e.target.value)}
-                  inputProps={{ step: '0.01' }}
+                  slotProps={{
+                    htmlInput: { step: '0.01' }
+                  }}
                 />
                 <TextField
                   name="category"
@@ -261,7 +265,9 @@ export default function ProductsView() {
                   select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  SelectProps={{ native: true }}
+                  slotProps={{
+                    select: { native: true }
+                  }}
                 >
                   <option value="food">{t('food')}</option>
                   <option value="drink">{t('drink')}</option>
@@ -275,7 +281,9 @@ export default function ProductsView() {
                   type="number"
                   value={prepTime}
                   onChange={(e) => setPrepTime(e.target.value)}
-                  inputProps={{ min: 0, step: 1 }}
+                  slotProps={{
+                    htmlInput: { min: 0, step: 1 }
+                  }}
                 />
               </div>
             </div>
@@ -327,5 +335,5 @@ export default function ProductsView() {
         </div>
       )}
     </div>
-  )
+  );
 }

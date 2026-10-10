@@ -397,7 +397,9 @@ export default function SettlementsView({
               size="small"
               value={periodStart}
               onChange={(e) => setPeriodStart(e.target.value)}
-              InputLabelProps={{ shrink: true }}
+              slotProps={{
+                inputLabel: { shrink: true }
+              }}
             />
             <TextField
               label="Period end"
@@ -405,7 +407,9 @@ export default function SettlementsView({
               size="small"
               value={periodEnd}
               onChange={(e) => setPeriodEnd(e.target.value)}
-              InputLabelProps={{ shrink: true }}
+              slotProps={{
+                inputLabel: { shrink: true }
+              }}
             />
           </div>
 
@@ -734,5 +738,5 @@ export default function SettlementsView({
         </DialogActions>
       </Dialog>
     </div>
-  )
+  );
 }

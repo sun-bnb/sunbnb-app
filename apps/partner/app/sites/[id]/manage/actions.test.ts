@@ -649,7 +649,12 @@ describe('markDeparted split-then-depart (machine split.subset)', () => {
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID, items } as any)
   }
   const applied = (extra: Record<string, unknown> = {}) =>
-    ({ outcome: 'applied', transition: {} as any, state: {} as any, ...extra }) as any
+    (({
+      outcome: 'applied',
+      transition: {} as any,
+      state: {} as any,
+      ...extra
+    }) as any)
 
   it('strict subset → split.subset with the subset ids, then staff.depart on the NEW reservation', async () => {
     lookup(THREE)

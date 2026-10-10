@@ -22,7 +22,7 @@ function checkPassword(value: string): PasswordChecks {
     lowercase: /[a-z]/.test(value),
     uppercase: /[A-Z]/.test(value),
     digit: /[0-9]/.test(value),
-  }
+  };
 }
 
 function isPasswordValid(checks: PasswordChecks) {

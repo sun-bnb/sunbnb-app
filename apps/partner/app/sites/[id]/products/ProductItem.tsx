@@ -12,7 +12,7 @@ import DialogContent from '@mui/material/DialogContent'
 import DialogContentText from '@mui/material/DialogContentText'
 import DialogActions from '@mui/material/DialogActions'
 import EditIcon from '@mui/icons-material/Edit'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import CameraAltIcon from '@mui/icons-material/CameraAlt'
 import CloseIcon from '@mui/icons-material/Close'
 import CheckIcon from '@mui/icons-material/Check'
@@ -166,13 +166,19 @@ export default function ProductItem({ product, onUpdated }: ProductItemProps) {
             <TextField label="Description" size="small" fullWidth multiline minRows={1} maxRows={3}
               value={description} onChange={(e) => setDescription(e.target.value)} sx={{ gridColumn: '1 / -1' }} />
             <TextField label="Total price (€)" size="small" type="number" value={totalPrice}
-              onChange={(e) => setTotalPrice(parseFloat(e.target.value) || 0)} inputProps={{ step: '0.01' }} />
+              onChange={(e) => setTotalPrice(parseFloat(e.target.value) || 0)} slotProps={{
+              htmlInput: { step: '0.01' }
+            }} />
             <TextField label="Tax %" size="small" type="number" value={tax}
-              onChange={(e) => setTax(parseFloat(e.target.value) || 0)} inputProps={{ step: '0.01' }} />
+              onChange={(e) => setTax(parseFloat(e.target.value) || 0)} slotProps={{
+              htmlInput: { step: '0.01' }
+            }} />
             <TextField
               label="Category" size="small" select value={category}
               onChange={(e) => setCategory(e.target.value)}
-              SelectProps={{ native: true }}
+              slotProps={{
+                select: { native: true }
+              }}
             >
               <option value="food">Food</option>
               <option value="drink">Drink</option>
@@ -181,7 +187,9 @@ export default function ProductItem({ product, onUpdated }: ProductItemProps) {
             </TextField>
             <TextField label="Prep time (min)" size="small" type="number" value={prepTime}
               onChange={(e) => setPrepTime(e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
-              inputProps={{ min: 0, step: 1 }} />
+              slotProps={{
+                htmlInput: { min: 0, step: 1 }
+              }} />
           </div>
           <div className="text-xs text-gray-400 mt-2">
             Price before tax: €{priceBeforeTax.toFixed(2)}
@@ -224,5 +232,5 @@ export default function ProductItem({ product, onUpdated }: ProductItemProps) {
         </DialogActions>
       </Dialog>
     </div>
-  )
+  );
 }

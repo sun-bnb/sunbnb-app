@@ -16,7 +16,7 @@ import Tabs from "@mui/material/Tabs"
 import Tab from "@mui/material/Tab"
 import AddIcon from "@mui/icons-material/Add"
 import EditIcon from "@mui/icons-material/Edit"
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline"
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined"
 import PercentIcon from "@mui/icons-material/Percent"
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney"
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong"
@@ -614,7 +614,9 @@ export default function FeesView({
                 value={codeForm.code}
                 onChange={(e) => setCodeForm({ ...codeForm, code: e.target.value })}
                 placeholder="e.g. PLATFORM_FEE"
-                inputProps={{ style: { textTransform: "lowercase" } }}
+                slotProps={{
+                  htmlInput: { style: { textTransform: "lowercase" } }
+                }}
               />
               <TextField
                 label="Description"
@@ -767,14 +769,18 @@ export default function FeesView({
               {...params}
               label="Search site"
               placeholder="Type site name or ID\u2026"
-              InputProps={{
-                ...params.InputProps,
-                endAdornment: (
-                  <>
-                    {siteLoading ? <CircularProgress size={16} /> : null}
-                    {params.InputProps.endAdornment}
-                  </>
-                ),
+              slotProps={{
+                ...params.slotProps,
+
+                input: {
+                  ...params.slotProps.input,
+                  endAdornment: (
+                    <>
+                      {siteLoading ? <CircularProgress size={16} /> : null}
+                      {params.slotProps.input.endAdornment}
+                    </>
+                  ),
+                }
               }}
             />
           )}
@@ -880,14 +886,18 @@ export default function FeesView({
               {...params}
               label="Search account"
               placeholder="Type company name, partner name, or ID\u2026"
-              InputProps={{
-                ...params.InputProps,
-                endAdornment: (
-                  <>
-                    {accountLoading ? <CircularProgress size={16} /> : null}
-                    {params.InputProps.endAdornment}
-                  </>
-                ),
+              slotProps={{
+                ...params.slotProps,
+
+                input: {
+                  ...params.slotProps.input,
+                  endAdornment: (
+                    <>
+                      {accountLoading ? <CircularProgress size={16} /> : null}
+                      {params.slotProps.input.endAdornment}
+                    </>
+                  ),
+                }
               }}
             />
           )}
@@ -1030,5 +1040,5 @@ export default function FeesView({
         </DialogActions>
       </Dialog>
     </div>
-  )
+  );
 }

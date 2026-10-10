@@ -463,7 +463,6 @@ export default function ReservationView({ reservation }: { reservation: Reservat
                 <TextField
                   value={notesValue}
                   onChange={e => setNotesValue(e.target.value)}
-                  inputProps={{ maxLength: 500 }}
                   multiline
                   rows={3}
                   size="small"
@@ -471,6 +470,9 @@ export default function ReservationView({ reservation }: { reservation: Reservat
                   fullWidth
                   autoFocus
                   sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                  slotProps={{
+                    htmlInput: { maxLength: 500 }
+                  }}
                 />
                 <div className="flex gap-2 justify-end">
                   <Button
@@ -648,5 +650,5 @@ export default function ReservationView({ reservation }: { reservation: Reservat
         </DialogActions>
       </Dialog>
     </div>
-  )
+  );
 }
