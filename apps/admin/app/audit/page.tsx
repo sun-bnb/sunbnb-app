@@ -7,8 +7,9 @@ import { listImpersonationAudit } from './actions'
 export default async function AuditPage({
   searchParams,
 }: {
-  searchParams: { targetUserId?: string }
+  searchParams: Promise<{ targetUserId?: string }>
 }) {
+  const { targetUserId } = await searchParams
   const session = await auth()
   if (!session?.user) redirect('/api/auth/signin')
 
@@ -19,14 +20,14 @@ export default async function AuditPage({
   if (!user?.sudo) redirect('/')
 
   const initial = await listImpersonationAudit(1, {
-    targetUserId: searchParams.targetUserId,
+    targetUserId,
   })
 
   return (
     <div className="container mx-auto max-w-6xl">
       <AuditView
         initial={initial}
-        initialTargetUserId={searchParams.targetUserId ?? null}
+        initialTargetUserId={targetUserId ?? null}
       />
     </div>
   )
