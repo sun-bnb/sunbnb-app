@@ -1,8 +1,10 @@
+/* @import must precede every other rule (Turbopack/lightningcss rejects it after
+   the @tailwind directives; webpack hoisted it, so this keeps the same order). */
+@import "react-day-picker/style.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import "react-day-picker/style.css";
 
 /* Restore react-day-picker styles that Tailwind Preflight strips */
 .rdp-root {
