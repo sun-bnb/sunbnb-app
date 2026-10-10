@@ -51,7 +51,7 @@ export default function ReservationView({ serviceFee, siteType, orderPaymentType
     pollingInterval: reservationStatus === RESERVATION_PROCESSING ? 1000 : 0
   })
 
-  const prevStatusRef = useRef<string | undefined>();
+  const prevStatusRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     const prevStatus = prevStatusRef.current

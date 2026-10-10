@@ -14,7 +14,7 @@ type ValidationState = 'idle' | 'valid' | 'invalid'
 
 function useDebouncedState(value: string, validate: (v: string) => boolean, delayMs = 500): ValidationState {
   const [state, setState] = useState<ValidationState>('idle')
-  const timer = useRef<ReturnType<typeof setTimeout>>()
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   useEffect(() => {
     if (!value) { setState('idle'); return }

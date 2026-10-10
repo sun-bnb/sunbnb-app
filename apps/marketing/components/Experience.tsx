@@ -293,7 +293,7 @@ export default function Experience({
     adjustedKinds.current.add(key)
     track('layout_adjusted', { how })
   }
-  const rotateTimer = useRef<number>()
+  const rotateTimer = useRef<number | undefined>(undefined)
   function rotate(delta: number) {
     haptic(6)
     adjusted.current = true
@@ -313,7 +313,7 @@ export default function Experience({
   }
 
   // The count settling re-frames the camera and is one funnel event (not one per tap).
-  const countTimer = useRef<number>()
+  const countTimer = useRef<number | undefined>(undefined)
   function setCount(n: number) {
     dispatch({ type: 'countSet', count: n })
     window.clearTimeout(countTimer.current)

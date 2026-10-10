@@ -56,7 +56,7 @@ function useDebouncedValidation<T>(
   delayMs = 500,
 ): ValidationState {
   const [state, setState] = useState<ValidationState>('idle')
-  const timer = useRef<ReturnType<typeof setTimeout>>()
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const touched = useRef(false)
 
   useEffect(() => {

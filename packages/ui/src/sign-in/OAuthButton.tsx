@@ -1,5 +1,7 @@
 'use client'
 
+import type { JSX } from 'react'
+
 type OAuthProvider = 'google' | 'facebook'
 
 interface OAuthButtonProps {
