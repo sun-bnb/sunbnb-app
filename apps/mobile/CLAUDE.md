@@ -15,9 +15,10 @@ full screen build). Lives in this monorepo as workspace `mobile`; its React (pin
 version RN 0.86 expects, 19.2.x) and RN deps nest under `apps/mobile/node_modules`, while the
 Next apps share the root React 19 (track 029).
 
-Lint uses the repo's eslint 8 stack (`@repo/eslint-config`), **not** `eslint-config-expo` —
-the Expo config hoists to the root where it collides with the workspace's eslint 8. Don't
-reintroduce it without solving that.
+Lint uses the repo's shared ESLint 9 flat config (`@repo/eslint-config/react-internal.js`,
+via `eslint.config.mjs`), **not** `eslint-config-expo`. It was originally kept out because it
+hoisted to the root and collided with the workspace's ESLint 8; the repo moved to ESLint 9
+in track 029, so re-check that before reintroducing it rather than assuming either way.
 
 ## Commands
 
