@@ -54,7 +54,7 @@ describe('registry', () => {
       [
         'explain_feature', 'find_seats', 'get_account_profile', 'get_accounting_summary', 'get_brand', 'get_content',
         'get_parcel', 'get_revenue_trend', 'get_site_overview', 'get_working_hours', 'list_layout_elements',
-        'list_parcels', 'list_products', 'list_rental_items',
+        'list_parcels', 'measure_parcels', 'list_products', 'list_rental_items',
         'propose_account_fields', 'propose_brand', 'propose_products', 'propose_rental_items', 'propose_site_fields',
         'propose_slug', 'propose_working_hours',
         'propose_canvas_size', 'propose_create_parcel', 'propose_edit_parcel', 'propose_layout_elements', 'propose_rotate', 'propose_spacing', 'propose_move',
@@ -135,8 +135,37 @@ describe('parcels', () => {
       parcel: 1, seats: 8, rows: 2, seatsPerRow: 4, rotationDegrees: 15,
       gapsMetres: { betweenSeats: 1, betweenRows: 1.5, betweenPairedBeds: 0.4 },
       category: 'PRICE1', price: 9, statuses: { active: 7, disabled: 1 },
+      position: expect.objectContaining({ centre: { lat: expect.any(Number), lng: expect.any(Number) }, sizeM: expect.any(Object), rowBearingDegrees: expect.any(Number) }),
     })
+    // compact: no corners / anchor in the list
+    expect(r.parcels[0].position.corners).toBeUndefined()
     expect(JSON.stringify(r)).not.toMatch(/ig1|locationLat|itemGroupId/)
+  })
+
+  it('get_parcel carries the full position (anchor, centre, size, bearing, 4 corners)', async () => {
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([] as never)
+    const r = await result('get_parcel', { parcel: 1 })
+    expect(r.position.anchor).toEqual({ lat: 1, lng: 2 })
+    expect(r.position.corners).toHaveLength(4)
+  })
+
+  it('measure_parcels: schematic positions in metres, the model gets a ready by_m', async () => {
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER, layoutMode: 'schematic' } as never)
+    vi.mocked(getParcelSummaries).mockResolvedValue({
+      parcels: [
+        parcel(4, { rows: 1, seatsPerRow: 1, rotation: 0, pairGap: 0, locationLat: null, locationLng: null, schematicX: 0, schematicY: 0 }),
+        parcel(5, { rows: 1, seatsPerRow: 1, rotation: 0, pairGap: 0, locationLat: null, locationLng: null, schematicX: 20, schematicY: 0 }),
+      ],
+      ungroupedCount: 0,
+    })
+    const r = await result('measure_parcels', { from: 5, to: 4 })
+    expect(r).toMatchObject({ from: 5, to: 4, edgeGapM: 17.9, targetGapM: 2, direction: { dx: -1, dy: 0 }, by_m: { dx: -15.9, dy: 0 } })
+  })
+
+  it('measure_parcels: unknown parcel, same parcel and bad input are rejected', async () => {
+    expect(await result('measure_parcels', { from: 1, to: 99 })).toEqual({ ok: false, error: 'parcel_not_found' })
+    expect((await result('measure_parcels', { from: 1, to: 1 })).ok).toBe(false)
+    expect((await call('measure_parcels', { from: 1 })).accepted).toBe(false)
   })
 
   it('get_parcel for a parcel number that is not on THIS site is parcel_not_found and reads no seats', async () => {

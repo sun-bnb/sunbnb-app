@@ -40,6 +40,13 @@ and its individual sunbeds load.
 - With a selection active you can also click the map to move the selection there ("Click map to move").
 - Single, loose sunbeds are dragged individually. Paired beds travel together.
 
+- **Ask the assistant for relative moves**: "move parcel 5 closer to parcel 4", "put parcel 2 next to
+  parcel 3", "2 m from parcel 1". The assistant knows where every parcel sits (centre, size in metres,
+  direction of the rows) and measures the gap between two parcels edge to edge, so you never need to give
+  coordinates. It moves the parcel along the line between the two centres so the gap becomes what you
+  asked for (2 m if you name none, 0 for "touching"), shows the result as a ghost preview and waits for
+  Apply.
+
 ## Rotate and spacing {#rotate-spacing}
 
 Rotation is in degrees.

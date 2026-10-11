@@ -3,7 +3,7 @@ import { getAccountingSummary, getRevenueTrend } from './accounting'
 import { listProducts, listRentalItems } from './catalog'
 import { explainFeatureTool } from './explain'
 import { extractSchematicFromPlan } from './extract-plan'
-import { findSeats, getParcel, listLayoutElements, listParcels, requestQrPrint } from './inventory'
+import { findSeats, getParcel, listLayoutElements, listParcels, measureParcelsTool, requestQrPrint } from './inventory'
 import { proposalTools } from './propose'
 import { proposeLayoutFromPhoto, requestPhotoAlignment } from './propose-aerial'
 import { getAccountProfile, getBrand, getContent, getSiteOverview, getWorkingHours } from './site'
@@ -18,6 +18,7 @@ export function getAssistantTools(): readonly AssistantTool[] {
     getSiteOverview,
     listParcels,
     getParcel,
+    measureParcelsTool,
     findSeats,
     listLayoutElements,
     listProducts,

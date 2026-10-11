@@ -1,6 +1,8 @@
 import prisma from '@repo/data/PrismaCient'
 import { formatSeatId } from '@repo/data/seat-label'
 import { getParcelSummaries, type ParcelSummary } from '@/app/sites/[id]/parcels'
+import { siteLayoutMode } from '../proposals/inventory-sim'
+import { measureParcels, positionFacts, type LayoutMode } from './parcel-geometry'
 import { capList, defineTool, elementHandle, MAX_LIST, round2, storedSeatLabel } from './helpers'
 
 const SEAT_STATUSES = ['active', 'disabled', 'new'] as const
@@ -17,7 +19,7 @@ function breakdownByParcel(rows: StatusRow[]): Map<number, Record<string, number
   return out
 }
 
-const parcelFacts = (p: ParcelSummary) => ({
+const parcelFacts = (p: ParcelSummary, mode: LayoutMode, compact: boolean) => ({
   parcel: p.group,
   seats: p.count,
   rows: p.rows,
@@ -28,16 +30,19 @@ const parcelFacts = (p: ParcelSummary) => ({
     : null,
   category: p.category,
   price: p.price,
+  // Where it sits (map: lat/lng, schematic: x/y metres; sizes in metres) -- what relative moves need.
+  position: positionFacts(p, mode, compact),
 })
 
 export const listParcels = defineTool({
   name: 'list_parcels',
   label: 'Reading parcels',
   description:
-    'All parcels (blocks of sunbeds) of the open site: parcel number, seat count, rows, seats per row, rotation, gaps, category/price and a status breakdown (active/disabled/new). Also the count of sunbeds that belong to no parcel.',
+    'All parcels (blocks of sunbeds) of the open site: parcel number, seat count, rows, seats per row, rotation, gaps, category/price, position (centre, size in metres, row bearing) and a status breakdown (active/disabled/new). Also the count of sunbeds that belong to no parcel.',
   async run(_input, ctx) {
-    const [summary, statusRows] = await Promise.all([
+    const [summary, mode, statusRows] = await Promise.all([
       getParcelSummaries(ctx.siteId),
+      siteLayoutMode(ctx.siteId),
       prisma.inventoryItem.groupBy({
         by: ['group', 'status'],
         where: { siteId: ctx.siteId, group: { gt: 0 }, status: { not: 'pool' } },
@@ -50,7 +55,7 @@ export const listParcels = defineTool({
       total,
       truncated,
       ungroupedSeats: summary.ungroupedCount,
-      parcels: rows.map((p) => ({ ...parcelFacts(p), statuses: byParcel.get(p.group) ?? {} })),
+      parcels: rows.map((p) => ({ ...parcelFacts(p, mode, true), statuses: byParcel.get(p.group) ?? {} })),
     }
   },
 })
@@ -59,12 +64,12 @@ export const getParcel = defineTool({
   name: 'get_parcel',
   label: 'Reading a parcel',
   description:
-    'Details of one parcel by its number: grid size, rotation, gaps, price, status breakdown, number of units (spots) and pairs, first/last seat id and seats with a custom label or price.',
+    'Details of one parcel by its number: grid size, rotation, position (anchor, centre, footprint size in metres, row bearing, the 4 corners), gaps, price, status breakdown, number of units (spots) and pairs, first/last seat id and seats with a custom label or price.',
   properties: { parcel: { type: 'integer', minimum: 1, maximum: 9999, description: 'The parcel number as shown on the map' } },
   required: ['parcel'],
   async run(input, ctx) {
     const number = input.parcel as number
-    const { parcels } = await getParcelSummaries(ctx.siteId)
+    const [{ parcels }, mode] = await Promise.all([getParcelSummaries(ctx.siteId), siteLayoutMode(ctx.siteId)])
     const summary = parcels.find((p) => p.group === number)
     if (!summary) return { ok: false, error: 'parcel_not_found' }
 
@@ -85,7 +90,7 @@ export const getParcel = defineTool({
     const first = seats[0]
     const last = seats[seats.length - 1]
     return {
-      ...parcelFacts(summary),
+      ...parcelFacts(summary, mode, false),
       statuses,
       units: unitSizes.size,
       pairedUnits: [...unitSizes.values()].filter((n) => n > 1).length,
@@ -94,6 +99,29 @@ export const getParcel = defineTool({
       labelledSeats: labelled.slice(0, 20).map((s) => ({ seat: formatSeatId(s), label: s.label })),
       seatsWithOwnPrice: priced.length,
     }
+  },
+})
+
+export const measureParcelsTool = defineTool({
+  name: 'measure_parcels',
+  label: 'Measuring parcels',
+  description:
+    'Relate two parcels: centre-to-centre distance and bearing, the edge-to-edge gap in metres (negative = overlapping), the unit direction from `from` to `to` ({ dx east, dy north }) and `by_m` -- the exact move for `from` (pass it to propose_move) that makes the edge gap `target_gap_m` (default 2) along the line between the centres. Use for "move parcel 5 closer to parcel 4", "2 m from parcel 3", "next to". Never ask the user for coordinates.',
+  properties: {
+    from: { type: 'integer', minimum: 1, maximum: 9999, description: 'The parcel that would move' },
+    to: { type: 'integer', minimum: 1, maximum: 9999, description: 'The parcel to measure against' },
+    target_gap_m: { type: 'number', minimum: 0, maximum: 1000, description: 'Wanted edge-to-edge gap in metres; default 2' },
+  },
+  required: ['from', 'to'],
+  async run(input, ctx) {
+    const [{ parcels }, mode] = await Promise.all([getParcelSummaries(ctx.siteId), siteLayoutMode(ctx.siteId)])
+    const a = parcels.find((p) => p.group === input.from)
+    const b = parcels.find((p) => p.group === input.to)
+    if (!a || !b) return { ok: false, error: 'parcel_not_found' }
+    if (a.group === b.group) return { ok: false, error: 'give two different parcels' }
+    const target = typeof input.target_gap_m === 'number' ? input.target_gap_m : 2
+    const m = measureParcels(a, b, mode, target)
+    return m.ok ? { from: a.group, to: b.group, ...m } : m
   },
 })
 
