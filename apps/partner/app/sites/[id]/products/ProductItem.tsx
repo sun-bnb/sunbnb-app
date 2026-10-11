@@ -32,6 +32,9 @@ interface ProductItemProps {
   onUpdated: () => void
 }
 
+// 40px tap target on phones; MUI's compact size from sm up.
+const ICON_BTN_SX = { p: { xs: 1.25, sm: 0.625 } }
+
 export default function ProductItem({ product, onUpdated }: ProductItemProps) {
 
   const [editing, setEditing] = useState(false)
@@ -99,10 +102,10 @@ export default function ProductItem({ product, onUpdated }: ProductItemProps) {
 
   return (
     <div className={`border rounded-lg bg-white overflow-hidden ${soldOut ? 'border-red-200 opacity-60' : 'border-gray-200'}`}>
-      <div className="flex items-start gap-4 p-4">
+      <div className="flex flex-wrap sm:flex-nowrap items-start gap-3 sm:gap-4 p-3 sm:p-4">
         {/* Image */}
         <div
-          className="relative w-16 h-16 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center overflow-hidden cursor-pointer group"
+          className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center overflow-hidden cursor-pointer group"
           onClick={() => fileRef.current?.click()}
         >
           {product.imageUrl ? (
@@ -132,25 +135,25 @@ export default function ProductItem({ product, onUpdated }: ProductItemProps) {
             <span className="text-xs text-gray-400">€{product.price.toFixed(2)} + {product.tax}% tax</span>
           </div>
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-[10px] text-gray-400">{CATEGORY_LABELS[product.category ?? 'food'] ?? product.category}</span>
-            {product.prepTime && <span className="text-[10px] text-gray-400">· ~{product.prepTime}min</span>}
+            <span className="text-xs sm:text-[10px] text-gray-400">{CATEGORY_LABELS[product.category ?? 'food'] ?? product.category}</span>
+            {product.prepTime && <span className="text-xs sm:text-[10px] text-gray-400">· ~{product.prepTime}min</span>}
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-0.5 shrink-0">
+        {/* Actions — own row on phones so the name/price keep their width */}
+        <div className="flex items-center justify-end gap-0.5 shrink-0 w-full sm:w-auto -my-1 sm:my-0 border-t border-gray-100 pt-1 sm:border-0 sm:pt-0">
           <Tooltip title={soldOut ? 'Mark available' : 'Mark sold out'}>
-            <IconButton size="small" onClick={handleToggleSoldOut}>
+            <IconButton size="small" sx={ICON_BTN_SX} onClick={handleToggleSoldOut}>
               <span className="text-sm">{soldOut ? '✅' : '🚫'}</span>
             </IconButton>
           </Tooltip>
           <Tooltip title="Edit">
-            <IconButton size="small" onClick={() => setEditing(!editing)}>
+            <IconButton size="small" sx={ICON_BTN_SX} onClick={() => setEditing(!editing)}>
               <EditIcon fontSize="small" className="text-gray-400" />
             </IconButton>
           </Tooltip>
           <Tooltip title="Delete">
-            <IconButton size="small" onClick={() => setConfirmDelete(true)}>
+            <IconButton size="small" sx={ICON_BTN_SX} onClick={() => setConfirmDelete(true)}>
               <DeleteOutlineIcon fontSize="small" className="text-gray-400" />
             </IconButton>
           </Tooltip>
@@ -160,7 +163,7 @@ export default function ProductItem({ product, onUpdated }: ProductItemProps) {
       {/* Inline edit form */}
       <Collapse in={editing}>
         <div className="px-4 pb-4 pt-1 border-t border-gray-100">
-          <div className="grid grid-cols-2 gap-3 mt-3">
+          <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-3 mt-3">
             <TextField label="Name" size="small" fullWidth value={name}
               onChange={(e) => setName(e.target.value)} sx={{ gridColumn: '1 / -1' }} />
             <TextField label="Description" size="small" fullWidth multiline minRows={1} maxRows={3}

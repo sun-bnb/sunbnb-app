@@ -569,7 +569,7 @@ export default function AccountingView() {
   }
 
   return (
-    <div className="pt-2">
+    <div className="pt-2 px-4 min-[800px]:px-0">
       {/* Header */}
       <div className="mt-4 mb-6">
         <h2 className="text-lg font-semibold text-gray-800">{t('title')}</h2>
@@ -578,10 +578,16 @@ export default function AccountingView() {
         </p>
       </div>
 
+      {/* Day-to-day block. Phones/tablets: stacked A → trend → employees.
+          From lg: a 3-col grid — today's summary and the per-employee card share
+          the left third, the trend chart spans the right two thirds (both rows).
+          Explicit placement keeps the source (= phone) order untouched. */}
+      <div className="mb-6 lg:grid lg:grid-cols-3 lg:gap-4 lg:items-start">
+
       {/* ── A · Resumen Diario (today's summary + parcel state) ─────────────────
           Revenue + sunbeds rented today (from last row of any opsTrend), plus
           a 5-chip Estado de la parcela row. Alonso-parity daily-summary card. */}
-      <div className="mb-4 border border-gray-200 rounded-lg bg-white p-4">
+      <div className="mb-4 lg:mb-0 lg:col-start-1 lg:row-start-1 border border-gray-200 rounded-lg bg-white p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-gray-800">{t('dailySummaryTitle')}</h3>
           {(opsTrendLoading || floorLoading) && (
@@ -642,16 +648,16 @@ export default function AccountingView() {
       </div>
 
       {/* ── Keep: recentTrend card — invoice-based rolling chart ──────────────── */}
-      <div className="mb-6 border border-gray-200 rounded-lg bg-white p-4">
+      <div className="mb-6 lg:mb-0 lg:col-start-2 lg:col-span-2 lg:row-start-1 lg:row-span-2 border border-gray-200 rounded-lg bg-white p-4">
         {/* Card header: title + window selector */}
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
           <h3 className="text-sm font-semibold text-gray-800">{t('recentTrend')}</h3>
           <div className="flex gap-1">
             {TREND_WINDOWS.map((w) => (
               <button
                 key={w}
                 onClick={() => setTrendWindow(w)}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                className={`px-2.5 py-1.5 sm:py-1 text-xs font-semibold rounded-md transition-colors ${
                   trendWindow === w
                     ? 'bg-accent text-white'
                     : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
@@ -664,12 +670,12 @@ export default function AccountingView() {
         </div>
 
         {/* Metric selector: Revenue / Sunbeds / Occupancy */}
-        <div className="flex gap-1 mb-3">
+        <div className="flex flex-wrap gap-1 mb-3">
           {TREND_METRICS.map((m) => (
             <button
               key={m}
               onClick={() => setTrendMetric(m)}
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+              className={`px-2.5 py-1.5 sm:py-1 text-xs font-semibold rounded-md transition-colors ${
                 trendMetric === m
                   ? 'bg-accent text-white'
                   : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
@@ -690,11 +696,11 @@ export default function AccountingView() {
           <>
             <div className="grid grid-cols-3 gap-3 mb-4">
               {trendViewModel.tiles.map((tile) => (
-                <div key={tile.label}>
+                <div key={tile.label} className="min-w-0">
                   <div className="text-xs text-gray-500 font-medium">{tile.label}</div>
-                  <div className="text-lg font-bold text-gray-900 mt-0.5 tabular-nums">{tile.value}</div>
+                  <div className="text-base sm:text-lg font-bold text-gray-900 mt-0.5 tabular-nums wrap-break-word">{tile.value}</div>
                   {tile.date && (
-                    <div className="text-[10px] text-gray-400">{formatDay(tile.date)}</div>
+                    <div className="text-xs sm:text-[10px] text-gray-400">{formatDay(tile.date)}</div>
                   )}
                 </div>
               ))}
@@ -702,7 +708,7 @@ export default function AccountingView() {
 
             {/* Channel legend — revenue metric only */}
             {trendMetric === 'revenue' && (
-              <div className="flex items-center gap-4 mb-3">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3">
                 <div className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-xs shrink-0" style={{ backgroundColor: '#16a34a' }} />
                   <span className="text-xs text-gray-500">{t('channelCash')}</span>
@@ -719,7 +725,7 @@ export default function AccountingView() {
             )}
 
             {/* Recharts bar chart — Y-axis scale + hover/touch tooltip */}
-            <div className="h-48">
+            <div className="h-48 lg:h-64">
               <SafeResponsiveContainer width="100%" height="100%">
                 <SafeBarChart
                   data={trendMetric === 'revenue' ? channelTrend?.rows ?? [] : trendViewModel.bars}
@@ -804,8 +810,8 @@ export default function AccountingView() {
       {/* ── B+C · Desglose por Empleado — per-employee, day-scoped ──────────────
           Read-only. Employee rows sorted by € desc, each expandable to itemized
           rentals for the chosen day. Alonso's Cierre de caja + Desglose model. */}
-      <div className="mb-6 border border-gray-200 rounded-lg bg-white overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-4">
+      <div className="lg:col-start-1 lg:row-start-2 border border-gray-200 rounded-lg bg-white overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2 sm:gap-4">
           <h3 className="text-sm font-semibold text-gray-800">{t('employeeCardTitle')}</h3>
           <div className="flex items-center gap-2 shrink-0">
             <label htmlFor="employee-day-picker" className="text-xs text-gray-500 font-medium">
@@ -844,7 +850,7 @@ export default function AccountingView() {
                       onClick={() => toggleEmployee(shift.employeeId)}
                       aria-expanded={isExpanded}
                     >
-                      <span className="flex items-center gap-1.5 text-sm text-gray-800 truncate">
+                      <span className="flex items-center gap-1.5 text-sm text-gray-800 truncate min-w-0">
                         <span className="text-gray-400 shrink-0" aria-hidden="true">
                           {isExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                         </span>
@@ -853,9 +859,9 @@ export default function AccountingView() {
                           <span className="ml-2 text-[11px] text-gray-400">{t('inactiveStaff')}</span>
                         )}
                       </span>
-                      <span className="text-sm text-gray-700 tabular-nums whitespace-nowrap shrink-0 ml-3">
+                      <span className="flex flex-col items-end sm:block text-sm text-gray-700 tabular-nums whitespace-nowrap shrink-0 ml-3">
                         <span className="font-semibold">€{shift.total.toFixed(2)}</span>
-                        <span className="text-gray-400 ml-2">{t('staffSales', { count: shift.count })}</span>
+                        <span className="text-xs sm:text-sm text-gray-400 sm:ml-2">{t('staffSales', { count: shift.count })}</span>
                       </span>
                     </button>
 
@@ -900,16 +906,19 @@ export default function AccountingView() {
         )}
       </div>
 
+      </div>
+
       {/* ── Month navigator ───────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between mb-4">
-        <IconButton size="small" onClick={goToPrevMonth}>
+      <div className="flex items-center justify-between lg:justify-start lg:gap-1 mb-4">
+        <IconButton size="small" sx={{ p: { xs: 1, sm: 0.625 } }} onClick={goToPrevMonth}>
           <ChevronLeftIcon />
         </IconButton>
-        <h3 className="text-base font-semibold text-gray-800">
+        <h3 className="text-base font-semibold text-gray-800 lg:order-first lg:mr-auto">
           {t(MONTH_KEYS[selectedMonth - 1]!)} {selectedYear}
         </h3>
         <IconButton
           size="small"
+          sx={{ p: { xs: 1, sm: 0.625 } }}
           onClick={goToNextMonth}
           disabled={selectedYear === now.getFullYear() && selectedMonth === now.getMonth() + 1}
         >
@@ -1014,7 +1023,7 @@ export default function AccountingView() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-xs">
+              <table className="w-full text-xs whitespace-nowrap">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
                     <th className="text-left px-4 py-2 text-gray-500 font-medium">{t('tabTableLabel')}</th>
@@ -1091,9 +1100,9 @@ export default function AccountingView() {
       {/* ── Accounting export — for your accountant ──────────────────────────── */}
       <div className="mb-6 border border-gray-200 rounded-lg bg-white overflow-hidden">
         {/* Card header */}
-        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-4">
+        <div className="px-4 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-x-2">
               <h3 className="text-sm font-semibold text-gray-800">{t('accountingExportTitle')}</h3>
               <span className="text-xs text-gray-400 font-medium">
                 {t(MONTH_KEYS[selectedMonth - 1]!)} {selectedYear}
@@ -1104,7 +1113,7 @@ export default function AccountingView() {
           <button
             onClick={downloadFiscalCsv}
             disabled={fiscalDownloading || fiscalLoading || !fiscalReport || fiscalReport.count === 0}
-            className="shrink-0 px-3 py-1.5 text-xs font-semibold rounded-md bg-accent text-white hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="shrink-0 self-start sm:self-auto px-3 py-2 sm:py-1.5 text-xs font-semibold rounded-md bg-accent text-white hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {fiscalDownloading ? '…' : `↓ ${t('downloadCsvRegister')}`}
           </button>
@@ -1118,9 +1127,11 @@ export default function AccountingView() {
         ) : !fiscalReport || fiscalReport.count === 0 ? (
           <div className="px-4 py-6 text-sm text-gray-400">{t('accountingExportEmpty')}</div>
         ) : (
-          <div className="px-4 py-4 space-y-4">
+          // From lg: headline figures across the top, VAT table and the
+          // commission/fees/refunds list side by side beneath.
+          <div className="px-4 py-4 space-y-4 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-x-8 lg:gap-y-4 lg:items-start">
             {/* Headline figures */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 lg:col-span-2">
               <div>
                 <div className="text-xs text-gray-500 font-medium">{t('payments')}</div>
                 <div className="text-xl font-bold text-gray-900 mt-0.5 tabular-nums">{fiscalReport.count}</div>
@@ -1143,8 +1154,8 @@ export default function AccountingView() {
             {fiscalReport.vatByRate.length > 0 && (
               <div>
                 <div className="text-xs text-gray-500 font-medium mb-1.5">{t('vatByRateTitle')}</div>
-                <div className="border border-gray-100 rounded-md overflow-hidden">
-                  <table className="w-full text-xs">
+                <div className="border border-gray-100 rounded-md overflow-x-auto">
+                  <table className="w-full text-xs whitespace-nowrap">
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-100">
                         <th className="text-left px-3 py-1.5 text-gray-500 font-medium">%</th>
@@ -1169,7 +1180,7 @@ export default function AccountingView() {
             )}
 
             {/* Platform commission, processing fees, refunds */}
-            <div className="border-t border-gray-100 pt-3 space-y-2">
+            <div className="border-t border-gray-100 pt-3 lg:border-t-0 lg:pt-0 space-y-2">
               {/* Platform commission */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">

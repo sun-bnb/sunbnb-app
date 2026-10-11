@@ -108,7 +108,7 @@ export default function GuestSearchSheet({
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 sm:p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-white dark:bg-gray-900 dark:text-gray-100 w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl overflow-hidden max-h-[92vh] sm:max-h-[85vh] flex flex-col">
+      <div className="bg-white dark:bg-gray-900 dark:text-gray-100 w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl overflow-hidden max-h-[92dvh] sm:max-h-[85vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b-2 border-gray-200 dark:border-gray-700">
           <h2 className="text-xl font-black">👤 {t('title')}</h2>
@@ -132,7 +132,7 @@ export default function GuestSearchSheet({
           aria-busy={loading || stale}
         >
           {!hasQuery && (
-            <div className="px-1 pt-1 text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+            <div className="px-1 pt-1 text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">
               {t('expectedToday')}
             </div>
           )}
@@ -195,7 +195,7 @@ export default function GuestSearchSheet({
                           <span className="text-gray-400"> · {days}d</span>
                         </div>
                       </div>
-                      <span className={`shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                      <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded-full ${
                         !today
                           ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
                           : paid

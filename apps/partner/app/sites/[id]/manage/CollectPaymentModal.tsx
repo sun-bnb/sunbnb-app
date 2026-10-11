@@ -208,7 +208,7 @@ export default function CollectPaymentModal({
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 sm:p-4"
       onClick={e => { if (e.target === e.currentTarget && canDismiss) handleClose() }}
     >
-      <div className="bg-white dark:bg-gray-900 dark:text-gray-100 w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl overflow-hidden max-h-[92vh] sm:max-h-[90vh] flex flex-col">
+      <div className="bg-white dark:bg-gray-900 dark:text-gray-100 w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl overflow-hidden max-h-[92dvh] sm:max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b-2 border-gray-200 dark:border-gray-700">
           <h2 className="text-xl font-black text-gray-900 dark:text-gray-100">💳 {modalTitle}</h2>
@@ -287,7 +287,7 @@ export default function CollectPaymentModal({
                 <div className="space-y-2">
                   <div className="font-bold text-gray-700 dark:text-gray-200">{t('scanToPay')}</div>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={qrDataUrl} alt={t('scanToPay')} className="mx-auto w-64 h-64 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white" />
+                  <img src={qrDataUrl} alt={t('scanToPay')} className="mx-auto w-64 h-64 max-w-full rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white" />
                 </div>
               ) : (
                 <div className="py-10 text-gray-500 dark:text-gray-400 font-bold">{t('creating')}</div>

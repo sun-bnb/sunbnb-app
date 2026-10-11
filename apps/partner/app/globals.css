@@ -55,6 +55,13 @@
 /* Semantic component classes — see .claude/rules/ui.md. Prefer these over
    re-typing the utility strings; one-offs may still use raw utilities. */
 
+/* One shared page width + gutters: header, banners and every page wrapper use
+   this so left edges line up with the header logo. Narrower reading widths go
+   on an inner left-aligned element, never on this wrapper. */
+@utility page-container {
+  @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+}
+
 @utility btn-primary {
   @apply bg-accent text-white px-4 py-2 text-sm font-medium rounded-lg transition-colors hover:bg-accent-hover disabled:opacity-60 disabled:cursor-not-allowed;
 }
@@ -67,8 +74,9 @@
   @apply bg-red-600 text-white px-4 py-2 text-sm font-medium rounded-lg transition-colors hover:bg-red-700;
 }
 
+/* 16px below sm stops iOS Safari auto-zooming on focus; text-sm from sm up. */
 @utility input {
-  @apply w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-accent;
+  @apply w-full px-3 py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-accent;
 }
 
 @utility label {

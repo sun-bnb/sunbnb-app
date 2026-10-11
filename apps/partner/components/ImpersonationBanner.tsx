@@ -10,13 +10,14 @@ export default function ImpersonationBanner({ email }: { email: string | null | 
       role="status"
     >
       <span className="truncate min-w-0">
-        ⚠️ Signed in as <strong>{email ?? 'user'}</strong> via admin impersonation
+        ⚠️ <span className="sm:hidden">Impersonating </span><span className="hidden sm:inline">Signed in as </span><strong>{email ?? 'user'}</strong>
+        <span className="hidden sm:inline"> via admin impersonation</span>
       </span>
       <a
         href="/api/auth/end-impersonation"
-        className="underline hover:no-underline whitespace-nowrap shrink-0"
+        className="underline hover:no-underline whitespace-nowrap shrink-0 py-2"
       >
-        Exit impersonation →
+        Exit<span className="hidden sm:inline"> impersonation</span> →
       </a>
     </div>
   )

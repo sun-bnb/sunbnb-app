@@ -34,7 +34,8 @@ export default function VerifactuAuthorisationView(props: Props) {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-6 py-10 text-sm text-gray-700 leading-relaxed">
+    <div className="page-container py-6 sm:py-10">
+    <div className="max-w-3xl text-sm text-gray-700 leading-relaxed">
       <h1 className="text-xl font-bold text-gray-900 mb-1">Veri*factu authorisation</h1>
       <p className="text-xs text-gray-400 mb-8">{props.company}</p>
 
@@ -76,7 +77,7 @@ export default function VerifactuAuthorisationView(props: Props) {
               Sunbnb at your venue, so Spanish invoicing obligations fall on you. Sunbnb carries
               them out on your behalf. Two separate permissions are needed for that:
             </p>
-            <div className="mt-3 space-y-3">
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="rounded-lg border border-gray-200 p-3">
                 <p className="font-medium text-gray-900">
                   1. Issuing invoices in your name
@@ -137,7 +138,7 @@ export default function VerifactuAuthorisationView(props: Props) {
                   type="checkbox"
                   checked={checked}
                   onChange={(e) => setChecked(e.target.checked)}
-                  className="mt-1"
+                  className="mt-0.5 h-5 w-5 shrink-0"
                 />
                 <span className="text-gray-800">
                   On behalf of <strong>{props.company}</strong>
@@ -150,7 +151,7 @@ export default function VerifactuAuthorisationView(props: Props) {
                 type="button"
                 onClick={handleGrant}
                 disabled={!checked || saving}
-                className="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm disabled:opacity-40"
+                className="w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-lg bg-gray-900 text-white text-sm disabled:opacity-40"
               >
                 {saving ? 'Saving…' : 'Authorise'}
               </button>
@@ -161,6 +162,7 @@ export default function VerifactuAuthorisationView(props: Props) {
           )}
         </>
       )}
+    </div>
     </div>
   )
 }

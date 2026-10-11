@@ -7,6 +7,7 @@ import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
 import Button from '@mui/material/Button'
 import TextField from '@mui/material/TextField'
+import useMediaQuery from '@mui/material/useMediaQuery'
 import type { MenuItemFormValues, MenuItemSaveResult } from './menu-types'
 
 export interface MenuItemDialogLabels {
@@ -62,6 +63,8 @@ export function MenuItemDialog({
   const [busy, setBusy] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
   const fileRef = useRef<HTMLInputElement | null>(null)
+  // Full-screen on phones; matches Tailwind's `sm` (640px) rather than MUI's 600px.
+  const fullScreen = useMediaQuery('(max-width: 639.98px)')
 
   useEffect(() => {
     if (!open) return
@@ -92,7 +95,7 @@ export function MenuItemDialog({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={fullScreen}>
       <DialogTitle sx={{ fontSize: '1rem', fontWeight: 600 }}>
         {initial ? labels.titleEdit : labels.titleCreate}
       </DialogTitle>
@@ -115,8 +118,9 @@ export function MenuItemDialog({
             minRows={2}
             fullWidth
           />
-          {/* Price ¼ + VAT ¼ + category ½ */}
-          <div className="flex gap-3">
+          {/* Price ¼ + VAT ¼ + category ½ from sm up; below sm price + VAT share a
+              row and category takes the full width under them. */}
+          <div className="grid grid-cols-2 gap-3 sm:flex">
             <TextField
               size="small"
               label={labels.fieldPrice}
@@ -127,7 +131,7 @@ export function MenuItemDialog({
                 if (!Number.isFinite(n)) return
                 setTotalPrice(n)
               }}
-              className="basis-1/4 min-w-0"
+              className="min-w-0 sm:basis-1/4"
               slotProps={{
                 htmlInput: { min: 0, step: 0.1 }
               }}
@@ -142,7 +146,7 @@ export function MenuItemDialog({
                 if (!Number.isFinite(n)) return
                 setTax(n)
               }}
-              className="basis-1/4 min-w-0"
+              className="min-w-0 sm:basis-1/4"
               slotProps={{
                 htmlInput: { min: 0, max: 100, step: 1 }
               }}
@@ -153,7 +157,7 @@ export function MenuItemDialog({
               value={category}
               onChange={(e) => setCategory(e.target.value)}
               helperText={labels.fieldCategoryHelper}
-              className="basis-1/2 min-w-0"
+              className="col-span-2 min-w-0 sm:basis-1/2"
             />
           </div>
           {tax > 0 && totalPrice > 0 && (

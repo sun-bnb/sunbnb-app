@@ -32,16 +32,16 @@ export default function ManageLanding({
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4">
-      <div className="w-full max-w-sm">
+      <div className="w-full max-w-sm sm:max-w-2xl">
         {/* Site name */}
         <h1 className="text-2xl font-black text-gray-900 text-center mb-1">{siteName}</h1>
         <p className="text-sm text-gray-500 text-center mb-8">{t('title')}</p>
 
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:[&>*:only-child]:col-span-2">
           {/* Sunbed management — always shown */}
           <Link
             href={sunbedsHref}
-            className="w-full flex items-center gap-4 bg-white rounded-xl border border-gray-200 shadow-xs px-5 py-4 hover:border-gray-300 hover:shadow-sm transition-all group"
+            className="w-full flex items-center gap-4 bg-white rounded-xl border border-gray-200 shadow-xs px-5 py-4 sm:py-6 hover:border-gray-300 hover:shadow-sm transition-all group"
           >
             <span className="text-2xl" aria-hidden="true">⛱️</span>
             <div className="flex-1 min-w-0">
@@ -63,7 +63,7 @@ export default function ManageLanding({
           {isAdmin && (
             <Link
               href={summaryHref}
-              className="w-full flex items-center gap-4 bg-white rounded-xl border border-gray-200 shadow-xs px-5 py-4 hover:border-gray-300 hover:shadow-sm transition-all group"
+              className="w-full flex items-center gap-4 bg-white rounded-xl border border-gray-200 shadow-xs px-5 py-4 sm:py-6 hover:border-gray-300 hover:shadow-sm transition-all group"
             >
               <span className="text-2xl" aria-hidden="true">📊</span>
               <div className="flex-1 min-w-0">
@@ -86,7 +86,7 @@ export default function ManageLanding({
           {isAdmin && (
             <Link
               href={closeHref}
-              className="w-full flex items-center gap-4 bg-white rounded-xl border border-gray-200 shadow-xs px-5 py-4 hover:border-gray-300 hover:shadow-sm transition-all group"
+              className="w-full flex items-center gap-4 bg-white rounded-xl border border-gray-200 shadow-xs px-5 py-4 sm:py-6 hover:border-gray-300 hover:shadow-sm transition-all group"
             >
               <span className="text-2xl" aria-hidden="true">🏁</span>
               <div className="flex-1 min-w-0">
@@ -109,7 +109,7 @@ export default function ManageLanding({
           {isAdmin && (
             <Link
               href={trendsHref}
-              className="w-full flex items-center gap-4 bg-white rounded-xl border border-gray-200 shadow-xs px-5 py-4 hover:border-gray-300 hover:shadow-sm transition-all group"
+              className="w-full flex items-center gap-4 bg-white rounded-xl border border-gray-200 shadow-xs px-5 py-4 sm:py-6 hover:border-gray-300 hover:shadow-sm transition-all group"
             >
               <span className="text-2xl" aria-hidden="true">📈</span>
               <div className="flex-1 min-w-0">

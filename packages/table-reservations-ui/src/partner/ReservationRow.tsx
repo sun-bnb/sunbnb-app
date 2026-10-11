@@ -78,8 +78,10 @@ export function ReservationRow({
         isCanceled || op === 'no_show' ? 'opacity-60' : ''
       }`}
     >
-      <div className="flex items-center gap-4 px-3 py-2.5">
-        <div className="w-20 shrink-0">
+      {/* Below sm the action buttons drop to a second line (40px targets); from sm up
+          everything sits on one row. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2.5 sm:flex-nowrap">
+        <div className="w-14 shrink-0 sm:w-20">
           <div className="text-sm font-medium text-gray-900">{formatTime(reservation.from)}</div>
           <div className="text-xs text-gray-500">{formatTime(reservation.to)}</div>
         </div>
@@ -104,7 +106,7 @@ export function ReservationRow({
               </strong>
             </span>
             {reservation.guestEmail && (
-              <span className="truncate max-w-[180px]">{reservation.guestEmail}</span>
+              <span className="truncate max-w-[180px] lg:max-w-[280px]">{reservation.guestEmail}</span>
             )}
             {reservation.guestPhone && <span>{reservation.guestPhone}</span>}
           </div>
@@ -115,17 +117,17 @@ export function ReservationRow({
           )}
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex basis-full items-center justify-end gap-1 border-t border-gray-100 pt-1 sm:basis-auto sm:shrink-0 sm:border-t-0 sm:pt-0">
           {!isCanceled && op === 'expected' && (
             <Tooltip title={labels.markSeated}>
-              <IconButton size="small" color="primary" onClick={() => void onMarkSeated()}>
+              <IconButton size="small" color="primary" onClick={() => void onMarkSeated()} className="size-10 sm:size-auto">
                 <CheckIcon fontSize="small" />
               </IconButton>
             </Tooltip>
           )}
           {!isCanceled && op === 'seated' && (
             <Tooltip title={labels.markDeparted}>
-              <IconButton size="small" onClick={() => void onMarkDeparted()}>
+              <IconButton size="small" onClick={() => void onMarkDeparted()} className="size-10 sm:size-auto">
                 <LogoutIcon fontSize="small" />
               </IconButton>
             </Tooltip>
@@ -134,12 +136,17 @@ export function ReservationRow({
             <IconButton
               size="small"
               onClick={() => setNotesOpen((v) => !v)}
+              className="size-10 sm:size-auto"
               sx={{ color: reservation.internalNotes ? 'primary.main' : undefined }}
             >
               <NotesIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <IconButton size="small" onClick={(e) => setMenuAnchor(e.currentTarget)}>
+          <IconButton
+            size="small"
+            onClick={(e) => setMenuAnchor(e.currentTarget)}
+            className="size-10 sm:size-auto"
+          >
             <MoreVertIcon fontSize="small" />
           </IconButton>
           <Menu anchorEl={menuAnchor} open={!!menuAnchor} onClose={() => setMenuAnchor(null)}>
@@ -195,7 +202,7 @@ export function ReservationRow({
       {notesOpen && (
         <div className="px-3 pb-3 border-t border-gray-100">
           <textarea
-            className="mt-2 w-full rounded-sm border border-gray-300 px-2 py-1.5 text-sm text-gray-900 focus:outline-hidden focus:border-black"
+            className="mt-2 w-full rounded-sm border border-gray-300 px-2 py-1.5 text-base sm:text-sm text-gray-900 focus:outline-hidden focus:border-black"
             rows={2}
             placeholder={labels.notesPlaceholder}
             value={notes}

@@ -22,7 +22,7 @@ function TokenStatusBadge({ expires }: { expires: string | Date }) {
   const t = useTranslations('Security')
   const isExpired = new Date(expires) < new Date()
   return (
-    <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${
+    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
       isExpired
         ? 'bg-red-50 text-red-600'
         : 'bg-green-50 text-green-700'
@@ -56,7 +56,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900 transition-colors"
+      className="shrink-0 inline-flex items-center gap-1 min-h-10 sm:min-h-0 px-1 text-xs font-medium text-gray-600 hover:text-gray-900 transition-colors"
       title={label}
     >
       {copied ? (
@@ -115,10 +115,11 @@ function ResourceLinks({ tokenId, sites }: { tokenId: string; sites: OwnedSite[]
 
   return (
     <div className="space-y-3">
-      <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">{t('linksTitle')}</p>
-      <ul className="space-y-3">
+      <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{t('linksTitle')}</p>
+      {/* lg+: one site's links per column, so a multi-site key reads side by side. */}
+      <ul className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
         {sites.map((site) => (
-          <li key={site.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <li key={site.id} className="min-w-0 bg-white border border-gray-200 rounded-lg overflow-hidden">
             <div className="px-3 py-2 bg-gray-50 border-b border-gray-200">
               <p className="text-sm font-semibold text-gray-800 truncate">{site.name || 'Unnamed site'}</p>
             </div>
@@ -130,12 +131,12 @@ function ResourceLinks({ tokenId, sites }: { tokenId: string; sites: OwnedSite[]
                     <div className="mt-0.5 text-gray-400 shrink-0">{resource.icon}</div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-gray-700">{t(resource.labelKey as any)}</p>
-                      <p className="text-[11px] text-gray-400 leading-snug">{t(resource.descKey as any)}</p>
+                      <p className="text-xs text-gray-400 leading-snug">{t(resource.descKey as any)}</p>
                       <a
                         href={url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block mt-1 text-[11px] font-mono text-gray-500 hover:text-gray-900 truncate"
+                        className="block mt-1 text-xs font-mono text-gray-500 hover:text-gray-900 truncate"
                       >
                         {url}
                       </a>
@@ -204,18 +205,18 @@ export default function SecurityView() {
   const expiredTokens = tokens.filter(token => new Date(token.expires) < new Date())
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-3xl">
+    <div className="page-container py-6">
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <div className="min-w-0">
           <h1 className="text-lg font-semibold text-gray-900">{t('title')}</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {t('headerSub', { count: tokens.length, active: activeTokens.length })}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+          <label className="flex items-center gap-2 min-h-10 sm:min-h-0 text-sm text-gray-600 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={adminAccess}
@@ -227,7 +228,7 @@ export default function SecurityView() {
           <button
             onClick={handleCreate}
             disabled={creating}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-40 transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 sm:py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-40 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -254,13 +255,13 @@ export default function SecurityView() {
             <p className="text-sm font-medium text-green-800">{t('accessKeyCreated')}</p>
             <p className="text-xs text-green-700/80 mt-0.5">{t('accessKeyHint')}</p>
             <div className="mt-2 flex items-center gap-2">
-              <code className="block flex-1 text-xs text-green-700 bg-green-100 rounded-sm px-2 py-1 font-mono break-all">
+              <code className="block flex-1 min-w-0 text-xs text-green-700 bg-green-100 rounded-sm px-2 py-1 font-mono break-all">
                 {createdToken}
               </code>
               <CopyButton value={createdToken} label={t('copy')} />
             </div>
           </div>
-          <button onClick={() => setCreatedToken(null)} className="text-green-400 hover:text-green-600 shrink-0">
+          <button onClick={() => setCreatedToken(null)} className="-m-2 p-2 text-green-400 hover:text-green-600 shrink-0">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>
@@ -275,7 +276,7 @@ export default function SecurityView() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
           </svg>
           <p className="text-sm text-red-700">{error}</p>
-          <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">
+          <button onClick={() => setError(null)} className="ml-auto -m-2 p-2 text-red-400 hover:text-red-600 shrink-0">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>
@@ -290,7 +291,7 @@ export default function SecurityView() {
             const isExpanded = expandedTokenId === token.id
             return (
               <div key={token.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <div className="flex items-center gap-3 px-5 py-3.5">
+                <div className="flex items-center gap-3 px-4 sm:px-5 py-3.5">
                   <button
                     onClick={() => setExpandedTokenId(isExpanded ? null : token.id)}
                     className="flex-1 min-w-0 flex items-center gap-3 text-left"
@@ -309,12 +310,12 @@ export default function SecurityView() {
                         <code className="text-xs font-mono text-gray-600 bg-gray-50 rounded-sm px-1.5 py-0.5">
                           {token.id.slice(0, 12)}…
                         </code>
-                        <span className="inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-md bg-gray-100 text-gray-600">
+                        <span className="inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md bg-gray-100 text-gray-600">
                           {t('fullAccess')}
                         </span>
                         <TokenStatusBadge expires={token.expires} />
                       </div>
-                      <p className="text-[11px] text-gray-400 mt-1">
+                      <p className="text-xs text-gray-400 mt-1">
                         {t('createdOn', { date: formatDate(token.createdAt) })}
                         {' · '}
                         {t('expiresOn', { date: formatDate(token.expires) })}
@@ -323,7 +324,7 @@ export default function SecurityView() {
                   </button>
                   <button
                     onClick={() => handleDelete(token.id)}
-                    className="text-gray-300 hover:text-red-500 transition-colors shrink-0"
+                    className="inline-flex items-center justify-center min-h-10 min-w-10 sm:min-h-0 sm:min-w-0 text-gray-300 hover:text-red-500 transition-colors shrink-0"
                     title={t('deleteTitle')}
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -332,7 +333,7 @@ export default function SecurityView() {
                   </button>
                 </div>
                 {isExpanded && (
-                  <div className="border-t border-gray-100 bg-gray-50/50 px-5 py-4">
+                  <div className="border-t border-gray-100 bg-gray-50/50 px-4 sm:px-5 py-4">
                     <ResourceLinks tokenId={token.id} sites={sites} />
                   </div>
                 )}

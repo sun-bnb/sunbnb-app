@@ -25,6 +25,21 @@ const MONTH_KEYS = [
  * export, no per-employee till — those stay site-only for now. Modeled on
  * the "Dine-in tabs" card in sites/[id]/accounting/view.tsx.
  */
+/** Cash vs online payment chip (status colours: green = cash, blue = paid online). */
+function PaymentBadge({ isCash, label }: { isCash: boolean; label: string }) {
+  return (
+    <span
+      className={`badge border ${
+        isCash
+          ? 'bg-green-50 text-green-700 border-green-200'
+          : 'bg-blue-50 text-blue-700 border-blue-200'
+      }`}
+    >
+      {label}
+    </span>
+  )
+}
+
 export default function AccountingView({ restaurantId }: { restaurantId: string }) {
   const t = useTranslations('RestaurantAccounting')
   const ts = useTranslations('SiteAccounting')
@@ -83,10 +98,30 @@ export default function AccountingView({ restaurantId }: { restaurantId: string 
     }
   }, [invoices])
 
+  // Per-row display values, shared by the phone card list and the sm+ table.
+  // Tab invoice semantics (processConfirmedTabPayment):
+  // totalCharge = NET base, totalTax = VAT, totalAmount = GROSS.
+  const rows = (invoices ?? []).map((inv) => {
+    const tab = inv.tableTab
+    const fmt = (d: Date | string) =>
+      new Date(d).toLocaleDateString('default', { day: 'numeric', month: 'short' })
+    return {
+      id: inv.id,
+      isCash: tab?.status === 'settled_cash',
+      tableLabel: tab
+        ? `${ts('tabTableLabel')} ${tab.table.number}${tab.table.label ? ` · ${tab.table.label}` : ''}`
+        : '—',
+      closedDate: tab?.closedAt ? fmt(tab.closedAt) : inv.invoicedAt ? fmt(inv.invoicedAt) : '—',
+      net: inv.totalCharge,
+      tax: inv.totalTax,
+      gross: inv.totalAmount,
+    }
+  })
+
   return (
     <div className="pt-2">
       <RestaurantSubNav restaurantId={restaurantId} active="accounting" />
-      <div className="p-4 space-y-4">
+      <div className="py-4 space-y-4">
         <RestaurantHeader restaurantId={restaurantId} />
 
         <div>
@@ -100,48 +135,63 @@ export default function AccountingView({ restaurantId }: { restaurantId: string 
           </div>
         )}
 
+        {/* Phone → md: month navigator, totals, invoices stacked. lg+: the
+            navigator + totals become an 18rem side column (totals stacked
+            1-up) beside the invoice table, which gets the remaining width. */}
+        <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
+        <div className="space-y-4">
         {/* ── Month navigator ─────────────────────────────────────────────── */}
         <div className="flex items-center justify-between">
-          <IconButton size="small" onClick={goToPrevMonth}>
+          <IconButton onClick={goToPrevMonth}>
             <ChevronLeftIcon />
           </IconButton>
           <h3 className="text-base font-semibold text-gray-800">
             {ts(MONTH_KEYS[selectedMonth - 1]!)} {selectedYear}
           </h3>
-          <IconButton size="small" onClick={goToNextMonth} disabled={isCurrentMonth}>
+          <IconButton onClick={goToNextMonth} disabled={isCurrentMonth}>
             <ChevronRightIcon />
           </IconButton>
         </div>
 
         {/* ── Revenue/VAT summary cards ───────────────────────────────────── */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="border border-gray-200 rounded-lg bg-white p-3">
+        {/* Phone: one row per total (label left, value right) — three € figures
+            at text-xl don't fit 3-up in ~100px columns. sm+: the 3-up grid. */}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-1">
+          <div className="flex items-baseline justify-between gap-3 border border-gray-200 rounded-lg bg-white p-3 sm:block">
             <div className="text-xs text-gray-500 font-medium">{ts('net')}</div>
-            <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
+            <div className="text-lg font-bold text-gray-900 tabular-nums sm:mt-1 sm:text-xl">
               {loading ? '—' : `€${totals.net.toFixed(2)}`}
             </div>
           </div>
-          <div className="border border-gray-200 rounded-lg bg-white p-3">
+          <div className="flex items-baseline justify-between gap-3 border border-gray-200 rounded-lg bg-white p-3 sm:block">
             <div className="text-xs text-gray-500 font-medium">{ts('vat')}</div>
-            <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
+            <div className="text-lg font-bold text-gray-900 tabular-nums sm:mt-1 sm:text-xl">
               {loading ? '—' : `€${totals.vat.toFixed(2)}`}
             </div>
           </div>
-          <div className="border border-gray-200 rounded-lg bg-white p-3">
-            <div className="text-xs text-gray-500 font-medium">{ts('gross')}</div>
-            <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
+          <div className="flex items-baseline justify-between gap-3 border border-gray-200 rounded-lg bg-white p-3 sm:block">
+            <div>
+              <div className="text-xs text-gray-500 font-medium">{ts('gross')}</div>
+              {!loading && (
+                <div className="text-xs text-gray-400 mt-0.5 sm:hidden">
+                  {ts('salesCount', { count: totals.count })}
+                </div>
+              )}
+            </div>
+            <div className="text-lg font-bold text-gray-900 tabular-nums sm:mt-1 sm:text-xl">
               {loading ? '—' : `€${totals.gross.toFixed(2)}`}
             </div>
             {!loading && (
-              <div className="text-xs text-gray-400 mt-0.5">
+              <div className="hidden text-xs text-gray-400 mt-0.5 sm:block">
                 {ts('salesCount', { count: totals.count })}
               </div>
             )}
           </div>
         </div>
+        </div>
 
         {/* ── Invoice table ────────────────────────────────────────────────── */}
-        <div className="border border-gray-200 rounded-lg bg-white overflow-hidden">
+        <div className="min-w-0 border border-gray-200 rounded-lg bg-white overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-4">
             <h3 className="text-sm font-semibold text-gray-800">{ts('tabsGroupTitle')}</h3>
             {loading && <CircularProgress size={16} sx={{ color: '#9ca3af' }} />}
@@ -156,60 +206,61 @@ export default function AccountingView({ restaurantId }: { restaurantId: string 
               <p className="text-sm font-medium">{t('empty')}</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100">
-                    <th className="text-left px-4 py-2 text-gray-500 font-medium">{ts('tabTableLabel')}</th>
-                    <th className="text-left px-4 py-2 text-gray-500 font-medium">{ts('tabClosedAt')}</th>
-                    <th className="text-left px-4 py-2 text-gray-500 font-medium">{ts('payments')}</th>
-                    <th className="text-right px-4 py-2 text-gray-500 font-medium">{ts('net')}</th>
-                    <th className="text-right px-4 py-2 text-gray-500 font-medium">{ts('vat')}</th>
-                    <th className="text-right px-4 py-2 text-gray-500 font-medium">{ts('gross')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {invoices.map((inv) => {
-                    const tab = inv.tableTab
-                    const isCash = tab?.status === 'settled_cash'
-                    const tableLabel = tab
-                      ? `${ts('tabTableLabel')} ${tab.table.number}${tab.table.label ? ` · ${tab.table.label}` : ''}`
-                      : '—'
-                    const closedDate = tab?.closedAt
-                      ? new Date(tab.closedAt).toLocaleDateString('default', { day: 'numeric', month: 'short' })
-                      : inv.invoicedAt
-                      ? new Date(inv.invoicedAt).toLocaleDateString('default', { day: 'numeric', month: 'short' })
-                      : '—'
-                    // Tab invoice semantics (processConfirmedTabPayment):
-                    // totalCharge = NET base, totalTax = VAT, totalAmount = GROSS.
-                    const net = inv.totalCharge
-                    const tax = inv.totalTax
-                    const gross = inv.totalAmount
-                    return (
-                      <tr key={inv.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-2.5 text-gray-800 font-medium">{tableLabel}</td>
-                        <td className="px-4 py-2.5 text-gray-500">{closedDate}</td>
+            <>
+              {/* Phone: one card per invoice — six columns don't fit 360px. */}
+              <ul className="divide-y divide-gray-100 sm:hidden">
+                {rows.map((row) => (
+                  <li key={row.id} className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-gray-800">{row.tableLabel}</div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                          <span>{row.closedDate}</span>
+                          <PaymentBadge isCash={row.isCash} label={row.isCash ? ts('tabStatusCash') : ts('tabStatusPaid')} />
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="text-sm font-semibold text-gray-900 tabular-nums">€{row.gross.toFixed(2)}</div>
+                        <div className="mt-1 text-xs text-gray-500 tabular-nums">
+                          {ts('net')} €{row.net.toFixed(2)} · {ts('vat')} €{row.tax.toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="hidden overflow-x-auto sm:block">
+                <table className="w-full text-xs lg:text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="text-left px-4 py-2 text-gray-500 font-medium">{ts('tabTableLabel')}</th>
+                      <th className="text-left px-4 py-2 text-gray-500 font-medium">{ts('tabClosedAt')}</th>
+                      <th className="text-left px-4 py-2 text-gray-500 font-medium">{ts('payments')}</th>
+                      <th className="text-right px-4 py-2 text-gray-500 font-medium">{ts('net')}</th>
+                      <th className="text-right px-4 py-2 text-gray-500 font-medium">{ts('vat')}</th>
+                      <th className="text-right px-4 py-2 text-gray-500 font-medium">{ts('gross')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {rows.map((row) => (
+                      <tr key={row.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-2.5 text-gray-800 font-medium">{row.tableLabel}</td>
+                        <td className="px-4 py-2.5 text-gray-500">{row.closedDate}</td>
                         <td className="px-4 py-2.5">
-                          <span
-                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                              isCash
-                                ? 'bg-green-50 text-green-700 border border-green-200'
-                                : 'bg-blue-50 text-blue-700 border border-blue-200'
-                            }`}
-                          >
-                            {isCash ? ts('tabStatusCash') : ts('tabStatusPaid')}
-                          </span>
+                          <PaymentBadge isCash={row.isCash} label={row.isCash ? ts('tabStatusCash') : ts('tabStatusPaid')} />
                         </td>
-                        <td className="px-4 py-2.5 text-right text-gray-700 tabular-nums">€{net.toFixed(2)}</td>
-                        <td className="px-4 py-2.5 text-right text-gray-700 tabular-nums">€{tax.toFixed(2)}</td>
-                        <td className="px-4 py-2.5 text-right text-gray-900 font-semibold tabular-nums">€{gross.toFixed(2)}</td>
+                        <td className="px-4 py-2.5 text-right text-gray-700 tabular-nums">€{row.net.toFixed(2)}</td>
+                        <td className="px-4 py-2.5 text-right text-gray-700 tabular-nums">€{row.tax.toFixed(2)}</td>
+                        <td className="px-4 py-2.5 text-right text-gray-900 font-semibold tabular-nums">€{row.gross.toFixed(2)}</td>
                       </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
+        </div>
         </div>
       </div>
     </div>

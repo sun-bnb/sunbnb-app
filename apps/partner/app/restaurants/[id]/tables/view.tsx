@@ -90,7 +90,7 @@ export default function TablesView({
     return (
       <div className="pt-2">
         <RestaurantSubNav restaurantId={restaurantId} active="tables" />
-        <div className="p-4 text-sm text-gray-500">{t('loading')}</div>
+        <div className="py-4 text-sm text-gray-500">{t('loading')}</div>
       </div>
     )
   }
@@ -244,21 +244,34 @@ export default function TablesView({
   return (
     <div className="pt-2">
       <RestaurantSubNav restaurantId={restaurantId} active="tables" />
-      <div className="p-4 space-y-4">
-        <RestaurantHeader
-          restaurantId={restaurantId}
-          saveStatus={saveStatus}
-          saveError={saveErrors.length > 0 ? saveErrors.join(', ') : undefined}
-        />
-        {consumerAppUrl && activeTables.length > 0 && (
-          <div className="flex justify-end">
-            <DineInQRButton
-              consumerAppUrl={consumerAppUrl}
-              tables={activeTables}
-              label={t('printDineInQr')}
+      <div className="py-4 space-y-4">
+        {/* Phone: header, then a full-width QR button. sm–md: button on its
+            own row, right-aligned. lg+: the button sits beside the header so
+            the floor-plan editor starts higher. */}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+          <div className="min-w-0 lg:flex-1">
+            <RestaurantHeader
+              restaurantId={restaurantId}
+              saveStatus={saveStatus}
+              saveError={saveErrors.length > 0 ? saveErrors.join(', ') : undefined}
             />
           </div>
-        )}
+          {consumerAppUrl && activeTables.length > 0 && (
+            <div className="flex shrink-0 sm:justify-end">
+              <DineInQRButton
+                consumerAppUrl={consumerAppUrl}
+                tables={activeTables}
+                label={t('printDineInQr')}
+              />
+            </div>
+          )}
+        </div>
+        {/* The floor-plan editor (palette + canvas + w-80 properties panel,
+            fixed 600px tall, drag-to-place) is a desktop tool. Below md it keeps
+            a 720px working width and scrolls sideways inside this box so the
+            page itself never scrolls horizontally; md+ is unchanged. */}
+        <div className="overflow-x-auto md:overflow-visible">
+        <div className="min-w-[720px] md:min-w-0">
         <TableLayoutEditor
           worldWidth={layout.layoutWidth}
           worldHeight={layout.layoutHeight}
@@ -346,6 +359,8 @@ export default function TablesView({
             return res
           }}
         />
+        </div>
+        </div>
 
         <CombinationsEditor
           combinations={combinations}

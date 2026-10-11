@@ -66,12 +66,12 @@ function ValidationDot({ ok, label }: { ok: boolean; label: string }) {
   return (
     <span className={`inline-flex items-center gap-1 transition-colors duration-200 ${ok ? 'text-emerald-500' : 'text-gray-400'}`}>
       {ok ? <CheckIcon /> : <span className="w-[14px] text-center text-[10px]">&#9679;</span>}
-      <span className="text-[11px]">{label}</span>
+      <span className="text-xs">{label}</span>
     </span>
   )
 }
 
-const INPUT_CLASS = 'w-full px-3.5 py-2.5 text-sm bg-white border rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-400/30 transition-all placeholder:text-gray-300 text-gray-900 pr-9'
+const INPUT_CLASS = 'w-full px-3.5 py-2.5 text-base sm:text-sm bg-white border rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-400/30 transition-all placeholder:text-gray-300 text-gray-900 pr-9'
 
 function inputBorder(state: ValidationState) {
   if (state === 'valid') return 'border-emerald-400/60 focus:border-emerald-400'
@@ -132,7 +132,7 @@ function ResetPasswordContent() {
       <div className="text-center">
         <h2 className="text-xl font-bold text-gray-900">{t('invalidLinkTitle')}</h2>
         <p className="mt-2 text-sm text-gray-500">{t('invalidLinkBody')}</p>
-        <Link href="/forgot-password" className="inline-block mt-6 text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors">
+        <Link href="/forgot-password" className="inline-block mt-6 py-2 text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors">
           {t('requestNewLink')}
         </Link>
       </div>
@@ -221,7 +221,7 @@ function ResetPasswordContent() {
             )}
           </div>
           {confirmState === 'invalid' && (
-            <p className="mt-1 text-[11px] text-red-500">{t('passwordsDoNotMatch')}</p>
+            <p className="mt-1 text-xs text-red-500">{t('passwordsDoNotMatch')}</p>
           )}
         </div>
 
@@ -242,7 +242,7 @@ function ResetPasswordContent() {
       </form>
 
       <div className="mt-6 text-center">
-        <Link href="/sign-in" className="text-sm text-gray-400 hover:text-gray-600 transition-colors">
+        <Link href="/sign-in" className="inline-block py-2 text-sm text-gray-400 hover:text-gray-600 transition-colors">
           {t('backToSignIn')}
         </Link>
       </div>
@@ -252,20 +252,23 @@ function ResetPasswordContent() {
 
 export default function ResetPasswordPage() {
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-10">
+      <div className="w-full max-w-sm sm:max-w-md">
         <div className="flex items-center gap-2 justify-center mb-10">
           <Image alt="Sunbnb" src={sunbnbLogo} className="w-8 h-8" />
           <span className="text-sm font-bold text-gray-900">sunbnb</span>
           <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider ml-1">Partner</span>
         </div>
-        <Suspense fallback={
-          <div className="flex justify-center">
-            <div className="w-5 h-5 border-2 border-gray-200 border-t-gray-600 rounded-full animate-spin" />
-          </div>
-        }>
-          <ResetPasswordContent />
-        </Suspense>
+        {/* Phones: bare form on the page. Tablet/desktop: framed card so it doesn't float. */}
+        <div className="sm:rounded-2xl sm:border sm:border-gray-200 sm:bg-white sm:p-8 sm:shadow-xs">
+          <Suspense fallback={
+            <div className="flex justify-center">
+              <div className="w-5 h-5 border-2 border-gray-200 border-t-gray-600 rounded-full animate-spin" />
+            </div>
+          }>
+            <ResetPasswordContent />
+          </Suspense>
+        </div>
       </div>
     </div>
   )

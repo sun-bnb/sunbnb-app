@@ -20,7 +20,7 @@ export default async function TablesPage({
     process.env.CONSUMER_APP_URL ?? 'https://sunbnb.app'
 
   return (
-    <div className="container mx-auto max-w-[768px]">
+    <div className="page-container">
       <TablesView
         restaurantId={id}
         consumerAppUrl={consumerAppUrl}

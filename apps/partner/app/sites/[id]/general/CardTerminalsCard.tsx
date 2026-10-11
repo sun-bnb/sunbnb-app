@@ -123,11 +123,11 @@ export default function CardTerminalsCard({ siteId }: { siteId: string }) {
           {terminals.map((terminal) => (
             <li
               key={terminal.id}
-              className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-3"
+              className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-3"
             >
-              <div>
-                <div className="text-sm font-medium text-gray-700">{terminal.label || terminal.terminalId}</div>
-                <div className="text-xs text-gray-400 font-mono">{terminal.terminalId}</div>
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-gray-700 truncate">{terminal.label || terminal.terminalId}</div>
+                <div className="text-xs text-gray-400 font-mono truncate">{terminal.terminalId}</div>
               </div>
               <button
                 type="button"

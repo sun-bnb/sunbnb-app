@@ -4,7 +4,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useSession, signOut } from 'next-auth/react'
 import { usePathname, useRouter } from 'next/navigation'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslations, useLocale } from 'next-intl'
 import { useFlag } from '@repo/ui/flags'
 import sunbnbLogo from '@/app/sunbnb-logo.svg'
@@ -22,6 +23,136 @@ function isActive(pathname: string, href: string) {
   return pathname.startsWith(href)
 }
 
+const MOBILE_NAV_ID = 'partner-mobile-nav'
+/** Tailwind `lg` — the width at which the inline nav takes over from the drawer. */
+const DESKTOP_QUERY = '(min-width: 1024px)'
+const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+type NavItem = { label: string; href: string }
+
+/**
+ * Off-canvas navigation for phones/tablets (below `lg`). Portalled to <body>
+ * because the sticky header uses `backdrop-blur`, and a `backdrop-filter`
+ * ancestor becomes the containing block for `position: fixed` descendants —
+ * rendered inline, the drawer would be clipped to the 56px header.
+ *
+ * Starts below the impersonation banner (`--impersonation-offset`, set on
+ * <body> by the root layout) so the banner's exit link stays reachable.
+ */
+function MobileNavDrawer({
+  items,
+  pathname,
+  onClose,
+  returnFocusTo,
+}: {
+  items: NavItem[]
+  pathname: string
+  onClose: () => void
+  returnFocusTo: React.RefObject<HTMLButtonElement | null>
+}) {
+  const t = useTranslations('Header')
+  const panelRef = useRef<HTMLDivElement>(null)
+  const closeRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    const returnTarget = returnFocusTo.current
+    closeRef.current?.focus()
+
+    // Lock page scroll behind the drawer; restore the previous value on close.
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        onClose()
+        return
+      }
+      if (e.key !== 'Tab' || !panelRef.current) return
+      // Focus trap: wrap Tab / Shift+Tab inside the panel.
+      const nodes = Array.from(panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE))
+      if (nodes.length === 0) return
+      const first = nodes[0]!
+      const last = nodes[nodes.length - 1]!
+      const active = document.activeElement
+      if (e.shiftKey && (active === first || !panelRef.current.contains(active))) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && (active === last || !panelRef.current.contains(active))) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.body.style.overflow = prevOverflow
+      returnTarget?.focus()
+    }
+  }, [onClose, returnFocusTo])
+
+  return createPortal(
+    <div
+      className="fixed inset-x-0 bottom-0 z-50 lg:hidden"
+      style={{ top: 'var(--impersonation-offset, 0px)' }}
+    >
+      {/* Backdrop — a plain click target; keyboard users close with Escape or the X. */}
+      <div className="absolute inset-0 bg-gray-900/40" aria-hidden onClick={onClose} />
+      <div
+        id={MOBILE_NAV_ID}
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Main navigation"
+        className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white shadow-xl"
+      >
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-gray-200 px-4">
+          <span className="flex items-center gap-2">
+            <Image alt="" src={sunbnbLogo} className="w-8 h-8" />
+            <span className="text-sm font-bold text-gray-900">sunbnb</span>
+          </span>
+          <button
+            ref={closeRef}
+            type="button"
+            onClick={onClose}
+            aria-label={t('closeMenu')}
+            className="-mr-2 flex h-10 w-10 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <nav className="flex-1 overflow-y-auto p-2" aria-label="Main">
+          <ul className="space-y-0.5">
+            {items.map(item => {
+              const active = isActive(pathname, item.href)
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    onClick={onClose}
+                    aria-current={active ? 'page' : undefined}
+                    className={`flex min-h-11 items-center rounded-md px-3 text-base transition-colors ${
+                      active
+                        ? 'text-gray-900 font-semibold bg-gray-100'
+                        : 'text-gray-600 font-medium hover:text-gray-900 hover:bg-gray-50'
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        </nav>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 export default function Header() {
   const { data: session } = useSession()
   const pathname = usePathname()
@@ -30,7 +161,10 @@ export default function Header() {
   const tp = useTranslations('Payments')
   const currentLocale = useLocale()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [navOpen, setNavOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const navButtonRef = useRef<HTMLButtonElement>(null)
+  const closeNav = useCallback(() => setNavOpen(false), [])
   const restaurantsEnabled = useFlag('restaurants')
   // Track 021 P5: hidden until the flag exists, so operators with no hardware
   // never see a menu entry for a fleet they do not have (useFlag defaults off).
@@ -45,6 +179,23 @@ export default function Header() {
     ...(devicesEnabled ? [{ label: t('devices'), href: '/devices' }] : []),
     { label: t('security'), href: '/security' },
   ]
+
+  // Close the mobile drawer on navigation (covers back/forward and programmatic
+  // pushes, not just taps on a drawer link).
+  useEffect(() => {
+    setNavOpen(false)
+  }, [pathname])
+
+  // Close the drawer if the viewport grows past `lg` (rotation, window resize),
+  // otherwise the body scroll lock would outlive the hidden drawer.
+  useEffect(() => {
+    if (!navOpen) return
+    const mql = window.matchMedia(DESKTOP_QUERY)
+    const onChange = () => { if (mql.matches) setNavOpen(false) }
+    onChange()
+    mql.addEventListener('change', onChange)
+    return () => mql.removeEventListener('change', onChange)
+  }, [navOpen])
 
   // Close menu on outside click
   useEffect(() => {
@@ -62,11 +213,26 @@ export default function Header() {
     : session?.user?.email?.[0]?.toUpperCase() || '?'
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-xs border-b border-gray-200">
-      <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+    // `top` follows the fixed impersonation banner (0px when not impersonating),
+    // so the sticky header doesn't slide underneath it on scroll.
+    <header className="sticky top-[var(--impersonation-offset,0px)] z-40 bg-white/95 backdrop-blur-xs border-b border-gray-200">
+      <div className="page-container h-14 flex items-center justify-between gap-3">
 
-        {/* Left: Logo + Nav */}
-        <div className="flex items-center gap-8">
+        {/* Left: (mobile) menu button + Logo + Nav */}
+        <div className="flex min-w-0 items-center gap-2 lg:gap-5 xl:gap-8">
+          <button
+            ref={navButtonRef}
+            type="button"
+            onClick={() => setNavOpen(true)}
+            aria-label={t('openMenu')}
+            aria-expanded={navOpen}
+            aria-controls={MOBILE_NAV_ID}
+            className="-ml-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 lg:hidden"
+          >
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            </svg>
+          </button>
           <Link href="/" className="flex items-center gap-2 shrink-0">
             <span className="relative">
               <Image alt="Sunbnb" src={sunbnbLogo} className="w-8 h-8" />
@@ -79,14 +245,14 @@ export default function Header() {
             <span className="text-sm font-bold text-gray-900 hidden md:inline">sunbnb</span>
           </Link>
 
-          <nav className="flex items-center gap-1">
+          <nav className="hidden lg:flex min-w-0 items-center gap-0.5 xl:gap-1" aria-label="Main">
             {navItems.map(item => {
               const active = isActive(pathname, item.href)
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                  className={`whitespace-nowrap px-2.5 xl:px-3 py-1.5 text-sm rounded-md transition-colors ${
                     active
                       ? 'text-gray-900 font-semibold bg-gray-100'
                       : 'text-gray-500 font-medium hover:text-gray-900 hover:bg-gray-50'
@@ -101,10 +267,13 @@ export default function Header() {
         </div>
 
         {/* Right: User menu */}
-        <div className="relative" ref={menuRef}>
+        <div className="relative shrink-0" ref={menuRef}>
           <button
+            type="button"
             onClick={() => setMenuOpen(!menuOpen)}
-            className="flex items-center gap-2 rounded-full p-0.5 hover:ring-2 hover:ring-gray-200 transition-all"
+            aria-label={t('accountMenu')}
+            aria-expanded={menuOpen}
+            className="flex items-center gap-2 rounded-full p-1 hover:ring-2 hover:ring-gray-200 transition-all"
           >
             {session?.user?.image ? (
               <img
@@ -118,10 +287,16 @@ export default function Header() {
                 {initials}
               </div>
             )}
+            {/* Wide screens have room to say whose account this is. */}
+            {session?.user?.name && (
+              <span className="hidden xl:block max-w-40 truncate pr-2 text-sm font-medium text-gray-700">
+                {session.user.name}
+              </span>
+            )}
           </button>
 
           {menuOpen && (
-            <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl border border-gray-200 shadow-lg py-1 z-50">
+            <div className="absolute right-0 top-full mt-2 w-56 max-w-[calc(100vw-2rem)] bg-white rounded-xl border border-gray-200 shadow-lg py-1 z-50">
               {/* User info */}
               <div className="px-4 py-2.5 border-b border-gray-100">
                 <p className="text-sm font-medium text-gray-900 truncate">
@@ -135,7 +310,7 @@ export default function Header() {
               <Link
                 href="/account"
                 onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-2 px-4 py-2.5 lg:py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
@@ -146,7 +321,7 @@ export default function Header() {
               <Link
                 href="/account/subscription"
                 onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-2 px-4 py-2.5 lg:py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" />
@@ -157,7 +332,7 @@ export default function Header() {
               <Link
                 href="/account/payments"
                 onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-2 px-4 py-2.5 lg:py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
@@ -168,7 +343,7 @@ export default function Header() {
               <Link
                 href="/account/invoices"
                 onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-2 px-4 py-2.5 lg:py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5A3.375 3.375 0 0 0 10.125 2.25H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
@@ -179,7 +354,7 @@ export default function Header() {
               <Link
                 href="/account/staff"
                 onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-2 px-4 py-2.5 lg:py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
@@ -199,7 +374,7 @@ export default function Header() {
                         setMenuOpen(false)
                         router.refresh()
                       }}
-                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${
+                      className={`px-3 py-1.5 lg:px-2.5 lg:py-1 rounded-full text-xs font-semibold transition-colors ${
                         currentLocale === loc.code
                           ? 'bg-gray-900 text-white'
                           : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
@@ -213,7 +388,7 @@ export default function Header() {
 
               <button
                 onClick={() => { setMenuOpen(false); signOut() }}
-                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                className="w-full flex items-center gap-2 px-4 py-2.5 lg:py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15m-3 0-3-3m0 0 3-3m-3 3H15" />
@@ -224,6 +399,14 @@ export default function Header() {
           )}
         </div>
       </div>
+      {navOpen && (
+        <MobileNavDrawer
+          items={navItems}
+          pathname={pathname}
+          onClose={closeNav}
+          returnFocusTo={navButtonRef}
+        />
+      )}
     </header>
   )
 }

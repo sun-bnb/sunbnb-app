@@ -18,7 +18,7 @@ function RestaurantCard({ restaurant }: { restaurant: RestaurantCardProps }) {
       className="group block bg-white rounded-xl border border-gray-200 overflow-hidden hover:border-gray-300 hover:shadow-md transition-all duration-200"
     >
       {/* Placeholder banner */}
-      <div className="w-full h-[100px] bg-gray-50 flex items-center justify-center border-b border-gray-100">
+      <div className="w-full h-16 sm:h-[100px] bg-gray-50 flex items-center justify-center border-b border-gray-100">
         <svg
           className="w-8 h-8 text-gray-300"
           fill="none"
@@ -72,7 +72,7 @@ function AddRestaurantCard() {
   return (
     <Link
       href="/restaurants/create"
-      className="group flex flex-col items-center justify-center bg-white rounded-xl border-2 border-dashed border-gray-300 hover:border-gray-400 hover:bg-gray-50 transition-all duration-200 min-h-[200px]"
+      className="group flex flex-col items-center justify-center bg-white rounded-xl border-2 border-dashed border-gray-300 hover:border-gray-400 hover:bg-gray-50 transition-all duration-200 min-h-[120px] sm:min-h-[200px]"
     >
       <div className="w-12 h-12 rounded-full bg-gray-100 group-hover:bg-gray-200 flex items-center justify-center mb-3 transition-colors">
         <svg
@@ -131,7 +131,7 @@ export default async function RestaurantsPage() {
   }))
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-5xl">
+    <div className="page-container py-6">
       <div className="mb-6">
         <h1 className="text-lg font-semibold text-gray-900">Restaurants</h1>
         {restaurants.length > 0 && (
@@ -179,7 +179,7 @@ export default async function RestaurantsPage() {
           </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           <AddRestaurantCard />
           {restaurants.map((restaurant) => (
             <RestaurantCard key={restaurant.id} restaurant={restaurant} />

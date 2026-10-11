@@ -90,7 +90,7 @@ export default async function OrdersPage(
   }
 
   return (
-    <div className="w-screen max-w-6xl">
+    <div className="page-container">
       <OrdersView scope={{ kind: 'site', id: site.id }} orders={orders} tableMap={tableMap} accessKey={accessKey} />
     </div>
   )

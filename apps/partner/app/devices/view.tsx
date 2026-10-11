@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useTransition } from 'react'
+import React, { useState, useSyncExternalStore, useTransition } from 'react'
 import type { FleetDevice } from './queries'
 import type { DeviceHealth } from './device-health'
 import {
@@ -135,7 +135,7 @@ function PowerPolicyEditor({
           aria-label="Power mode"
           value={mode}
           onChange={(e) => { setMode(e.target.value); setError(null) }}
-          className="rounded-lg border border-gray-200 px-2 py-1 text-sm"
+          className="min-h-10 sm:min-h-0 rounded-lg border border-gray-200 px-2 py-1 text-sm"
         >
           {DEVICE_POWER_MODES.map((m) => (
             <option key={m} value={m}>{devicePowerModeLabel(m)}</option>
@@ -148,7 +148,7 @@ function PowerPolicyEditor({
           value={seconds}
           min={draftMode ? undefined : 1}
           onChange={(e) => { setSeconds(e.target.value); setError(null) }}
-          className={`w-20 rounded-lg border px-2 py-1 text-sm ${
+          className={`w-20 min-h-10 sm:min-h-0 rounded-lg border px-2 py-1 text-sm ${
             invalid ? 'border-red-300' : 'border-gray-200'
           }`}
         />
@@ -158,7 +158,7 @@ function PowerPolicyEditor({
           disabled={pending || invalid !== null}
           onClick={save}
           title={invalid ?? undefined}
-          className="rounded-lg bg-accent px-3 py-1 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+          className="min-h-10 sm:min-h-0 rounded-lg bg-accent px-3 py-1 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
         >
           {pending ? 'Saving…' : 'Save'}
         </button>
@@ -167,7 +167,7 @@ function PowerPolicyEditor({
             type="button"
             disabled={pending}
             onClick={useDefault}
-            className="rounded-lg border border-gray-200 px-3 py-1 text-sm text-gray-600 hover:bg-white"
+            className="min-h-10 sm:min-h-0 rounded-lg border border-gray-200 px-3 py-1 text-sm text-gray-600 hover:bg-white"
           >
             Use venue default
           </button>
@@ -190,6 +190,25 @@ function PowerPolicyEditor({
       </p>
       {error && <p role="status" className="mt-2 text-sm text-red-600">{error}</p>}
     </div>
+  )
+}
+
+/**
+ * Both layouts stay in the DOM (CSS picks one), so the open editors must live in
+ * exactly one of them — otherwise two copies of the same form, with the same
+ * draft and error state, are mounted at once. The server snapshot is `false`
+ * (cards); editors only open after interaction, so there is no hydration flash.
+ */
+const TABLE_QUERY = '(min-width: 1024px)'
+function useTableLayout(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const mql = window.matchMedia(TABLE_QUERY)
+      mql.addEventListener('change', onChange)
+      return () => mql.removeEventListener('change', onChange)
+    },
+    () => window.matchMedia(TABLE_QUERY).matches,
+    () => false,
   )
 }
 
@@ -218,6 +237,7 @@ export default function DevicesView({
   const [editingPolicy, setEditingPolicy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const tableLayout = useTableLayout()
 
   /**
    * Assignment is typed as the address painted on the bed — `parcel-row-unit`.
@@ -242,13 +262,161 @@ export default function DevicesView({
     })
   }
 
+  /** Location cell: assigned address, plus the pending/claim flags. */
+  const renderLocation = (device: FleetDevice) => (
+    <>
+      {device.assignedLocation ?? <span className="text-gray-400">—</span>}
+      {/* The gap between assigned and applied is the whole point
+          of showing both: a device can be told where it is and
+          not have heard yet. */}
+      {device.health === 'pending' && device.reportedLocation && (
+        <span className="ml-2 text-xs text-amber-600">
+          running {device.reportedLocation}
+        </span>
+      )}
+      {/* A device asserting a different customer: recorded, never
+          acted on, and shown because an unseen claim is the same
+          as no claim. Usually a reflashed unit; occasionally not. */}
+      {device.claimedPartnerCode && (
+        <span
+          title={`This device reports it belongs to ${device.claimedPartnerCode}. Nothing was changed — contact support if it is not yours.`}
+          className="ml-2 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600"
+        >
+          claims {device.claimedPartnerCode}
+        </span>
+      )}
+    </>
+  )
+
+  const renderHealth = (device: FleetDevice) => (
+    <span
+      title={HEALTH[device.health].hint}
+      className={`rounded-full border px-2 py-0.5 text-xs font-medium ${HEALTH[device.health].classes}`}
+    >
+      {HEALTH[device.health].label}
+    </span>
+  )
+
+  /** Row actions — `tap` gives them a phone-sized hit area in the card list. */
+  const renderActions = (device: FleetDevice, tap = false) => {
+    const size = tap ? 'min-h-10 px-3 py-2' : 'px-2.5 py-1'
+    return (
+      <>
+        {/* Effective policy, and whether it is this device's own.
+            Muted when inherited: an operator scanning the column
+            should see only the devices that differ from the venue. */}
+        <button
+          type="button"
+          title={
+            device.policyOverride
+              ? `${devicePowerModeLabel(device.policy.mode)} every ${device.policy.pollAfterSec} s — set on this device`
+              : `${devicePowerModeLabel(device.policy.mode)} every ${device.policy.pollAfterSec} s — the venue default`
+          }
+          onClick={() => {
+            setError(null)
+            setEditingPolicy(editingPolicy === device.id ? null : device.id)
+          }}
+          className={`${tap ? '' : 'mr-2 '}rounded-full border ${size} text-xs font-medium hover:bg-gray-50 ${
+            device.policyOverride
+              ? 'border-gray-900 text-gray-900'
+              : 'border-gray-200 text-gray-500'
+          }`}
+        >
+          {SHORT_MODE[device.policy.mode]} · {device.policy.pollAfterSec}s
+        </button>
+        <button
+          type="button"
+          onClick={() => { setError(null); setEditing(editing === device.id ? null : device.id) }}
+          className={`rounded-lg border border-gray-200 ${size} text-xs font-medium text-gray-700 hover:bg-gray-50`}
+        >
+          {device.assignedLocation ? 'Move' : 'Assign'}
+        </button>
+        {device.assignedLocation && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => startTransition(async () => { await identifyDevice(device.id) })}
+            title="Flashes the bar on the next poll, so you can confirm which box this is"
+            className={`${tap ? '' : 'ml-2 '}rounded-lg border border-gray-200 ${size} text-xs font-medium text-gray-700 hover:bg-gray-50`}
+          >
+            Identify
+          </button>
+        )}
+      </>
+    )
+  }
+
+  const renderAssignForm = (device: FleetDevice) => (
+    <>
+      <form
+        onSubmit={(e) => { e.preventDefault(); submit(device.id, e.currentTarget) }}
+        className="flex flex-wrap items-center gap-2"
+      >
+        <select
+          name="siteId"
+          defaultValue={device.assignedSiteId ?? sites[0]?.id ?? ''}
+          className="w-full sm:w-auto min-h-10 sm:min-h-0 rounded-lg border border-gray-200 px-2 py-1 text-sm"
+        >
+          {sites.map((site) => (
+            <option key={site.id} value={site.id}>{site.name}</option>
+          ))}
+        </select>
+        <input
+          name="location"
+          defaultValue={device.assignedLocation ?? ''}
+          placeholder="parcel-row-unit, e.g. 1-10-3"
+          className="w-full sm:w-56 min-h-10 sm:min-h-0 rounded-lg border border-gray-200 px-2 py-1 text-sm"
+        />
+        <button
+          type="submit"
+          disabled={pending}
+          className="min-h-10 sm:min-h-0 rounded-lg bg-accent px-3 py-1 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+        >
+          {pending ? 'Saving…' : 'Save'}
+        </button>
+        {device.assignedLocation && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => startTransition(async () => {
+              await unassignDevice(device.id); setEditing(null)
+            })}
+            className="min-h-10 sm:min-h-0 rounded-lg border border-gray-200 px-3 py-1 text-sm text-gray-600 hover:bg-white"
+          >
+            Unassign
+          </button>
+        )}
+        <label className="flex items-center gap-1.5 min-h-10 sm:min-h-0 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            defaultChecked={device.reverseSegments}
+            disabled={pending}
+            onChange={(e) => {
+              const reversed = e.currentTarget.checked
+              startTransition(async () => {
+                await setDeviceSegmentOrder(device.id, reversed)
+              })
+            }}
+          />
+          Bar mounted the other way round
+        </label>
+        <span className="text-xs text-gray-500">
+          Saving flashes the bar — watch the parasol to confirm it is this one.
+        </span>
+      </form>
+      {error && (
+        <p role="status" className="mt-2 text-sm text-red-600">{error}</p>
+      )}
+    </>
+  )
+
   const counts = devices.reduce<Record<string, number>>((acc, d) => {
     acc[d.health] = (acc[d.health] ?? 0) + 1
     return acc
   }, {})
 
   return (
-    <div className="container mx-auto max-w-[900px] px-4 py-6">
+    <div className="page-container py-6">
       <h1 className="text-xl font-semibold text-gray-900">Devices</h1>
       <p className="mt-1 text-sm text-gray-500">
         Sunbed indicators report in on their own. Assign each one the spot it is mounted on.
@@ -274,7 +442,56 @@ export default function DevicesView({
               ))}
           </div>
 
-          <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200 bg-white">
+          {/* Phone / tablet: one card per device, two abreast from sm. The
+              seven-column table (and its full-width inline editors) needs lg. */}
+          <ul className="mt-4 grid grid-cols-1 items-start gap-3 sm:grid-cols-2 lg:hidden">
+            {devices.map((device) => (
+              <li key={device.id} className="min-w-0 rounded-xl border border-gray-200 bg-white p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-mono text-sm text-gray-900">{device.code}</div>
+                    <div className="mt-0.5 text-sm text-gray-700 break-words">{renderLocation(device)}</div>
+                  </div>
+                  <div className="shrink-0">{renderHealth(device)}</div>
+                </div>
+                <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <dt className="uppercase text-gray-500">Last seen</dt>
+                    <dd className="mt-0.5 text-sm text-gray-600">{relative(device.lastSeenAt)}</dd>
+                  </div>
+                  <div>
+                    <dt className="uppercase text-gray-500">Battery</dt>
+                    <dd className={`mt-0.5 text-sm ${BATTERY[device.battery]}`}>
+                      {device.battMv ? `${(device.battMv / 1000).toFixed(2)}V` : '—'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="uppercase text-gray-500">Signal</dt>
+                    <dd className="mt-0.5 text-sm text-gray-600">
+                      {device.rssiDbm != null ? `${device.rssiDbm} dBm` : '—'}
+                    </dd>
+                  </div>
+                </dl>
+                <div className="mt-3 flex flex-wrap gap-2">{renderActions(device, true)}</div>
+                {!tableLayout && editing === device.id && (
+                  <div className="mt-3 -mx-4 -mb-4 rounded-b-xl border-t border-gray-100 bg-gray-50/60 px-4 py-3">
+                    {renderAssignForm(device)}
+                  </div>
+                )}
+                {!tableLayout && editingPolicy === device.id && (
+                  <div className="mt-3 -mx-4 -mb-4 rounded-b-xl border-t border-gray-100 bg-gray-50/60 px-4 py-3">
+                    <PowerPolicyEditor
+                      device={device}
+                      platformPolicy={platformPolicy}
+                      onDone={() => setEditingPolicy(null)}
+                    />
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          <div className="mt-4 hidden lg:block overflow-x-auto rounded-xl border border-gray-200 bg-white">
             <table className="w-full text-sm">
               <thead className="border-b border-gray-100 bg-gray-50 text-left text-xs uppercase text-gray-500">
                 <tr>
@@ -292,36 +509,8 @@ export default function DevicesView({
                   <React.Fragment key={device.id}>
                   <tr className="border-b border-gray-50 last:border-0">
                     <td className="px-4 py-2 font-mono text-gray-900">{device.code}</td>
-                    <td className="px-4 py-2 text-gray-700">
-                      {device.assignedLocation ?? <span className="text-gray-400">—</span>}
-                      {/* The gap between assigned and applied is the whole point
-                          of showing both: a device can be told where it is and
-                          not have heard yet. */}
-                      {device.health === 'pending' && device.reportedLocation && (
-                        <span className="ml-2 text-xs text-amber-600">
-                          running {device.reportedLocation}
-                        </span>
-                      )}
-                      {/* A device asserting a different customer: recorded, never
-                          acted on, and shown because an unseen claim is the same
-                          as no claim. Usually a reflashed unit; occasionally not. */}
-                      {device.claimedPartnerCode && (
-                        <span
-                          title={`This device reports it belongs to ${device.claimedPartnerCode}. Nothing was changed — contact support if it is not yours.`}
-                          className="ml-2 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600"
-                        >
-                          claims {device.claimedPartnerCode}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      <span
-                        title={HEALTH[device.health].hint}
-                        className={`rounded-full border px-2 py-0.5 text-xs font-medium ${HEALTH[device.health].classes}`}
-                      >
-                        {HEALTH[device.health].label}
-                      </span>
-                    </td>
+                    <td className="px-4 py-2 text-gray-700">{renderLocation(device)}</td>
+                    <td className="px-4 py-2">{renderHealth(device)}</td>
                     <td className="px-4 py-2 text-gray-600">{relative(device.lastSeenAt)}</td>
                     <td className={`px-4 py-2 ${BATTERY[device.battery]}`}>
                       {device.battMv ? `${(device.battMv / 1000).toFixed(2)}V` : '—'}
@@ -329,115 +518,14 @@ export default function DevicesView({
                     <td className="px-4 py-2 text-gray-600">
                       {device.rssiDbm != null ? `${device.rssiDbm} dBm` : '—'}
                     </td>
-                    <td className="px-4 py-2 text-right whitespace-nowrap">
-                      {/* Effective policy, and whether it is this device's own.
-                          Muted when inherited: an operator scanning the column
-                          should see only the devices that differ from the venue. */}
-                      <button
-                        type="button"
-                        title={
-                          device.policyOverride
-                            ? `${devicePowerModeLabel(device.policy.mode)} every ${device.policy.pollAfterSec} s — set on this device`
-                            : `${devicePowerModeLabel(device.policy.mode)} every ${device.policy.pollAfterSec} s — the venue default`
-                        }
-                        onClick={() => {
-                          setError(null)
-                          setEditingPolicy(editingPolicy === device.id ? null : device.id)
-                        }}
-                        className={`mr-2 rounded-full border px-2.5 py-1 text-xs font-medium hover:bg-gray-50 ${
-                          device.policyOverride
-                            ? 'border-gray-900 text-gray-900'
-                            : 'border-gray-200 text-gray-500'
-                        }`}
-                      >
-                        {SHORT_MODE[device.policy.mode]} · {device.policy.pollAfterSec}s
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setError(null); setEditing(editing === device.id ? null : device.id) }}
-                        className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                      >
-                        {device.assignedLocation ? 'Move' : 'Assign'}
-                      </button>
-                      {device.assignedLocation && (
-                        <button
-                          type="button"
-                          disabled={pending}
-                          onClick={() => startTransition(async () => { await identifyDevice(device.id) })}
-                          title="Flashes the bar on the next poll, so you can confirm which box this is"
-                          className="ml-2 rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                        >
-                          Identify
-                        </button>
-                      )}
-                    </td>
+                    <td className="px-4 py-2 text-right whitespace-nowrap">{renderActions(device)}</td>
                   </tr>
-                  {editing === device.id && (
+                  {tableLayout && editing === device.id && (
                     <tr className="border-b border-gray-50 bg-gray-50/60">
-                      <td colSpan={7} className="px-4 py-3">
-                        <form
-                          onSubmit={(e) => { e.preventDefault(); submit(device.id, e.currentTarget) }}
-                          className="flex flex-wrap items-center gap-2"
-                        >
-                          <select
-                            name="siteId"
-                            defaultValue={device.assignedSiteId ?? sites[0]?.id ?? ''}
-                            className="rounded-lg border border-gray-200 px-2 py-1 text-sm"
-                          >
-                            {sites.map((site) => (
-                              <option key={site.id} value={site.id}>{site.name}</option>
-                            ))}
-                          </select>
-                          <input
-                            name="location"
-                            defaultValue={device.assignedLocation ?? ''}
-                            placeholder="parcel-row-unit, e.g. 1-10-3"
-                            className="w-56 rounded-lg border border-gray-200 px-2 py-1 text-sm"
-                          />
-                          <button
-                            type="submit"
-                            disabled={pending}
-                            className="rounded-lg bg-accent px-3 py-1 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-                          >
-                            {pending ? 'Saving…' : 'Save'}
-                          </button>
-                          {device.assignedLocation && (
-                            <button
-                              type="button"
-                              disabled={pending}
-                              onClick={() => startTransition(async () => {
-                                await unassignDevice(device.id); setEditing(null)
-                              })}
-                              className="rounded-lg border border-gray-200 px-3 py-1 text-sm text-gray-600 hover:bg-white"
-                            >
-                              Unassign
-                            </button>
-                          )}
-                          <label className="flex items-center gap-1.5 text-sm text-gray-700">
-                            <input
-                              type="checkbox"
-                              defaultChecked={device.reverseSegments}
-                              disabled={pending}
-                              onChange={(e) => {
-                                const reversed = e.currentTarget.checked
-                                startTransition(async () => {
-                                  await setDeviceSegmentOrder(device.id, reversed)
-                                })
-                              }}
-                            />
-                            Bar mounted the other way round
-                          </label>
-                          <span className="text-xs text-gray-500">
-                            Saving flashes the bar — watch the parasol to confirm it is this one.
-                          </span>
-                        </form>
-                        {error && (
-                          <p role="status" className="mt-2 text-sm text-red-600">{error}</p>
-                        )}
-                      </td>
+                      <td colSpan={7} className="px-4 py-3">{renderAssignForm(device)}</td>
                     </tr>
                   )}
-                  {editingPolicy === device.id && (
+                  {tableLayout && editingPolicy === device.id && (
                     <tr className="border-b border-gray-50 bg-gray-50/60">
                       <td colSpan={7} className="px-4 py-3">
                         <PowerPolicyEditor

@@ -84,7 +84,7 @@ export default function PaymentsView({
       : t('cardNone')
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-5xl">
+    <div className="page-container py-6">
       <div className="mb-6">
         <h1 className="text-lg font-semibold text-gray-900">{t('title')}</h1>
         <p className="text-sm text-gray-500 mt-0.5">{t('subtitle')}</p>
@@ -113,7 +113,7 @@ export default function PaymentsView({
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {providers.map(({ provider, readiness, availability }) => {
           const isSelected = provider === selected
           const isEffective = provider === eff
@@ -150,18 +150,18 @@ export default function PaymentsView({
                 <p className="text-xs text-gray-500 mb-2">{t('notAvailableInCountry')}</p>
               )}
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {!isSelected && (
                   <button
                     type="button"
-                    className="btn-primary"
+                    className="btn-primary min-h-10 flex-1 sm:flex-none"
                     disabled={!availability.online || pending}
                     onClick={() => select(provider)}
                   >
                     {t('select')}
                   </button>
                 )}
-                <Link href={readiness.connectPath} className="btn-ghost">
+                <Link href={readiness.connectPath} className="btn-ghost inline-flex items-center min-h-10 px-2">
                   {connectLabel(readiness)}
                 </Link>
               </div>

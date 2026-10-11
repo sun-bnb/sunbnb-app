@@ -288,10 +288,11 @@ export default function DailySummaryView({
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col">
 
       {/* Page header */}
-      <div className="bg-white dark:bg-gray-900 border-b-2 border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center gap-3">
+      <div className="bg-white dark:bg-gray-900 border-b-2 border-gray-200 dark:border-gray-700 px-4 py-3">
+        <div className="max-w-lg md:max-w-3xl xl:max-w-6xl mx-auto w-full flex items-center gap-3">
         <Link
           href={backHref}
-          className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors shrink-0"
+          className="flex items-center gap-1.5 min-h-10 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors shrink-0"
           aria-label={t('backToMenu')}
         >
           <svg
@@ -312,11 +313,13 @@ export default function DailySummaryView({
           </h1>
           <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 truncate">{siteName}</p>
         </div>
+        </div>
       </div>
 
       {/* Day-totals summary header (visible when data is loaded) */}
       {showTotals && (
         <div className="bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-4 py-3">
+          <div className="max-w-lg md:max-w-3xl xl:max-w-6xl mx-auto w-full">
           <div className="flex items-center gap-6">
             <div>
               <div className="text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">
@@ -355,15 +358,17 @@ export default function DailySummaryView({
               )}
             </div>
           )}
+          </div>
         </div>
       )}
 
-      {/* Mode toggle tabs */}
-      <div className="flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+      {/* Mode toggle tabs — full-width halves on phones, left-aligned tabs from md */}
+      <div className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 md:px-4">
+      <div className="flex max-w-lg md:max-w-3xl xl:max-w-6xl mx-auto w-full">
         <button
           type="button"
           onClick={switchToOpen}
-          className={`flex-1 py-2.5 text-sm font-semibold transition-colors ${
+          className={`flex-1 md:flex-none md:px-6 py-2.5 text-sm font-semibold transition-colors ${
             mode === 'open'
               ? 'text-gray-900 dark:text-gray-100 border-b-2 border-accent dark:border-gray-100 -mb-px'
               : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
@@ -374,7 +379,7 @@ export default function DailySummaryView({
         <button
           type="button"
           onClick={switchToDay}
-          className={`flex-1 py-2.5 text-sm font-semibold transition-colors ${
+          className={`flex-1 md:flex-none md:px-6 py-2.5 text-sm font-semibold transition-colors ${
             mode === 'day'
               ? 'text-gray-900 dark:text-gray-100 border-b-2 border-accent dark:border-gray-100 -mb-px'
               : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
@@ -383,13 +388,14 @@ export default function DailySummaryView({
           {t('tabDay')}
         </button>
       </div>
+      </div>
 
       {/* Page body */}
-      <div className="flex-1 px-4 py-4 space-y-3 max-w-lg mx-auto w-full">
+      <div className="flex-1 px-4 py-4 lg:py-6 space-y-3 max-w-lg md:max-w-3xl xl:max-w-6xl mx-auto w-full">
 
         {/* Day picker (day-report mode only) */}
         {mode === 'day' && (
-          <div className="space-y-1">
+          <div className="space-y-1 md:max-w-xs">
             <label className="block text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">
               {t('selectDay')}
             </label>
@@ -455,7 +461,7 @@ export default function DailySummaryView({
 
         {/* Open-mode till list */}
         {mode === 'open' && phase === 'ready' && tills.length > 0 && (
-          <div className="space-y-3">
+          <div className="space-y-3 md:space-y-0 md:grid md:grid-cols-2 xl:grid-cols-3 md:gap-4 md:items-start">
             {tills.map(till => {
               const cs = closeStates[till.employeeId] ?? { phase: 'idle' }
               // Sweepable (today + carryOver) — what the close action actually hands in.
@@ -525,7 +531,7 @@ export default function DailySummaryView({
                   {/* Inline itemised transaction list — only in open (non-closed) state */}
                   {cs.phase !== 'closed' && till.items.length > 0 && (
                     <ul
-                      className="mt-3 max-h-40 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30"
+                      className="mt-3 max-h-40 lg:max-h-64 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30"
                       aria-label={`${till.name} till items`}
                     >
                       {till.items.map(item => {
@@ -628,7 +634,7 @@ export default function DailySummaryView({
 
         {/* Day-mode shift list — per-employee / per-sunbed earnings */}
         {mode === 'day' && phase === 'ready' && shifts.length > 0 && (
-          <div className="space-y-3">
+          <div className="space-y-3 md:space-y-0 md:grid md:grid-cols-2 xl:grid-cols-3 md:gap-4 md:items-start">
             {shifts.map(shift => {
               const isExpanded = expandedRows[shift.employeeId] ?? false
               const expandId = `shift-items-${shift.employeeId}`

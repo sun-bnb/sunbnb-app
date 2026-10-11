@@ -54,7 +54,8 @@ export default async function CreateSitePage() {
   } : null
 
   return (
-    <div className="container mx-auto max-w-[768px]">
+    <div className="page-container">
+      <div className="max-w-3xl lg:max-w-5xl">
       <CreateSiteWizard
         apiKey={apiKey}
         tier={tier}
@@ -63,6 +64,7 @@ export default async function CreateSitePage() {
         allowed={siteLimit.allowed}
         features={ctx.features ?? null}
       />
+      </div>
     </div>
   )
 }

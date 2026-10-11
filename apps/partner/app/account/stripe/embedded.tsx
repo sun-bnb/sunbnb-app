@@ -58,7 +58,7 @@ export default function EmbeddedManagement() {
       <div className="mb-4">
         <ConnectNotificationBanner />
       </div>
-      <div role="tablist" aria-label={t('embeddedTitle')} className="flex gap-1 border-b border-gray-200 mb-4">
+      <div role="tablist" aria-label={t('embeddedTitle')} className="flex gap-1 border-b border-gray-200 mb-4 overflow-x-auto">
         {TABS.map((x) => (
           <button
             key={x.id}
@@ -68,7 +68,7 @@ export default function EmbeddedManagement() {
             aria-selected={tab === x.id}
             aria-controls="stripe-tabpanel"
             onClick={() => setTab(x.id)}
-            className={`px-3 py-2 text-sm font-medium -mb-px border-b-2 ${
+            className={`shrink-0 whitespace-nowrap px-3 py-2.5 sm:py-2 text-sm font-medium -mb-px border-b-2 ${
               tab === x.id
                 ? 'border-accent text-gray-900'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -78,7 +78,7 @@ export default function EmbeddedManagement() {
           </button>
         ))}
       </div>
-      <div role="tabpanel" id="stripe-tabpanel" aria-labelledby={`stripe-tab-${tab}`}>
+      <div role="tabpanel" id="stripe-tabpanel" aria-labelledby={`stripe-tab-${tab}`} className="min-w-0">
         {tab === 'account' && <ConnectAccountManagement />}
         {tab === 'payouts' && <ConnectPayouts />}
         {tab === 'payments' && <ConnectPayments />}

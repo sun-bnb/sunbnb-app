@@ -124,13 +124,13 @@ function StatCard({
 }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</span>
-        <span className={`w-7 h-7 rounded-lg flex items-center justify-center ${accent || 'bg-gray-100 text-gray-500'}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="min-w-0 text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</span>
+        <span className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${accent || 'bg-gray-100 text-gray-500'}`}>
           {icon}
         </span>
       </div>
-      <span className="text-2xl font-semibold text-gray-900">{value}</span>
+      <span className="text-xl sm:text-2xl font-semibold text-gray-900 break-words">{value}</span>
       {subtitle && <span className="text-xs text-gray-400">{subtitle}</span>}
     </div>
   )
@@ -170,7 +170,7 @@ function ChartTooltip({ active, payload, label }: any) {
 function StatusBadge({ status, opStatus, t }: { status: string; opStatus?: string; t: (key: string) => string }) {
   if (opStatus === OP_CHECKED_IN || opStatus === OP_WALKED_IN) {
     return (
-      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+      <span className="shrink-0 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
         {opStatus === OP_WALKED_IN ? t('statusWalkIn') : t('statusCheckedIn')}
       </span>
     )
@@ -195,7 +195,7 @@ function StatusBadge({ status, opStatus, t }: { status: string; opStatus?: strin
   }
 
   return (
-    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${styles[status] || 'bg-gray-100 text-gray-500'}`}>
+    <span className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded-full ${styles[status] || 'bg-gray-100 text-gray-500'}`}>
       {labels[status] || status}
     </span>
   )
@@ -253,7 +253,7 @@ export default function DashboardView({ data }: { data: DashboardData }) {
   const availableSpots = data.sellableInventory - data.occupiedSeats
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-5xl">
+    <div className="page-container py-6">
 
       {/* Header */}
       <div className="mb-6">
@@ -265,18 +265,18 @@ export default function DashboardView({ data }: { data: DashboardData }) {
 
       {/* ── Today's Snapshot ──────────────────────────────────────────────────── */}
 
-      <div className={`grid gap-4 mb-6 ${data.hasFnb ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-2 lg:grid-cols-3'}`}>
+      <div className={`grid gap-3 sm:gap-4 mb-6 ${data.hasFnb ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-2 md:grid-cols-3'}`}>
 
-        {/* Occupancy */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('occupancy')}</span>
-            <span className="w-7 h-7 rounded-lg flex items-center justify-center bg-blue-50 text-blue-600">
+        {/* Occupancy — spans the phone row when only three cards, so no orphan */}
+        <div className={`bg-white rounded-xl border border-gray-200 p-4 flex flex-col gap-2 ${data.hasFnb ? '' : 'col-span-2 md:col-span-1'}`}>
+          <div className="flex items-center justify-between gap-2">
+            <span className="min-w-0 text-xs font-medium text-gray-500 uppercase tracking-wide">{t('occupancy')}</span>
+            <span className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center bg-blue-50 text-blue-600">
               {icons.occupancy}
             </span>
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-semibold text-gray-900">{data.occupancyPct}%</span>
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <span className="text-xl sm:text-2xl font-semibold text-gray-900">{data.occupancyPct}%</span>
             <span className="text-sm text-gray-400">
               {data.occupiedSeats}/{data.sellableInventory}
             </span>
@@ -328,17 +328,17 @@ export default function DashboardView({ data }: { data: DashboardData }) {
 
       {data.arrivingSoon.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex flex-wrap items-center gap-2 mb-3">
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
             <h2 className="text-sm font-semibold text-amber-900">{t('arrivingSoon')}</h2>
             <span className="text-xs text-amber-600 ml-auto">{t('expectedSoon', { count: data.arrivingSoon.length })}</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
             {data.arrivingSoon.map((r) => (
               <Link
                 key={r.id}
                 href={`/reservations/${r.id}`}
-                className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 hover:shadow-xs transition-shadow"
+                className="flex items-center gap-3 bg-white rounded-lg px-3 py-2.5 sm:py-2 hover:shadow-xs transition-shadow"
               >
                 <div className="shrink-0 text-center w-10">
                   <span className="text-sm font-semibold text-amber-700">{timeUntil(r.from)}</span>
@@ -355,11 +355,11 @@ export default function DashboardView({ data }: { data: DashboardData }) {
 
       {/* ── Revenue Chart + Upcoming ───────────────────────────────────────────── */}
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-3 gap-4 mb-6">
 
         {/* Revenue chart */}
-        <div className="lg:col-span-3 bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between mb-4">
+        <div className="lg:col-span-3 xl:col-span-2 min-w-0 bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-900">{t('revenueAndFees')}</h2>
               <p className="text-xs text-gray-400 mt-0.5">{t('last5Months')}</p>
@@ -375,7 +375,7 @@ export default function DashboardView({ data }: { data: DashboardData }) {
           </div>
 
           {/* YTD callout */}
-          <div className="mb-4 flex items-baseline gap-4">
+          <div className="mb-4 flex flex-wrap items-baseline gap-2 sm:gap-4">
             <div className="px-3 py-2 bg-gray-50 rounded-lg inline-flex items-baseline gap-2">
               <span className="text-xs text-gray-500">{t('ytdGross')}</span>
               <span className="text-lg font-semibold text-gray-900">{formatCurrency(data.revenueYearToDate)}</span>
@@ -386,7 +386,7 @@ export default function DashboardView({ data }: { data: DashboardData }) {
             </div>
           </div>
 
-          <div className="h-[220px]">
+          <div className="h-[220px] lg:h-[260px] xl:h-[300px]">
             <SafeResponsiveContainer width="100%" height="100%">
               <SafeBarChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
                 <SafeCartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
@@ -418,14 +418,14 @@ export default function DashboardView({ data }: { data: DashboardData }) {
         </div>
 
         {/* Upcoming reservations */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5 flex flex-col">
-          <div className="flex items-center justify-between mb-4">
+        <div className="lg:col-span-2 xl:col-span-1 min-w-0 bg-white rounded-xl border border-gray-200 p-4 sm:p-5 flex flex-col lg:max-h-[30rem]">
+          <div className="flex items-center justify-between gap-2 mb-4">
             <h2 className="text-sm font-semibold text-gray-900">{t('upcoming')}</h2>
             <span className="text-xs text-gray-400">{t('upcomingCount', { count: data.upcomingReservations.length })}</span>
           </div>
 
           {data.upcomingReservations.length > 0 ? (
-            <div className="flex-1 overflow-y-auto -mx-2 space-y-1">
+            <div className="flex-1 min-h-0 overflow-y-auto -mx-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 content-start gap-1">
               {data.upcomingReservations.map((r) => (
                 <Link
                   key={r.id}
@@ -434,7 +434,7 @@ export default function DashboardView({ data }: { data: DashboardData }) {
                 >
                   {/* Date pill */}
                   <div className="shrink-0 w-11 h-11 rounded-lg bg-gray-100 flex flex-col items-center justify-center">
-                    <span className="text-[10px] leading-none text-gray-400 uppercase">
+                    <span className="text-xs leading-none text-gray-400 uppercase">
                       {new Date(r.from).toLocaleString('en', { month: 'short' })}
                     </span>
                     <span className="text-sm font-semibold text-gray-900 leading-tight">

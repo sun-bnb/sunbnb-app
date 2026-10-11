@@ -16,7 +16,10 @@
     "subscription": "Suscripción",
     "signOut": "Cerrar sesión",
     "language": "Idioma",
-    "devices": "Dispositivos"
+    "devices": "Dispositivos",
+    "openMenu": "Abrir menú",
+    "closeMenu": "Cerrar menú",
+    "accountMenu": "Menú de la cuenta"
   },
   "App": {
     "mollieNotConnected": "Pagos de Mollie no conectados. Conecta tu cuenta de Mollie para aceptar pagos online.",
@@ -467,7 +470,8 @@
     "instructions": "Arrastra un elemento sobre el lienzo para colocarlo.",
     "totalElements": "{count, plural, one {# elemento} other {# elementos}}",
     "totalSunbedsLabel": "{count, plural, one {# tumbona} other {# tumbonas}}",
-    "parcelsLabel": "{count, plural, one {# parcela} other {# parcelas}}"
+    "parcelsLabel": "{count, plural, one {# parcela} other {# parcelas}}",
+    "bestOnLargerScreen": "El editor de distribución funciona mejor en una pantalla más grande."
   },
   "ReadinessChecklist": {
     "title": "Cosas por completar antes de publicar",

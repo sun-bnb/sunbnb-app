@@ -124,7 +124,7 @@ export default function CreateSiteWizard({
   }
 
   return (
-    <div className="px-4 py-6">
+    <div className="px-4 py-6 lg:py-8">
       <Stepper activeStep={activeStep} alternativeLabel sx={{ mb: 4 }}>
         {STEPS.map(label => (
           <Step key={label}>

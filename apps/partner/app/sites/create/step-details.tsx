@@ -199,6 +199,11 @@ export default function StepDetails({
         All settings can be changed later.
       </p>
 
+      {/* Two columns from lg: identity + billing on the left, the week of
+          booking hours on the right. Source order = phone order. */}
+      <div className="lg:grid lg:grid-cols-2 lg:gap-x-10 lg:items-start">
+      <div className="min-w-0">
+
       {/* Site name */}
       <TextField
         fullWidth
@@ -215,7 +220,7 @@ export default function StepDetails({
       {/* Billing type */}
       <div className="mb-5">
         <h3 className="text-sm font-medium text-gray-700 mb-2">Billing type</h3>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <button
             type="button"
             onClick={() => update({ type: 'paid' })}
@@ -266,7 +271,7 @@ export default function StepDetails({
       {/* Pricing — only for paid */}
       {isPaid && (
         <>
-          <div className="flex gap-3 mb-4">
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
             <TextField
               fullWidth
               label="Base price (€)"
@@ -277,7 +282,7 @@ export default function StepDetails({
               helperText="Base price shown on your site page"
             />
             <TextField
-              sx={{ width: 180, flexShrink: 0 }}
+              sx={{ width: { xs: '100%', sm: 180 }, flexShrink: 0 }}
               required
               label="Tax rate (%)"
               type="number"
@@ -297,7 +302,10 @@ export default function StepDetails({
         </>
       )}
 
-      <Divider sx={{ mb: 3 }} />
+      </div>
+      <div className="min-w-0">
+
+      <Divider sx={{ mb: 3, display: { lg: 'none' } }} />
 
       {/* Booking hours */}
       <div>
@@ -319,7 +327,7 @@ export default function StepDetails({
                 }`}
               >
                 {/* Day toggle row */}
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
                   <Switch
                     size="small"
                     checked={isActive}
@@ -330,21 +338,21 @@ export default function StepDetails({
                   </span>
 
                   {isActive ? (
-                    <div className="flex-1 flex flex-col gap-1">
+                    <div className="order-last sm:order-none w-full sm:w-auto sm:flex-1 flex flex-col gap-1">
                       {slots.map((slot, slotIdx) => (
                         <div key={slotIdx} className="flex items-center gap-2">
                           <input
                             type="time"
                             value={slot.openTime}
                             onChange={e => updateSlot(slot.idx, 'openTime', e.target.value)}
-                            className="border border-gray-300 rounded-sm px-2 py-1 text-sm w-28"
+                            className="flex-1 min-w-0 sm:flex-none min-h-[36px] sm:min-h-0 border border-gray-300 rounded-sm px-2 py-1 text-sm sm:w-28"
                           />
                           <span className="text-xs text-gray-400">to</span>
                           <input
                             type="time"
                             value={slot.closeTime}
                             onChange={e => updateSlot(slot.idx, 'closeTime', e.target.value)}
-                            className="border border-gray-300 rounded-sm px-2 py-1 text-sm w-28"
+                            className="flex-1 min-w-0 sm:flex-none min-h-[36px] sm:min-h-0 border border-gray-300 rounded-sm px-2 py-1 text-sm sm:w-28"
                           />
                           {slots.length > 1 && (
                             <IconButton size="small" onClick={() => removeSlot(slot.idx)}>
@@ -363,7 +371,7 @@ export default function StepDetails({
                       size="small"
                       startIcon={<AddIcon fontSize="small" />}
                       onClick={() => addSlot(day.key)}
-                      sx={{ textTransform: 'none', fontSize: '0.7rem', minWidth: 0, ml: 1 }}
+                      sx={{ textTransform: 'none', fontSize: '0.7rem', minWidth: 0, ml: { xs: 'auto', sm: 1 } }}
                     >
                       Split
                     </Button>
@@ -376,6 +384,8 @@ export default function StepDetails({
         <p className="text-xs text-gray-400 mt-2">
           Use "Split" to add a break in the middle of the day, e.g. a lunch closure.
         </p>
+      </div>
+      </div>
       </div>
     </div>
   )

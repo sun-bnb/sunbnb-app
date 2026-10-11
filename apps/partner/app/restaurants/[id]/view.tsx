@@ -57,7 +57,7 @@ export default function RestaurantView({ restaurantId }: { restaurantId: string 
     return (
       <div className="pt-2">
         <RestaurantSubNav restaurantId={restaurantId} active="general" />
-        <div className="p-4 text-sm text-gray-500">{t('loading')}</div>
+        <div className="py-4 text-sm text-gray-500">{t('loading')}</div>
       </div>
     )
   }
@@ -95,7 +95,7 @@ export default function RestaurantView({ restaurantId }: { restaurantId: string 
   return (
     <div className="pt-2">
       <RestaurantSubNav restaurantId={restaurantId} active="general" />
-      <div className="p-4 space-y-4">
+      <div className="py-4 space-y-4">
         <RestaurantHeader
           restaurantId={restaurantId}
           restaurant={restaurant}
@@ -103,6 +103,15 @@ export default function RestaurantView({ restaurantId }: { restaurantId: string 
           saveError={saveErrors.length > 0 ? saveErrors.join(', ') : undefined}
         />
 
+        {/* Phone → lg: one column (the settings form already splits into
+            2-col sub-grids at sm). xl+: settings + shifts (the wide, multi-field
+            editors) on the left, hours + embed code in a 32rem side column —
+            wide enough for the hours rows (~450px + card padding) to sit
+            without their scroll fallback. Below xl the column wrappers are
+            display:contents and `order` keeps the original stacking:
+            settings → hours → shifts → embed. */}
+        <div className="flex flex-col gap-4 xl:grid xl:grid-cols-[minmax(0,1fr)_32rem] xl:items-start">
+        <div className="contents xl:block xl:min-w-0 xl:space-y-4">
         <RestaurantSettingsForm
           initial={initialSettings}
           labels={{
@@ -147,33 +156,7 @@ export default function RestaurantView({ restaurantId }: { restaurantId: string 
           }}
         />
 
-        <RestaurantHoursEditor
-          initial={initialHours}
-          labels={{
-            heading: t('hoursHeading'),
-            closed: t('hoursClosed'),
-            openAbbr: t('hoursOpenAbbr'),
-            closeAbbr: t('hoursCloseAbbr'),
-            save: t('hoursSave'),
-            saving: t('saving'),
-            dayNames: [
-              t('daySun'),
-              t('dayMon'),
-              t('dayTue'),
-              t('dayWed'),
-              t('dayThu'),
-              t('dayFri'),
-              t('daySat'),
-            ],
-          }}
-          onSaveStatusChange={trackSave}
-          onSave={async (hours) => {
-            const res = await setRestaurantOpeningHours(restaurantId, hours)
-            if (res.status === 'ok') await refresh()
-            return res
-          }}
-        />
-
+        <div className="order-2 xl:order-none">
         <ShiftsEditor
           initial={shifts.map(
             (s): RestaurantShiftInput => ({
@@ -223,7 +206,47 @@ export default function RestaurantView({ restaurantId }: { restaurantId: string 
           }}
         />
 
+        </div>
+        </div>
+
+        <div className="contents xl:block xl:min-w-0 xl:space-y-4">
+        {/* Hours rows (@repo/table-reservations-ui) are ~450px of fixed-width
+            controls; on a phone the card keeps its content width and scrolls
+            inside this box instead of overflowing the page. No-op at sm+. */}
+        <div className="order-1 overflow-x-auto xl:order-none [&>section]:min-w-max">
+        <RestaurantHoursEditor
+          initial={initialHours}
+          labels={{
+            heading: t('hoursHeading'),
+            closed: t('hoursClosed'),
+            openAbbr: t('hoursOpenAbbr'),
+            closeAbbr: t('hoursCloseAbbr'),
+            save: t('hoursSave'),
+            saving: t('saving'),
+            dayNames: [
+              t('daySun'),
+              t('dayMon'),
+              t('dayTue'),
+              t('dayWed'),
+              t('dayThu'),
+              t('dayFri'),
+              t('daySat'),
+            ],
+          }}
+          onSaveStatusChange={trackSave}
+          onSave={async (hours) => {
+            const res = await setRestaurantOpeningHours(restaurantId, hours)
+            if (res.status === 'ok') await refresh()
+            return res
+          }}
+        />
+        </div>
+
+        <div className="order-3 xl:order-none">
         <EmbedCodeCard restaurantId={restaurantId} />
+        </div>
+        </div>
+        </div>
       </div>
     </div>
   )

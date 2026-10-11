@@ -164,7 +164,7 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
     <div className="min-h-screen bg-white text-gray-900">
       {/* Nav */}
       <header className="border-b border-gray-200">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
+        <div className="mx-auto flex h-14 max-w-5xl xl:max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2">
             <Image alt="Sunbnb" src={sunbnbLogo} className="h-7 w-7" />
             <span className="font-semibold tracking-tight">Sunbnb</span>
@@ -172,22 +172,22 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
               {t('nav.badge')}
             </span>
           </div>
-          <SignInLink className="btn-ghost" cta="nav-sign-in" lead={false}>{t('nav.signIn')}</SignInLink>
+          <SignInLink className="btn-ghost inline-flex min-h-10 items-center px-2 -mr-2" cta="nav-sign-in" lead={false}>{t('nav.signIn')}</SignInLink>
         </div>
       </header>
 
       {/* Hero */}
-      <section className="mx-auto grid max-w-5xl items-center gap-12 px-6 pb-20 pt-16 md:grid-cols-[1.15fr_1fr] md:pt-24">
+      <section className="mx-auto grid max-w-5xl xl:max-w-6xl items-center gap-10 px-4 sm:px-6 lg:px-8 pb-14 pt-10 sm:pb-20 sm:pt-16 md:gap-12 md:grid-cols-[1.15fr_1fr] md:pt-24 lg:gap-16 xl:pb-28">
         <div>
           <p className="text-sm font-medium text-gray-500">{t('hero.eyebrow')}</p>
-          <h1 className="mt-3 text-4xl font-bold leading-[1.1] tracking-tight md:text-5xl md:leading-none">
+          <h1 className="mt-3 text-[2rem] sm:text-4xl font-bold leading-[1.1] tracking-tight md:text-5xl md:leading-none xl:text-6xl">
             <span className="block">{t('hero.title1')}</span>
             <span className="block text-gray-400">{t('hero.title2')}</span>
           </h1>
-          <p className="mt-5 max-w-xl text-lg leading-relaxed text-gray-600">{t('hero.body')}</p>
+          <p className="mt-5 max-w-xl text-base sm:text-lg leading-relaxed text-gray-600">{t('hero.body')}</p>
           <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
-            <SignInLink className="btn-primary px-5 py-2.5" cta="hero-sign-up">{t('hero.cta')}</SignInLink>
-            <a href={marketingCtaUrl(process.env.NEXT_PUBLIC_MARKETING_URL)} onClick={() => trackCta('hero-see-your-beach')} className="btn-ghost underline underline-offset-4">
+            <SignInLink className="btn-primary block w-full px-5 py-3 text-center sm:inline-block sm:w-auto sm:py-2.5" cta="hero-sign-up">{t('hero.cta')}</SignInLink>
+            <a href={marketingCtaUrl(process.env.NEXT_PUBLIC_MARKETING_URL)} onClick={() => trackCta('hero-see-your-beach')} className="btn-ghost inline-flex min-h-10 items-center underline underline-offset-4">
               {t('hero.seeYourBeach')}
             </a>
           </div>
@@ -198,12 +198,12 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
 
       {/* A day at the venue */}
       <section className="border-t border-gray-200">
-        <div className="mx-auto max-w-5xl px-6 py-20">
-          <h2 className="text-3xl font-bold tracking-tight">{t('day.title')}</h2>
+        <div className="mx-auto max-w-5xl xl:max-w-6xl px-4 sm:px-6 lg:px-8 py-14 sm:py-20">
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">{t('day.title')}</h2>
           <p className="mt-2 max-w-2xl text-gray-600">{t('day.subtitle')}</p>
           <ol className="mt-10 divide-y divide-gray-200 border-y border-gray-200">
             {day.map((d) => (
-              <li key={d.title} className="grid gap-1 py-6 md:grid-cols-[9rem_14rem_1fr] md:gap-6">
+              <li key={d.title} className="grid gap-1 py-6 md:grid-cols-[9rem_14rem_1fr] md:gap-6 xl:grid-cols-[10rem_18rem_1fr] xl:gap-10">
                 <span className={`${mono} text-sm text-gray-400`}>{d.time}</span>
                 <h3 className="font-semibold">{d.title}</h3>
                 <p className="leading-relaxed text-gray-600">{d.body}</p>
@@ -214,7 +214,7 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
       </section>
 
       {/* More */}
-      <section className="mx-auto max-w-5xl px-6 pb-20">
+      <section className="mx-auto max-w-5xl xl:max-w-6xl px-4 sm:px-6 lg:px-8 pb-14 sm:pb-20">
         <h2 className="text-2xl font-bold tracking-tight">{t('more.title')}</h2>
         <dl className="mt-8 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
           {more.map((m) => (
@@ -228,12 +228,12 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
 
       {/* Money — the deal in plain words, before the price table. */}
       <section className="bg-gray-900 text-white">
-        <div className="mx-auto grid max-w-5xl gap-10 px-6 py-20 md:grid-cols-2">
+        <div className="mx-auto grid max-w-5xl xl:max-w-6xl gap-10 px-4 sm:px-6 lg:px-8 py-14 sm:py-20 md:grid-cols-2 lg:grid-cols-[2fr_3fr] lg:gap-16">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">{t('money.title')}</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">{t('money.title')}</h2>
             <p className="mt-4 leading-relaxed text-gray-300">{t('money.body')}</p>
           </div>
-          <ul className="space-y-5">
+          <ul className="space-y-5 lg:grid lg:grid-cols-2 lg:gap-x-10 lg:gap-y-6 lg:space-y-0">
             {(['merchant', 'listed', 'commission', 'cash'] as const).map((k) => (
               <li key={k} className="border-t border-white/15 pt-4">
                 <p className="font-semibold">{t(`money.${k}.title`)}</p>
@@ -245,14 +245,14 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
       </section>
 
       {/* Pricing */}
-      <section className="mx-auto max-w-5xl px-6 py-20">
-        <h2 className="text-3xl font-bold tracking-tight">{t('plans.title')}</h2>
+      <section className="mx-auto max-w-5xl xl:max-w-6xl px-4 sm:px-6 lg:px-8 py-14 sm:py-20">
+        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">{t('plans.title')}</h2>
         <p className="mt-2 text-gray-600">{t('plans.subtitle')}</p>
-        <div className="mt-10 grid gap-6 md:grid-cols-3">
+        <div className="mt-10 grid gap-6 md:grid-cols-3 md:gap-4 lg:gap-6 xl:gap-8">
           {plans.map((p) => (
             <div
               key={p.tier}
-              className={`flex flex-col rounded-xl border bg-white p-6 ${p.featured ? 'border-2 border-gray-900' : 'border-gray-200'}`}
+              className={`flex flex-col rounded-xl border bg-white p-6 md:p-5 lg:p-6 xl:p-8 ${p.featured ? 'border-2 border-gray-900' : 'border-gray-200'}`}
             >
               <div className="flex items-center justify-between">
                 <p className="font-semibold">{p.name}</p>
@@ -285,7 +285,7 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
               <SignInLink
                 cta={`pricing-${p.tier.toLowerCase()}`}
                 className={`mt-6 w-full text-center ${
-                  p.featured ? 'btn-primary' : 'rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium transition-colors hover:bg-gray-50'
+                  p.featured ? 'btn-primary' : 'rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-gray-50'
                 }`}
               >
                 {t('plans.cta')}
@@ -297,9 +297,9 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
 
       {/* Getting started — honest about the Mollie step instead of "in minutes". */}
       <section className="border-t border-gray-200">
-        <div className="mx-auto max-w-5xl px-6 py-20">
-          <h2 className="text-3xl font-bold tracking-tight">{t('start.title')}</h2>
-          <ol className="mt-10 grid gap-8 md:grid-cols-3">
+        <div className="mx-auto max-w-5xl xl:max-w-6xl px-4 sm:px-6 lg:px-8 py-14 sm:py-20">
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">{t('start.title')}</h2>
+          <ol className="mt-10 grid gap-8 md:grid-cols-3 lg:gap-12">
             {(['account', 'beach', 'mollie'] as const).map((k, i) => (
               <li key={k}>
                 <span className={`${mono} text-sm text-gray-400`}>0{i + 1}</span>
@@ -309,7 +309,7 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
             ))}
           </ol>
           <div className="mt-12 flex flex-wrap items-center gap-x-6 gap-y-3">
-            <SignInLink className="btn-primary px-5 py-2.5" cta="start-sign-up">{t('start.cta')}</SignInLink>
+            <SignInLink className="btn-primary block w-full px-5 py-3 text-center sm:inline-block sm:w-auto sm:py-2.5" cta="start-sign-up">{t('start.cta')}</SignInLink>
             <span className="text-sm text-gray-500">
               {t('start.questions')}{' '}
               <a href="mailto:partners@sunbnb.app" onClick={() => trackCta('start-email', 'generate_lead')} className="font-medium text-gray-900 underline underline-offset-4">
@@ -322,21 +322,21 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
 
       {/* Footer */}
       <footer className="border-t border-gray-200">
-        <div className="mx-auto max-w-5xl px-6 py-8">
+        <div className="mx-auto max-w-5xl xl:max-w-6xl px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
             <div className="flex items-center gap-2">
               <Image alt="Sunbnb" src={sunbnbLogo} className="h-5 w-5 opacity-50" />
               <span className="text-xs text-gray-400">{t('footer.copyright', { year: new Date().getFullYear() })}</span>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-400">
-              <a href="/legal/onboarding" className="transition-colors hover:text-gray-600">{t('footer.onboarding')}</a>
-              <a href="/legal/merchant-agreement" className="transition-colors hover:text-gray-600">{t('footer.merchantAgreement')}</a>
-              <a href="/legal/verifactu" className="transition-colors hover:text-gray-600">{t('footer.verifactu')}</a>
-              <a href="/legal/privacy" className="transition-colors hover:text-gray-600">{t('footer.privacy')}</a>
-              <a href="mailto:partners@sunbnb.app" onClick={() => trackCta('footer-email', 'generate_lead')} className="transition-colors hover:text-gray-600">{t('footer.contact')}</a>
+              <a href="/legal/onboarding" className="py-1.5 transition-colors hover:text-gray-600">{t('footer.onboarding')}</a>
+              <a href="/legal/merchant-agreement" className="py-1.5 transition-colors hover:text-gray-600">{t('footer.merchantAgreement')}</a>
+              <a href="/legal/verifactu" className="py-1.5 transition-colors hover:text-gray-600">{t('footer.verifactu')}</a>
+              <a href="/legal/privacy" className="py-1.5 transition-colors hover:text-gray-600">{t('footer.privacy')}</a>
+              <a href="mailto:partners@sunbnb.app" onClick={() => trackCta('footer-email', 'generate_lead')} className="py-1.5 transition-colors hover:text-gray-600">{t('footer.contact')}</a>
             </div>
           </div>
-          <p className="mt-4 text-[10px] text-gray-400">
+          <p className="mt-4 text-xs text-gray-400">
             {t('footer.operatedBy', { company: businessEntity.companyName })}
             {businessEntity.businessId ? ` · ${t('footer.businessId', { id: businessEntity.businessId })}` : ''}
             {businessEntity.vatId ? ` · ${t('footer.vatId', { id: businessEntity.vatId })}` : ''}

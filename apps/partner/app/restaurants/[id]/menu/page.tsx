@@ -7,7 +7,7 @@ export default async function MenuPage({
 }) {
   const { id } = await params
   return (
-    <div className="container mx-auto max-w-[768px]">
+    <div className="page-container">
       <MenuView restaurantId={id} />
     </div>
   )

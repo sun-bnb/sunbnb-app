@@ -151,8 +151,8 @@ export function CredentialsForm({ onSubmit, theme = 'light', inputFocusClassName
   const focusClasses = inputFocusClassName || defaultInputFocus
 
   const inputBase = isDark
-    ? 'w-full px-3.5 py-2.5 text-sm bg-gray-900 border rounded-xl focus:outline-hidden focus:ring-2 transition-all placeholder:text-gray-600 text-gray-200'
-    : 'w-full px-3.5 py-2.5 text-sm bg-white border rounded-xl focus:outline-hidden focus:ring-2 transition-all placeholder:text-gray-300 text-gray-900'
+    ? 'w-full px-3.5 py-2.5 text-base sm:text-sm bg-gray-900 border rounded-xl focus:outline-hidden focus:ring-2 transition-all placeholder:text-gray-600 text-gray-200'
+    : 'w-full px-3.5 py-2.5 text-base sm:text-sm bg-white border rounded-xl focus:outline-hidden focus:ring-2 transition-all placeholder:text-gray-300 text-gray-900'
 
   const defaultBorder = isDark ? 'border-gray-700' : 'border-gray-200'
   const validBorder = isDark ? 'border-emerald-500/50' : 'border-emerald-400/60'

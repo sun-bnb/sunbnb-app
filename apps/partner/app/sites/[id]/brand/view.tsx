@@ -259,9 +259,9 @@ export default function BrandView() {
   )
 
   const previewLink = (
-    <div className="flex items-center gap-2 px-4 py-3 bg-sky-50 border border-sky-200 rounded-sm">
+    <div className="flex items-center gap-2 px-3 sm:px-4 py-3 bg-sky-50 border border-sky-200 rounded-sm">
       <LanguageIcon fontSize="small" className="text-sky-600" />
-      <code className="text-sm text-sky-800 flex-1 truncate">{bookingUrl}</code>
+      <code className="text-sm text-sky-800 flex-1 min-w-0 truncate">{bookingUrl}</code>
       <Button
         size="small"
         variant="text"
@@ -279,8 +279,8 @@ export default function BrandView() {
   // nothing that would not take effect (track 023 D2).
   if (isCustomBrand) {
     return (
-      <div className="pt-2">
-        <div className="mt-4 mb-6 flex items-start justify-between">
+      <div className="pt-2 px-4 min-[800px]:px-0">
+        <div className="mt-4 mb-6 flex flex-col sm:flex-row sm:items-start justify-between gap-2">
           <div>
             <h2 className="text-lg font-semibold text-gray-800">Custom brand page</h2>
             <p className="text-sm text-gray-500 mt-1">
@@ -292,7 +292,7 @@ export default function BrandView() {
           {savingIndicator}
         </div>
 
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-6 lg:max-w-3xl">
           {previewLink}
 
           <section>
@@ -311,8 +311,8 @@ export default function BrandView() {
   }
 
   return (
-    <div className="pt-2">
-      <div className="mt-4 mb-6 flex items-start justify-between">
+    <div className="pt-2 px-4 min-[800px]:px-0">
+      <div className="mt-4 mb-6 flex flex-col sm:flex-row sm:items-start justify-between gap-2">
         <div>
           <h2 className="text-lg font-semibold text-gray-800">Branded Booking Page</h2>
           <p className="text-sm text-gray-500 mt-1">
@@ -327,9 +327,9 @@ export default function BrandView() {
       </div>
 
       {/* Preview link */}
-      <div className="flex items-center gap-2 px-4 py-3 bg-sky-50 border border-sky-200 rounded-sm mb-6">
+      <div className="flex items-center gap-2 px-3 sm:px-4 py-3 bg-sky-50 border border-sky-200 rounded-sm mb-6">
         <LanguageIcon fontSize="small" className="text-sky-600" />
-        <code className="text-sm text-sky-800 flex-1 truncate">{bookingUrl}</code>
+        <code className="text-sm text-sky-800 flex-1 min-w-0 truncate">{bookingUrl}</code>
         <Button
           size="small"
           variant="text"
@@ -342,10 +342,12 @@ export default function BrandView() {
         </Button>
       </div>
 
-      <div className="flex flex-col gap-8">
+      {/* From lg the form and the live preview sit side by side; the preview
+          stays in view (sticky) while the form scrolls. */}
+      <div className="flex flex-col gap-8 lg:grid lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-10 lg:items-start">
 
         {/* Identity */}
-        <section>
+        <section className="min-w-0">
           <div className="flex items-center gap-2 mb-3">
             <PaletteIcon fontSize="small" className="text-gray-500" />
             <h3 className="font-medium text-gray-700">Identity</h3>
@@ -397,7 +399,7 @@ export default function BrandView() {
               helperText="Short description below the brand name"
               size="small"
             />
-            <div className="flex gap-4">
+            <div className="flex flex-wrap gap-4">
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-500">Background</label>
                 <div className="flex items-center gap-2">
@@ -426,10 +428,10 @@ export default function BrandView() {
           </div>
         </section>
 
-        <Divider />
+        <Divider sx={{ display: { lg: 'none' } }} />
 
         {/* Live preview */}
-        <section>
+        <section className="lg:sticky lg:top-4">
           <h3 className="font-medium text-gray-700 mb-4">Preview</h3>
           <div className="rounded-lg border border-gray-200 overflow-hidden shadow-xs mx-auto" style={{ maxWidth: 420 }}>
             {/* Hero image with gradient + brand name */}

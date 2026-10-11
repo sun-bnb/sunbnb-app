@@ -37,7 +37,7 @@ export default function ReservationListItem({ reservation }: { reservation: Rese
   let reservationElem: React.ReactNode
 
   const reservationControls = (
-    <div className="flex justify-between">
+    <div className="flex flex-wrap justify-between gap-x-4 gap-y-2">
       <div className="">
         {
           reservation.status !== RESERVATION_CANCELED &&
@@ -46,11 +46,11 @@ export default function ReservationListItem({ reservation }: { reservation: Rese
             }}>Cancel</Button>
         }
       </div>
-      <div className="flex mt-[6px]">
-        <div className="text-gray-400 mr-1 -mt-px">
+      <div className="flex mt-[6px] min-w-0">
+        <div className="text-gray-400 mr-1 -mt-px shrink-0">
           <MailOutlineIcon />
         </div>
-        <div>{ reservation.user.email }</div>
+        <div className="break-all min-w-0">{ reservation.user.email }</div>
       </div>
     </div>
   )
@@ -61,8 +61,8 @@ export default function ReservationListItem({ reservation }: { reservation: Rese
     const timeRangeTo = `${dayjs(reservation.to).format('HH:mm')}`
     reservationElem = (
       <div className="pt-1 mb-2 pb-2">
-        <div className="flex justify-between align-center pb-1">
-          <div className="flex mt-[-7px]">
+        <div className="flex justify-between items-start gap-2 pb-1">
+          <div className="flex flex-wrap mt-[-7px] min-w-0">
             <div className="mr-4">{formattedDate}</div>
             <div className="flex text-gray-600">
               <div className="mr-1">{timeRangeFrom}</div>
@@ -70,7 +70,7 @@ export default function ReservationListItem({ reservation }: { reservation: Rese
               <div className="ml-1">{timeRangeTo}</div>
             </div>
           </div>
-          <div className="-mt-1">
+          <div className="-mt-1 shrink-0">
             <Chip color={statusToChipColor[reservation.status]} 
               label={statusToChipLabel[reservation.status]} 
               sx={{ height: '26px' }} />
@@ -84,15 +84,15 @@ export default function ReservationListItem({ reservation }: { reservation: Rese
     const dateRangeTo = dayjs(reservation.to).format('ddd, D MMM YYYY')
     reservationElem = (
       <div className="mb-2 pb-2 pt-1">
-        <div className="flex justify-between align-center pb-1">
-          <div className="mt-[-7px]">
-            <div className="flex">
+        <div className="flex justify-between items-start gap-2 pb-1">
+          <div className="mt-[-7px] min-w-0">
+            <div className="flex flex-wrap">
               <div className="mr-1">{dateRangeFrom}</div>
               <div>-</div>
               <div className="ml-1">{dateRangeTo}</div>
             </div>
           </div>
-          <div className="-mt-1">
+          <div className="-mt-1 shrink-0">
             <Chip color={statusToChipColor[reservation.status]} 
               label={statusToChipLabel[reservation.status]}
               sx={{ height: '26px' }} />

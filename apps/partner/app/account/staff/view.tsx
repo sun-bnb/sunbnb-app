@@ -21,7 +21,7 @@ function ActiveBadge({ active }: { active: boolean }) {
   const t = useTranslations('Staff')
   return (
     <span
-      className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${
+      className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
         active
           ? 'bg-green-50 text-green-700'
           : 'bg-gray-100 text-gray-500'
@@ -87,9 +87,10 @@ function EmployeeRow({
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="flex items-center gap-3 px-5 py-3.5">
-        {/* Name / inline edit */}
-        <div className="flex-1 min-w-0">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 sm:px-5 py-3 sm:py-3.5">
+        {/* Name / inline edit — takes the whole line on a phone while editing so
+            the input isn't squeezed by the row actions, which wrap below. */}
+        <div className={`flex-1 min-w-0 ${editing ? 'basis-full sm:basis-0' : ''}`}>
           {editing ? (
             <div className="flex items-center gap-2">
               <input
@@ -104,14 +105,14 @@ function EmployeeRow({
                     setEditing(false)
                   }
                 }}
-                className="input flex-1 py-1 text-sm"
+                className="input flex-1 min-w-0 py-1 text-sm"
                 maxLength={80}
                 disabled={saving}
               />
               <button
                 onClick={handleRename}
                 disabled={saving}
-                className="text-xs font-medium text-gray-700 hover:text-gray-900 disabled:opacity-40"
+                className="min-h-10 sm:min-h-0 px-1 text-xs font-medium text-gray-700 hover:text-gray-900 disabled:opacity-40"
               >
                 {saving ? t('saving') : t('save')}
               </button>
@@ -121,7 +122,7 @@ function EmployeeRow({
                   setEditing(false)
                   setError(null)
                 }}
-                className="text-xs text-gray-400 hover:text-gray-600"
+                className="min-h-10 sm:min-h-0 px-1 text-xs text-gray-400 hover:text-gray-600"
               >
                 {t('cancel')}
               </button>
@@ -130,7 +131,7 @@ function EmployeeRow({
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={() => setEditing(true)}
-                className="text-sm font-medium text-gray-800 hover:text-gray-600 transition-colors text-left"
+                className="min-h-10 sm:min-h-0 text-sm font-medium text-gray-800 hover:text-gray-600 transition-colors text-left break-words"
                 title={t('renameTitle')}
               >
                 {employee.name}
@@ -139,16 +140,16 @@ function EmployeeRow({
             </div>
           )}
           {error && (
-            <p className="text-[11px] text-red-600 mt-1">{error}</p>
+            <p className="text-xs text-red-600 mt-1">{error}</p>
           )}
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1 shrink-0 ml-auto">
           {/* Activate / deactivate toggle */}
           <button
             onClick={handleToggleActive}
-            className="text-xs font-medium text-gray-500 hover:text-gray-800 px-2 py-1 rounded-md hover:bg-gray-100 transition-colors"
+            className="min-h-10 sm:min-h-0 text-xs font-medium text-gray-500 hover:text-gray-800 px-2 py-1 rounded-md hover:bg-gray-100 transition-colors"
             title={employee.active ? t('deactivateTitle') : t('activateTitle')}
           >
             {employee.active ? t('deactivate') : t('activate')}
@@ -157,7 +158,7 @@ function EmployeeRow({
           {/* Delete */}
           <button
             onClick={handleDelete}
-            className="text-gray-300 hover:text-red-500 transition-colors p-1"
+            className="inline-flex items-center justify-center min-h-10 min-w-10 sm:min-h-0 sm:min-w-0 text-gray-300 hover:text-red-500 transition-colors p-1"
             title={t('deleteTitle')}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -224,11 +225,11 @@ export default function StaffView() {
   const activeCount = employees.filter((e) => e.active).length
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-3xl">
+    <div className="page-container py-6">
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <div className="min-w-0">
           <h1 className="text-lg font-semibold text-gray-900">{t('title')}</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {t('headerSub', { count: employees.length, active: activeCount })}
@@ -239,7 +240,7 @@ export default function StaffView() {
             setShowAddForm(true)
             setError(null)
           }}
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
+          className="inline-flex items-center gap-1.5 px-4 py-2.5 sm:py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -256,9 +257,9 @@ export default function StaffView() {
 
       {/* Add-staff form */}
       {showAddForm && (
-        <div className="mb-4 bg-white rounded-xl border border-gray-200 px-5 py-4">
+        <div className="mb-4 bg-white rounded-xl border border-gray-200 px-4 sm:px-5 py-4">
           <p className="text-sm font-medium text-gray-800 mb-3">{t('addFormTitle')}</p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 lg:max-w-2xl">
             <input
               ref={addInputRef}
               type="text"
@@ -275,12 +276,12 @@ export default function StaffView() {
               }}
               maxLength={80}
               disabled={adding}
-              className="input flex-1"
+              className="input basis-full sm:basis-0 flex-1 min-w-0"
             />
             <button
               onClick={handleAdd}
               disabled={adding || !newName.trim()}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-40 transition-colors"
+              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-40 transition-colors"
             >
               {adding ? t('adding') : t('add')}
             </button>
@@ -290,7 +291,7 @@ export default function StaffView() {
                 setNewName('')
                 setError(null)
               }}
-              className="text-sm text-gray-400 hover:text-gray-600 px-2"
+              className="min-h-10 text-sm text-gray-400 hover:text-gray-600 px-2"
             >
               {t('cancel')}
             </button>
@@ -305,7 +306,7 @@ export default function StaffView() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
           </svg>
           <p className="text-sm text-green-800 flex-1">{successMsg}</p>
-          <button onClick={() => setSuccessMsg(null)} className="text-green-400 hover:text-green-600 shrink-0">
+          <button onClick={() => setSuccessMsg(null)} className="-m-2 p-2 text-green-400 hover:text-green-600 shrink-0">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>
@@ -320,7 +321,7 @@ export default function StaffView() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
           </svg>
           <p className="text-sm text-red-700">{error}</p>
-          <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">
+          <button onClick={() => setError(null)} className="ml-auto -m-2 p-2 text-red-400 hover:text-red-600 shrink-0">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>
@@ -330,7 +331,7 @@ export default function StaffView() {
 
       {/* Employee list */}
       {employees.length > 0 ? (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 items-start gap-3">
           {employees.map((employee) => (
             <EmployeeRow
               key={employee.id}

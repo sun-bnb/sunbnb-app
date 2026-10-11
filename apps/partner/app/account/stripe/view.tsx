@@ -275,8 +275,12 @@ export default function StripeView({
     </div>
   );
 
+  // Once details are submitted the embedded Stripe components (payout and
+  // payment tables) appear; on xl they get the wide column beside the steps.
+  const showEmbedded = submitted && hasAccount;
+
   return (
-    <div className="container mx-auto px-4 py-6 max-w-3xl">
+    <div className="page-container py-6">
       <div className="mb-6">
         <h1 className="text-lg font-semibold text-gray-900">{t("title")}</h1>
         <p className="text-sm text-gray-500 mt-0.5">{t("subtitle")}</p>
@@ -295,14 +299,21 @@ export default function StripeView({
         </div>
       )}
 
-      <ol className="space-y-3">
+      <div
+        className={
+          showEmbedded
+            ? "xl:grid xl:grid-cols-5 xl:items-start xl:gap-6"
+            : "max-w-3xl"
+        }
+      >
+      <ol className="space-y-3 xl:col-span-2 min-w-0">
         {STEPS.map((s, idx) => {
           const done = isDone(s.id);
           const isOpen = open === s.id;
           const locked = !hasAccount && s.id !== "business-type";
           return (
             <li key={s.id} className="card">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                   <span
                     aria-hidden
@@ -319,7 +330,7 @@ export default function StripeView({
                 {done && !isOpen && (
                   <button
                     type="button"
-                    className="text-xs font-medium text-gray-600 hover:text-gray-900 underline"
+                    className="shrink-0 py-2 -my-2 px-1 text-xs font-medium text-gray-600 hover:text-gray-900 underline"
                     onClick={() => setOpenOverride(s.id)}
                   >
                     {t("edit")}
@@ -398,8 +409,11 @@ export default function StripeView({
         })}
       </ol>
 
-      {submitted && hasAccount && (
-        <section className="card mt-6" aria-labelledby="stripe-account-heading">
+      {showEmbedded && (
+        <section
+          className="card mt-6 xl:mt-0 xl:col-span-3 min-w-0"
+          aria-labelledby="stripe-account-heading"
+        >
           <h2
             id="stripe-account-heading"
             className="text-sm font-semibold text-gray-900 mb-4"
@@ -409,6 +423,7 @@ export default function StripeView({
           <EmbeddedManagement />
         </section>
       )}
+      </div>
     </div>
   );
 }
@@ -448,13 +463,13 @@ function StatusPanel({
               return (
                 <li
                   key={k}
-                  className="flex items-center justify-between text-sm text-gray-700"
+                  className="flex items-center justify-between gap-3 text-sm text-gray-700"
                 >
                   <span>{lk ? t(lk) : k}</span>
                   {step !== "status" && (
                     <button
                       type="button"
-                      className="text-xs font-medium text-gray-900 underline"
+                      className="shrink-0 min-h-10 sm:min-h-0 text-xs font-medium text-gray-900 underline"
                       onClick={() => onContinue(step)}
                     >
                       {t("continue")}
@@ -466,10 +481,10 @@ function StatusPanel({
           </ul>
         </div>
       )}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          className="btn-secondary"
+          className="btn-ghost border border-gray-200 rounded-lg px-4 py-2 min-h-10"
           disabled={pending}
           onClick={onRefresh}
         >
@@ -477,7 +492,7 @@ function StatusPanel({
         </button>
         <button
           type="button"
-          className="btn-secondary text-red-600"
+          className="min-h-10 px-4 py-2 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-40 transition-colors"
           disabled={pending}
           onClick={onDisconnect}
         >
@@ -527,7 +542,7 @@ function BankForm({
         value={holder}
         onChange={setHolder}
       />
-      <button type="submit" className="btn-primary" disabled={pending}>
+      <button type="submit" className="btn-primary w-full sm:w-auto min-h-10" disabled={pending}>
         {pending ? t("saving") : t("saveBank")}
       </button>
     </form>
@@ -575,7 +590,7 @@ function TermsForm({
       </label>
       <button
         type="button"
-        className="btn-primary"
+        className="btn-primary w-full sm:w-auto min-h-10"
         disabled={!agreed || pending}
         onClick={onSubmit}
       >
@@ -810,12 +825,12 @@ function DetailsForm({
   return (
     <form className="space-y-5" onSubmit={submit}>
       <div
-        className="flex gap-4 text-sm text-gray-700"
+        className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-700"
         role="radiogroup"
         aria-label={t("stepBusinessType")}
       >
         {(["company", "individual"] as const).map((bt) => (
-          <label key={bt} className="flex items-center gap-1.5">
+          <label key={bt} className="flex items-center gap-1.5 min-h-10 sm:min-h-0">
             <input
               type="radio"
               name="bt"
@@ -911,7 +926,7 @@ function DetailsForm({
           />
         </div>
         {type === "company" && (
-          <label className="flex items-center gap-2 text-sm text-gray-700">
+          <label className="flex items-center gap-2 min-h-10 sm:min-h-0 text-sm text-gray-700">
             <input
               type="checkbox"
               checked={sameAddress}
@@ -972,7 +987,7 @@ function DetailsForm({
                 </span>
                 <button
                   type="button"
-                  className="text-xs font-medium text-red-600 underline"
+                  className="py-2 -my-2 px-1 text-xs font-medium text-red-600 underline"
                   onClick={() =>
                     setOwners((list) => list.filter((_, idx) => idx !== i))
                   }
@@ -1022,7 +1037,7 @@ function DetailsForm({
                   type="number"
                 />
               </div>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
+              <label className="flex items-center gap-2 min-h-10 sm:min-h-0 text-sm text-gray-700">
                 <input
                   type="checkbox"
                   checked={o.sameAddress}
@@ -1093,7 +1108,7 @@ function DetailsForm({
         hint={t("websiteHint")}
       />
 
-      <button type="submit" className="btn-primary" disabled={pending}>
+      <button type="submit" className="btn-primary w-full sm:w-auto min-h-10" disabled={pending}>
         {pending ? t("saving") : t("saveDetails")}
       </button>
     </form>

@@ -576,14 +576,18 @@ export default function SchematicView() {
 
   return (
     <div className="flex flex-col -mt-2">
+      {/* Phones: the canvas editor is drag-and-drop and built for a mouse. */}
+      <div role="status" className="md:hidden px-4 py-2.5 bg-amber-50 border-b border-amber-200 text-xs text-amber-700">
+        {t('bestOnLargerScreen')}
+      </div>
       {/* Summary strip */}
-      <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs text-gray-500">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs text-gray-500">
         <span>{t('totalSunbedsLabel', { count: totalSunbeds })}</span>
         <span className="text-gray-300">·</span>
         <span>{t('parcelsLabel', { count: totalParcels })}</span>
         <span className="text-gray-300">·</span>
         <span>{t('totalElements', { count: elements.length })}</span>
-        <span className="ml-auto flex items-center gap-2">
+        <span className="w-full sm:w-auto sm:ml-auto flex items-center gap-2">
           <label className="flex items-center gap-1">
             <span>{t('layoutWidth')}</span>
             <input
@@ -629,7 +633,7 @@ export default function SchematicView() {
       />
 
       {/* Toolbar */}
-      <div className="px-4 py-2 border-b border-gray-100 bg-white">
+      <div className="px-4 py-2 border-b border-gray-100 bg-white overflow-x-auto">
         <InventoryToolbar
           creating={editorMode === 'create-chair'}
           creatingParcel={editorMode === 'create-parcel'}
@@ -689,10 +693,12 @@ export default function SchematicView() {
         />
       </div>
 
-      <div className="flex relative" style={{ height: '600px' }}>
+      {/* Below lg the properties panel overlays the canvas; from lg it docks
+          beside it (in-flow) so the selection it edits is never covered. */}
+      <div className="flex relative h-[70vh] min-h-[360px] md:h-[600px] xl:h-[720px]">
         <ElementPalette />
 
-        <div className="flex-1 relative bg-gray-100">
+        <div className="flex-1 min-w-0 relative bg-gray-100">
           {selectedElementId ? (() => {
             const selected = elements.find((e) => e.id === selectedElementId)
             if (!selected) return null
@@ -701,7 +707,7 @@ export default function SchematicView() {
               await refresh()
             }
             return (
-              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2">
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex flex-wrap justify-center items-center gap-2 w-max max-w-[calc(100%-1rem)]">
                 <div className="flex gap-1 bg-white/95 backdrop-blur-sm border border-gray-200 rounded-md shadow-xs p-1">
                   <button
                     type="button"
@@ -795,7 +801,7 @@ export default function SchematicView() {
         </div>
 
         {showRightPanel ? (
-          <div className="absolute right-0 top-0 bottom-0 w-80 border-l border-gray-200 bg-white overflow-y-auto shadow-lg z-10">
+          <div className="absolute right-0 top-0 bottom-0 w-full sm:w-80 lg:static lg:shrink-0 lg:shadow-none lg:z-auto xl:w-96 border-l border-gray-200 bg-white overflow-y-auto shadow-lg z-10">
             {showItemPanel && selectedItem ? (
               <InventoryForm
                 selectedItem={selectedItem}

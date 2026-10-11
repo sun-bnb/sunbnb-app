@@ -38,7 +38,7 @@ export default function MenuView({ restaurantId }: { restaurantId: string }) {
     return (
       <div className="pt-2">
         <RestaurantSubNav restaurantId={restaurantId} active="menu" />
-        <div className="p-4 text-sm text-gray-500">{t('loading')}</div>
+        <div className="py-4 text-sm text-gray-500">{t('loading')}</div>
       </div>
     )
   }
@@ -80,8 +80,12 @@ export default function MenuView({ restaurantId }: { restaurantId: string }) {
   return (
     <div className="pt-2">
       <RestaurantSubNav restaurantId={restaurantId} active="menu" />
-      <div className="p-4 space-y-4">
+      <div className="py-4 space-y-4">
         <RestaurantHeader restaurantId={restaurantId} />
+        {/* Safety net: MenuItemRow (@repo/table-reservations-ui) is a single
+            fixed-width flex row; on the narrowest phones it scrolls in here
+            rather than widening the page. */}
+        <div className="min-w-0 overflow-x-auto">
         <MenuEditor
           items={items}
           labels={labels}
@@ -128,6 +132,7 @@ export default function MenuView({ restaurantId }: { restaurantId: string }) {
             return res
           }}
         />
+        </div>
       </div>
     </div>
   )

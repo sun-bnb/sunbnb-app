@@ -118,7 +118,7 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-40 transition-colors"
+      className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-40 transition-colors"
     >
       {pending ? (
         <>
@@ -147,11 +147,11 @@ function PaymentProviderCard({ providerStatus }: { providerStatus: ProviderStatu
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between gap-3 mb-3">
         <h2 className="text-sm font-semibold text-gray-900">{t('cardTitle')}</h2>
         <Link
           href="/account/payments"
-          className="text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+          className="shrink-0 py-2 -my-2 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
         >
           {t('managePayments')} &rarr;
         </Link>
@@ -180,17 +180,17 @@ function MollieStatusCard({ mollieStatus }: { mollieStatus: MollieStatus }) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between gap-3 mb-3">
         <h2 className="text-sm font-semibold text-gray-900">{t('molliePayments')}</h2>
         <Link
           href="/account/mollie"
-          className="text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+          className="shrink-0 py-2 -my-2 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
         >
           {t('manage')} &rarr;
         </Link>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         {mollieStatus.isConnected ? (
           <>
             <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700">
@@ -207,14 +207,14 @@ function MollieStatusCard({ mollieStatus }: { mollieStatus: MollieStatus }) {
             })()}
           </>
         ) : (
-          <div className="flex items-center justify-between w-full">
+          <div className="flex flex-wrap items-center justify-between gap-2 w-full">
             <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400">
               <span className="w-2 h-2 rounded-full bg-gray-300" />
               {t('mollieNotConnected')}
             </span>
             <Link
               href="/account/mollie"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-2.5 sm:py-1.5 text-xs font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
             >
               {t('connectMollie')}
             </Link>
@@ -246,11 +246,11 @@ function VivaStatusCard({ vivaStatus }: { vivaStatus: VivaStatus }) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between gap-3 mb-3">
         <h2 className="text-sm font-semibold text-gray-900">{t('vivaPayments')}</h2>
         <Link
           href="/account/viva"
-          className="text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+          className="shrink-0 py-2 -my-2 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
         >
           {t('manage')} &rarr;
         </Link>
@@ -266,14 +266,14 @@ function VivaStatusCard({ vivaStatus }: { vivaStatus: VivaStatus }) {
             )}
           </span>
         ) : (
-          <div className="flex items-center justify-between w-full">
+          <div className="flex flex-wrap items-center justify-between gap-2 w-full">
             <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400">
               <span className="w-2 h-2 rounded-full bg-gray-300" />
               {t('vivaNotConnected')}
             </span>
             <Link
               href="/account/viva"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-2.5 sm:py-1.5 text-xs font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
             >
               {t('connectViva')}
             </Link>
@@ -291,7 +291,7 @@ export default function AccountView({ account, mollieStatus, vivaStatus, provide
   const [formState, formAction] = useActionState(submitForm, { status: '' })
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-3xl">
+    <div className="page-container py-6">
 
       {/* Header */}
       <div className="mb-6">
@@ -325,6 +325,10 @@ export default function AccountView({ account, mollieStatus, vivaStatus, provide
         </div>
       )}
 
+      {/* lg+: the form takes two thirds, payment status rides beside it as a
+          sticky side column. Below lg the status cards stay on top, as before. */}
+      <div className="lg:grid lg:grid-cols-3 lg:items-start lg:gap-6">
+      <aside className="lg:col-start-3 lg:row-start-1 lg:sticky lg:top-6">
       <PaymentProviderCard providerStatus={providerStatus} />
 
       {/* Mollie payment status */}
@@ -332,8 +336,9 @@ export default function AccountView({ account, mollieStatus, vivaStatus, provide
 
       {/* Viva card-present status */}
       <VivaStatusCard vivaStatus={vivaStatus} />
+      </aside>
 
-      <form action={formAction}>
+      <form action={formAction} className="lg:col-span-2 lg:col-start-1 lg:row-start-1">
 
         {/* Personal info */}
         <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
@@ -380,6 +385,7 @@ export default function AccountView({ account, mollieStatus, vivaStatus, provide
         </div>
 
       </form>
+      </div>
     </div>
   )
 }

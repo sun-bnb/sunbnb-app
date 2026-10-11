@@ -26,9 +26,9 @@ function SaveIndicator({
     <span
       role="status"
       aria-live="polite"
-      className={`flex items-center gap-1.5 text-xs shrink-0 ${map.text}`}
+      className={`flex min-w-0 items-center gap-1.5 text-xs sm:shrink-0 ${map.text}`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${map.dot}`} />
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${map.dot}`} />
       {map.label}
       {status === 'error' && error ? ` — ${error}` : ''}
     </span>
@@ -77,13 +77,15 @@ export function RestaurantHeader({
   const monogram = restaurant.name.trim().charAt(0).toUpperCase() || 'R'
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-xs">
+    // Phone: save status drops under the identity block (it can carry a long
+    // error string); sm+: identity left, status right as before.
+    <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4 shadow-xs sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-amber-100 to-orange-100 text-lg font-semibold text-amber-700">
           {monogram}
         </div>
         <div className="min-w-0">
-          <h1 className="truncate text-lg font-semibold text-gray-900">{restaurant.name}</h1>
+          <h1 className="truncate text-base font-semibold text-gray-900 sm:text-lg">{restaurant.name}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
             {restaurant.cuisineType && (
               <span className="rounded-full bg-gray-100 px-2 py-0.5 font-medium text-gray-600">
@@ -95,7 +97,7 @@ export function RestaurantHeader({
                 {priceLabel}
               </span>
             )}
-            <span className="text-gray-400">/{restaurant.slug}</span>
+            <span className="min-w-0 truncate text-gray-400">/{restaurant.slug}</span>
             {restaurant.siteId && (
               <Link
                 href={`/sites/${restaurant.siteId}`}

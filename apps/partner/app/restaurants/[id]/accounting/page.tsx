@@ -7,7 +7,7 @@ export default async function RestaurantAccountingPage({
 }) {
   const { id } = await params
   return (
-    <div className="container mx-auto max-w-[768px]">
+    <div className="page-container">
       <AccountingView restaurantId={id} />
     </div>
   )

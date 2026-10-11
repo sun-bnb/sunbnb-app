@@ -44,21 +44,25 @@ export function MenuItemRow({
 }: MenuItemRowProps) {
   return (
     <div
-      className={`flex items-center gap-3 rounded border border-gray-200 bg-white px-3 py-2 ${
+      className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-gray-200 bg-white px-3 py-2 sm:flex-nowrap ${
         item.soldOut ? 'opacity-60' : ''
       }`}
     >
-      <div className="flex flex-col gap-0.5">
+      {/* Below sm: image + name + price on the first line; reorder arrows and the
+          sold-out / edit / archive controls move to a second line with 40px targets.
+          From sm up the single-row desktop layout is unchanged. */}
+      <div className="order-last h-0 basis-full sm:hidden" aria-hidden />
+      <div className="order-last flex gap-0.5 sm:order-none sm:flex-col">
         <Tooltip title={labels.moveUp}>
           <span>
-            <IconButton size="small" disabled={!canMoveUp} onClick={onMoveUp} sx={{ p: 0.25 }}>
+            <IconButton size="small" disabled={!canMoveUp} onClick={onMoveUp} sx={{ p: 0.25 }} className="size-10 sm:size-auto">
               <ArrowUpwardIcon sx={{ fontSize: '0.9rem' }} />
             </IconButton>
           </span>
         </Tooltip>
         <Tooltip title={labels.moveDown}>
           <span>
-            <IconButton size="small" disabled={!canMoveDown} onClick={onMoveDown} sx={{ p: 0.25 }}>
+            <IconButton size="small" disabled={!canMoveDown} onClick={onMoveDown} sx={{ p: 0.25 }} className="size-10 sm:size-auto">
               <ArrowDownwardIcon sx={{ fontSize: '0.9rem' }} />
             </IconButton>
           </span>
@@ -71,10 +75,10 @@ export function MenuItemRow({
         <img
           src={item.imageUrl}
           alt={item.name}
-          className="h-12 w-12 rounded-sm object-cover border border-gray-200"
+          className="h-12 w-12 shrink-0 rounded-sm object-cover border border-gray-200"
         />
       ) : (
-        <div className="h-12 w-12 rounded-sm bg-gray-100 border border-gray-200" />
+        <div className="h-12 w-12 shrink-0 rounded-sm bg-gray-100 border border-gray-200" />
       )}
 
       <div className="flex flex-col min-w-0 flex-1">
@@ -91,31 +95,33 @@ export function MenuItemRow({
         )}
       </div>
 
-      <div className="text-sm font-medium text-gray-900 tabular-nums w-20 text-right">
+      <div className="text-sm font-medium text-gray-900 tabular-nums shrink-0 text-right sm:w-20">
         {labels.currencyPrefix}
         {/* Gross price; pre-v2 rows may have totalPrice 0 — fall back to the legacy price. */}
         {(item.totalPrice > 0 ? item.totalPrice : item.price).toFixed(2)}
       </div>
 
-      <Tooltip title={labels.soldOutTitle}>
-        <Switch
-          size="small"
-          checked={item.soldOut}
-          onChange={(e) => void onToggleSoldOut(e.target.checked)}
-        />
-      </Tooltip>
+      <div className="order-last ml-auto flex items-center gap-1 sm:order-none sm:ml-0 sm:gap-3">
+        <Tooltip title={labels.soldOutTitle}>
+          <Switch
+            size="small"
+            checked={item.soldOut}
+            onChange={(e) => void onToggleSoldOut(e.target.checked)}
+          />
+        </Tooltip>
 
-      <Tooltip title={labels.edit}>
-        <IconButton size="small" onClick={onEdit}>
-          <EditIcon fontSize="small" />
-        </IconButton>
-      </Tooltip>
+        <Tooltip title={labels.edit}>
+          <IconButton size="small" onClick={onEdit} className="size-10 sm:size-auto">
+            <EditIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
 
-      <Tooltip title={labels.archive}>
-        <IconButton size="small" color="error" onClick={() => void onArchive()}>
-          <DeleteOutlineIcon fontSize="small" />
-        </IconButton>
-      </Tooltip>
+        <Tooltip title={labels.archive}>
+          <IconButton size="small" color="error" onClick={() => void onArchive()} className="size-10 sm:size-auto">
+            <DeleteOutlineIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </div>
     </div>
   )
 }

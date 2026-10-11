@@ -109,7 +109,7 @@ export default function SubscriptionView({ data }: { data: SubscriptionData }) {
   }
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-4xl">
+    <div className="page-container py-6">
 
       {/* Header */}
       <div className="mb-6">
@@ -121,12 +121,12 @@ export default function SubscriptionView({ data }: { data: SubscriptionData }) {
 
       {/* Current plan summary */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Current plan</p>
             <p className="text-xl font-bold text-gray-900 mt-1">{subscription?.plan?.name ?? 'Starter'}</p>
           </div>
-          <div className="text-right">
+          <div className="text-right shrink-0">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Sites used</p>
             <p className="text-xl font-bold text-gray-900 mt-1">
               {siteCount} / {effectiveMaxSites >= 999 ? '∞' : effectiveMaxSites}
@@ -147,7 +147,7 @@ export default function SubscriptionView({ data }: { data: SubscriptionData }) {
       </div>
 
       {/* Plan cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
         {plans.map((plan) => {
           const isCurrent = plan.tier === currentTier
           const colors = TIER_COLORS[plan.tier] ?? DEFAULT_COLORS
@@ -162,11 +162,11 @@ export default function SubscriptionView({ data }: { data: SubscriptionData }) {
             >
               {/* Badge */}
               <div className="flex items-center justify-between mb-3">
-                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${colors.badge}`}>
+                <span className={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${colors.badge}`}>
                   {colors.badgeText}
                 </span>
                 {isCurrent && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                  <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
                     Current
                   </span>
                 )}
@@ -218,7 +218,7 @@ export default function SubscriptionView({ data }: { data: SubscriptionData }) {
                 <button
                   onClick={() => handleSelectPlan(plan.id)}
                   disabled={loading !== null || !plan.stripePriceId}
-                  className={`w-full py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${colors.button}`}
+                  className={`w-full py-2.5 sm:py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${colors.button}`}
                   title={!plan.stripePriceId ? 'Stripe pricing not configured yet' : undefined}
                 >
                   {loading === plan.id ? (
@@ -242,7 +242,7 @@ export default function SubscriptionView({ data }: { data: SubscriptionData }) {
           <button
             onClick={handleManageBilling}
             disabled={loading !== null}
-            className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
           >
             {loading === 'portal' ? (
               <>

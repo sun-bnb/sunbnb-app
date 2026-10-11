@@ -111,7 +111,8 @@ function ItemForm({
           ))}
         </div>
       </div>
-      <div className="flex gap-3">
+      {/* Prices two-up; quantity joins them on one row from lg. */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <TextField
           fullWidth
           label={t('pricePerHour')}
@@ -130,17 +131,18 @@ function ItemForm({
           placeholder="e.g. 30"
           size="small"
         />
+        <TextField
+          fullWidth
+          label={t('availableQuantity')}
+          type="number"
+          value={totalQuantity}
+          onChange={e => setTotalQuantity(e.target.value)}
+          placeholder="e.g. 5"
+          size="small"
+          helperText={t('availableQuantityHelper')}
+          sx={{ gridColumn: { xs: '1 / -1', lg: 'auto' } }}
+        />
       </div>
-      <TextField
-        fullWidth
-        label={t('availableQuantity')}
-        type="number"
-        value={totalQuantity}
-        onChange={e => setTotalQuantity(e.target.value)}
-        placeholder="e.g. 5"
-        size="small"
-        helperText={t('availableQuantityHelper')}
-      />
       <div className="flex gap-2 pt-2">
         <Button
           variant="contained"
@@ -279,10 +281,10 @@ export default function RentalsView() {
   }
 
   return (
-    <div className="pt-2">
-      {/* Rentals toggle + VAT on same row */}
-      <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 mt-4 mb-4 gap-4">
-        <div className="flex-1 min-w-0">
+    <div className="pt-2 px-4 min-[800px]:px-0">
+      {/* Rentals toggle + VAT on same row (description gets its own row on phones) */}
+      <div className="flex flex-wrap sm:flex-nowrap items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 mt-4 mb-4 gap-3 sm:gap-4">
+        <div className="basis-full sm:basis-auto flex-1 min-w-0">
           <p className="text-sm font-medium text-gray-800">{t('title')}</p>
           <p className="text-xs text-gray-500 mt-0.5">
             {t('equipmentRentalDesc')}
@@ -320,7 +322,7 @@ export default function RentalsView() {
       {rentalsEnabled && (
         <div className="mb-4">
           <h3 className="text-sm font-medium text-gray-700 mb-2">{t('rentalBilling')}</h3>
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             <button
               type="button"
               onClick={() => {
@@ -371,7 +373,7 @@ export default function RentalsView() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Rental equipment</h2>
           <p className="text-sm text-gray-500">
@@ -392,7 +394,7 @@ export default function RentalsView() {
 
       {/* Create form */}
       {showForm && (
-        <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50/30 p-4">
+        <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50/30 p-4 lg:max-w-3xl">
           <h3 className="text-sm font-medium text-gray-700 mb-3">New rental item</h3>
           <ItemForm onSave={handleCreate} onCancel={() => setShowForm(false)} saving={saving} />
         </div>
@@ -406,11 +408,12 @@ export default function RentalsView() {
           <p className="text-xs mt-1">Add surfboards, kayaks, umbrellas, and more</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        // Two-up from lg; a card being edited expands in place.
+        <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-3 lg:items-start">
           {items.map(item => (
             <div
               key={item.id}
-              className={`rounded-lg border p-4 transition-all ${
+              className={`rounded-lg border p-3 sm:p-4 transition-all ${
                 item.active
                   ? 'border-gray-200 bg-white'
                   : 'border-gray-100 bg-gray-50 opacity-60'
@@ -424,7 +427,7 @@ export default function RentalsView() {
                   saving={saving}
                 />
               ) : (
-                <div className="flex items-start gap-3">
+                <div className="flex flex-wrap sm:flex-nowrap items-start gap-3">
                   <div className="text-2xl mt-0.5">{getCategoryEmoji(item.category)}</div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -449,17 +452,17 @@ export default function RentalsView() {
                       ) : null}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center justify-end gap-1 w-full sm:w-auto border-t border-gray-100 pt-1 sm:border-0 sm:pt-0">
                     <Switch
                       size="small"
                       checked={item.active}
                       onChange={() => handleToggleActive(item)}
                       color="success"
                     />
-                    <IconButton size="small" onClick={() => setEditingItem(item)}>
+                    <IconButton size="small" sx={{ p: { xs: 1.25, sm: 0.625 } }} onClick={() => setEditingItem(item)}>
                       <EditIcon fontSize="small" className="text-gray-400" />
                     </IconButton>
-                    <IconButton size="small" onClick={() => setDeleteTarget(item)}>
+                    <IconButton size="small" sx={{ p: { xs: 1.25, sm: 0.625 } }} onClick={() => setDeleteTarget(item)}>
                       <DeleteOutlineIcon fontSize="small" className="text-gray-400" />
                     </IconButton>
                   </div>

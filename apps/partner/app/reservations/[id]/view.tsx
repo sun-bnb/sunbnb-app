@@ -309,19 +309,19 @@ export default function ReservationView({ reservation }: { reservation: Reservat
   }
 
   return (
-    <div className={`max-w-3xl mx-auto px-4 py-6 ${isPending ? 'opacity-50 pointer-events-none' : ''}`}>
+    <div className={`page-container py-4 sm:py-6 ${isPending ? 'opacity-50 pointer-events-none' : ''}`}>
 
       {/* ── Back link ── */}
-      <Link href="/frontdesk" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4">
+      <Link href="/frontdesk" className="inline-flex items-center gap-1 min-h-10 text-sm text-gray-500 hover:text-gray-700 mb-2 sm:mb-4">
         <ArrowBackIcon sx={{ fontSize: 16 }} />
         <span>{t('backLink')}</span>
       </Link>
 
       {/* ── Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
-        <div>
-          <div className="flex items-center gap-2.5 mb-1">
-            <h1 className="text-xl font-bold text-gray-900">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4 sm:mb-6">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2.5 mb-1">
+            <h1 className="text-xl font-bold text-gray-900 break-words min-w-0">
               {r.guestName || 'Guest'}
             </h1>
             {isCanceled && (
@@ -337,7 +337,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
         </div>
 
         {/* Status chips */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <Chip
             label={t(paymentStatusKey(r.status) as any)}
             size="small"
@@ -363,18 +363,19 @@ export default function ReservationView({ reservation }: { reservation: Reservat
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
 
         {/* ═══════ Left column: Details ═══════ */}
-        <div className="md:col-span-2 flex flex-col gap-5">
+        <div className="md:col-span-2 flex flex-col gap-4 sm:gap-5 min-w-0">
 
           {/* ── Booking info card ── */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
             <h2 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
               <CalendarTodayIcon sx={{ fontSize: 16, color: '#6b7280' }} />
               {t('bookingDetails')}
             </h2>
-            <div className="grid gap-3">
+            {/* Short facts pair up in two columns on desktop; seats + id span both. */}
+            <div className="grid gap-3 lg:grid-cols-2 lg:gap-x-6">
               {/* Date/time */}
               <div className="flex items-start gap-3">
                 <AccessTimeIcon sx={{ fontSize: 16, color: '#9ca3af', mt: 0.3 }} />
@@ -402,7 +403,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
               )}
               <div className="flex items-center gap-3">
                 <EmailIcon sx={{ fontSize: 16, color: '#9ca3af' }} />
-                <span className="text-sm text-gray-700">{r.guestContact || r.user.email}</span>
+                <span className="text-sm text-gray-700 break-all min-w-0">{r.guestContact || r.user.email}</span>
               </div>
 
               {/* Payment */}
@@ -418,7 +419,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
 
               {/* Items */}
               {r.items.length > 0 && (
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3 lg:col-span-2">
                   <EventSeatIcon sx={{ fontSize: 16, color: '#9ca3af', mt: 0.3 }} />
                   <div>
                     <p className="text-sm text-gray-700">
@@ -440,11 +441,11 @@ export default function ReservationView({ reservation }: { reservation: Reservat
               )}
 
               {/* Reservation ID */}
-              <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-center gap-3 min-w-0 lg:col-span-2">
                 <TagIcon sx={{ fontSize: 16, color: '#d1d5db', flexShrink: 0 }} />
                 <span className="font-mono text-xs text-gray-400 select-all truncate">{r.id}</span>
                 <Tooltip title={copied ? t('copiedTooltip') : t('copyIdTooltip')} arrow>
-                  <IconButton size="small" onClick={copyId} sx={{ ml: -0.5, flexShrink: 0 }}>
+                  <IconButton size="small" onClick={copyId} sx={{ ml: -0.5, flexShrink: 0, p: { xs: 1.25, sm: 0.625 } }}>
                     <ContentCopyIcon sx={{ fontSize: 14, color: copied ? '#22c55e' : '#d1d5db' }} />
                   </IconButton>
                 </Tooltip>
@@ -453,7 +454,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
           </div>
 
           {/* ── Internal notes card ── */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
             <h2 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
               <NoteIcon sx={{ fontSize: 16, color: '#6b7280' }} />
               {t('internalNotes')}
@@ -497,10 +498,10 @@ export default function ReservationView({ reservation }: { reservation: Reservat
             ) : (
               <button
                 onClick={startEditNotes}
-                className="w-full text-left text-sm px-3 py-2.5 rounded-lg border border-dashed border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-colors flex items-start gap-2"
+                className="w-full text-left text-sm px-3 py-2.5 min-h-11 rounded-lg border border-dashed border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-colors flex items-start gap-2"
               >
                 {r.internalNotes ? (
-                  <span className="whitespace-pre-wrap">{r.internalNotes}</span>
+                  <span className="whitespace-pre-wrap break-words min-w-0">{r.internalNotes}</span>
                 ) : (
                   <span className="text-gray-400">{t('addNotes')}</span>
                 )}
@@ -510,7 +511,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
 
           {/* ── Actions card ── */}
           {actions.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
               <h2 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
                 <BeachAccessIcon sx={{ fontSize: 16, color: '#6b7280' }} />
                 {t('actionsTitle')}
@@ -525,7 +526,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
                     startIcon={a.icon}
                     onClick={() => handleAction(a)}
                     disabled={isPending}
-                    sx={{ textTransform: 'none', fontSize: '0.85rem', px: 2, minHeight: 36 }}
+                    sx={{ textTransform: 'none', fontSize: '0.85rem', px: 2, minHeight: { xs: 44, sm: 36 }, flexGrow: { xs: 1, sm: 0 } }}
                   >
                     {t(a.labelKey as any)}
                   </Button>
@@ -535,11 +536,11 @@ export default function ReservationView({ reservation }: { reservation: Reservat
           )}
         </div>
 
-        {/* ═══════ Right column: Timeline + meta ═══════ */}
-        <div className="flex flex-col gap-5">
+        {/* ═══════ Right column: Timeline + meta (sticky beside the details on desktop) ═══════ */}
+        <div className="flex flex-col gap-4 sm:gap-5 min-w-0 lg:sticky lg:top-4 lg:self-start">
 
           {/* ── Timeline card ── */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
             <h2 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
               <ScheduleIcon sx={{ fontSize: 16, color: '#6b7280' }} />
               {t('timeline')}
@@ -572,13 +573,13 @@ export default function ReservationView({ reservation }: { reservation: Reservat
           </div>
 
           {/* ── Payment & meta card ── */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
             <h2 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
               <PaymentIcon sx={{ fontSize: 16, color: '#6b7280' }} />
               {t('paymentTitle')}
             </h2>
             <div className="grid gap-2.5">
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between items-center gap-3 text-sm">
                 <span className="text-gray-500">{t('status')}</span>
                 <Chip
                   label={t(paymentStatusKey(r.status) as any)}
@@ -589,7 +590,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
                 />
               </div>
               {r.paymentAmount != null && (
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between items-center gap-3 text-sm">
                   <span className="text-gray-500">{t('amount')}</span>
                   <span className="text-gray-800 font-medium">€{r.paymentAmount.toFixed(2)}</span>
                 </div>
@@ -601,15 +602,15 @@ export default function ReservationView({ reservation }: { reservation: Reservat
                 </div>
               )}
               <Divider sx={{ my: 0.5 }} />
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between items-center gap-3 text-sm">
                 <span className="text-gray-500">{t('type')}</span>
                 <span className="text-gray-700">{isHourly ? t('hourly') : t('daily')}</span>
               </div>
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between items-center gap-3 text-sm">
                 <span className="text-gray-500">{t('created')}</span>
                 <span className="text-gray-600 text-xs">{fmtDateTime(r.createdAt)}</span>
               </div>
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between items-center gap-3 text-sm">
                 <span className="text-gray-500">{t('updated')}</span>
                 <span className="text-gray-600 text-xs">{fmtDateTime(r.updatedAt)}</span>
               </div>

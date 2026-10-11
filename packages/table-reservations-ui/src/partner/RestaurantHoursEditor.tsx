@@ -9,7 +9,7 @@ export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 // Raw utility strings — aligned with .claude/rules/ui.md by hand (this shared
 // package can't see the partner app's component classes).
 const TIME_INPUT =
-  'text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-gray-900'
+  'min-w-0 text-base sm:text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-gray-900'
 const BTN =
   'bg-gray-900 text-white px-4 py-2 text-sm font-medium rounded-lg transition-colors hover:bg-gray-700 disabled:opacity-60 disabled:cursor-not-allowed'
 
@@ -94,7 +94,7 @@ export function RestaurantHoursEditor({
         {rows.map((r, idx) => (
           <div
             key={r.day}
-            className={`flex items-center gap-3 py-2 ${idx > 0 ? 'border-t border-gray-100' : ''}`}
+            className={`flex flex-wrap items-center gap-x-3 gap-y-2 py-2 sm:flex-nowrap ${idx > 0 ? 'border-t border-gray-100' : ''}`}
           >
             <div className="flex items-center gap-2 w-36 shrink-0">
               <Toggle
@@ -110,18 +110,19 @@ export function RestaurantHoursEditor({
               </span>
             </div>
             {r.enabled ? (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500 w-10">{labels.openAbbr}</span>
+              // Below sm the open/close inputs take their own line under the day toggle.
+              <div className="flex basis-full items-center gap-2 sm:basis-auto">
+                <span className="text-xs text-gray-500 w-10 shrink-0">{labels.openAbbr}</span>
                 <input
                   type="time"
-                  className={TIME_INPUT}
+                  className={`${TIME_INPUT} flex-1 sm:flex-none`}
                   value={r.openTime}
                   onChange={(e) => setRow(r.day, { openTime: e.target.value })}
                 />
-                <span className="text-xs text-gray-500 w-10">{labels.closeAbbr}</span>
+                <span className="text-xs text-gray-500 w-10 shrink-0">{labels.closeAbbr}</span>
                 <input
                   type="time"
-                  className={TIME_INPUT}
+                  className={`${TIME_INPUT} flex-1 sm:flex-none`}
                   value={r.closeTime}
                   onChange={(e) => setRow(r.day, { closeTime: e.target.value })}
                 />
@@ -133,7 +134,7 @@ export function RestaurantHoursEditor({
         ))}
       </div>
       <div className="mt-4">
-        <button type="button" className={BTN} disabled={busy} onClick={handleSave}>
+        <button type="button" className={`${BTN} w-full sm:w-auto`} disabled={busy} onClick={handleSave}>
           {busy ? labels.saving : labels.save}
         </button>
       </div>

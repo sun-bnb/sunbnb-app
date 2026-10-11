@@ -135,8 +135,10 @@ export default async function SitePage(
     return <ErrorCard title="Not authorized" message="You don't have access to this site." />
   }
   
+  // Shared page-container width; site-view.tsx cancels the gutter on phones
+  // (views pad themselves below 800px) and keeps the inventory editor at 768px.
   return (
-    <div className="container mx-auto max-w-[768px]">
+    <div className="page-container">
       <SiteView site={site} apiKey={apiKey} tab={tab}>
         { children }
       </SiteView>

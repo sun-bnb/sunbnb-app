@@ -5,9 +5,9 @@ export default async function OnboardingGuidePage() {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="max-w-3xl mx-auto px-6 py-12 text-sm text-gray-700 leading-relaxed">
+      <div className="max-w-3xl mx-auto px-4 py-8 sm:px-6 sm:py-12 text-sm text-gray-700 leading-relaxed break-words">
 
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Onboarding Guide for Beach Clubs</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1">Onboarding Guide for Beach Clubs</h1>
         <p className="text-xs text-gray-400 mb-8">Sunbnb Partner Programme &middot; Effective: 7 March 2026</p>
 
         <section className="mb-8">

@@ -85,9 +85,9 @@ export default function ProductsView() {
   }
 
   return (
-    <div className="pt-2">
+    <div className="pt-2 px-4 min-[800px]:px-0">
       {/* App sales toggle */}
-      <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 mt-4 mb-2">
+      <div className="flex items-center justify-between gap-3 bg-white border border-gray-200 rounded-lg px-4 py-3 mt-4 mb-2">
         <div>
           <p className="text-sm font-medium text-gray-800">{t('inAppSalesTitle')}</p>
           <p className="text-xs text-gray-500 mt-0.5">
@@ -110,7 +110,7 @@ export default function ProductsView() {
       {salesEnabled && (
         <div className="mt-3 mb-2">
           <h3 className="text-sm font-medium text-gray-700 mb-2">{t('orderBilling')}</h3>
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             <button
               type="button"
               onClick={() => {
@@ -162,7 +162,7 @@ export default function ProductsView() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mt-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-4 mb-6">
         <div>
           <h2 className="text-lg font-semibold text-gray-800">{t('productsTitle')}</h2>
           <p className="text-sm text-gray-500 mt-1">
@@ -177,7 +177,7 @@ export default function ProductsView() {
             if (showAddForm) resetForm()
             setShowAddForm(!showAddForm)
           }}
-          sx={{ textTransform: 'none', borderColor: '#d1d5db', color: '#374151' }}
+          sx={{ textTransform: 'none', borderColor: '#d1d5db', color: '#374151', alignSelf: { xs: 'flex-start', sm: 'auto' }, flexShrink: 0 }}
         >
           {showAddForm ? t('cancel') : t('addProduct')}
         </Button>
@@ -189,7 +189,7 @@ export default function ProductsView() {
           <form ref={formRef} onSubmit={handleSubmit} encType="multipart/form-data">
             <input type="hidden" name="siteId" value={site.id} />
 
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-4">
               {/* Image upload */}
               <div
                 className="w-20 h-20 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center overflow-hidden cursor-pointer border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors"
@@ -211,7 +211,7 @@ export default function ProductsView() {
               </div>
 
               {/* Fields */}
-              <div className="flex-1 grid grid-cols-2 gap-3">
+              <div className="flex-1 min-w-0 grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <TextField
                   name="name"
                   label={t('productName')}
@@ -220,7 +220,7 @@ export default function ProductsView() {
                   fullWidth
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  sx={{ gridColumn: '1 / -1' }}
+                  sx={{ gridColumn: { xs: '1 / -1', lg: 'span 2' } }}
                 />
                 <TextField
                   name="description"
@@ -232,7 +232,7 @@ export default function ProductsView() {
                   maxRows={2}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  sx={{ gridColumn: '1 / -1' }}
+                  sx={{ gridColumn: { xs: '1 / -1', lg: 'span 2' } }}
                 />
                 <TextField
                   name="totalPrice"
@@ -289,7 +289,7 @@ export default function ProductsView() {
             </div>
 
             {priceNum > 0 && (
-              <div className="text-xs text-gray-400 mt-2 ml-24">
+              <div className="text-xs text-gray-400 mt-2 sm:ml-24">
                 {t('priceBeforeTax', { amount: priceBeforeTax.toFixed(2) })}
               </div>
             )}
@@ -317,7 +317,8 @@ export default function ProductsView() {
           <p className="text-xs mt-1">{t('noProductsSubtitle')}</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
+        // Two-up from lg; each card expands in place for inline edit.
+        <div className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:items-start">
           {productList.map((product) => (
             <ProductItem
               key={product.id}

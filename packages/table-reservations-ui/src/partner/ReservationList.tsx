@@ -75,24 +75,29 @@ export function ReservationList({
           value={date}
           onChange={(e) => onChangeDate(e.target.value)}
           sx={{ minWidth: 180 }}
+          className="w-full sm:w-auto"
           slotProps={{
             inputLabel: { shrink: true }
           }}
         />
-        <ToggleButtonGroup
-          size="small"
-          value={filter}
-          exclusive
-          onChange={(_, v) => v && setFilter(v)}
-          sx={{ '& .MuiToggleButton-root': { textTransform: 'none', px: 1.5, py: 0.5, fontSize: '0.75rem' } }}
-        >
-          <ToggleButton value="all">{labels.filterAll}</ToggleButton>
-          <ToggleButton value="expected">{labels.filterExpected}</ToggleButton>
-          <ToggleButton value="seated">{labels.filterSeated}</ToggleButton>
-          <ToggleButton value="departed">{labels.filterDeparted}</ToggleButton>
-          <ToggleButton value="no_show">{labels.filterNoShow}</ToggleButton>
-          <ToggleButton value="canceled">{labels.filterCanceled}</ToggleButton>
-        </ToggleButtonGroup>
+        {/* The six filters scroll sideways inside their own box on narrow screens
+            instead of pushing the page wider. */}
+        <div className="max-w-full overflow-x-auto">
+          <ToggleButtonGroup
+            size="small"
+            value={filter}
+            exclusive
+            onChange={(_, v) => v && setFilter(v)}
+            sx={{ '& .MuiToggleButton-root': { textTransform: 'none', px: 1.5, py: 0.5, fontSize: '0.75rem', whiteSpace: 'nowrap' } }}
+          >
+            <ToggleButton value="all">{labels.filterAll}</ToggleButton>
+            <ToggleButton value="expected">{labels.filterExpected}</ToggleButton>
+            <ToggleButton value="seated">{labels.filterSeated}</ToggleButton>
+            <ToggleButton value="departed">{labels.filterDeparted}</ToggleButton>
+            <ToggleButton value="no_show">{labels.filterNoShow}</ToggleButton>
+            <ToggleButton value="canceled">{labels.filterCanceled}</ToggleButton>
+          </ToggleButtonGroup>
+        </div>
       </div>
 
       {filtered.length === 0 ? (

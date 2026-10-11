@@ -135,7 +135,7 @@ function SubmitButton({ label }: { label: string }) {
     <button
       type="submit"
       disabled={pending}
-      className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-40 transition-colors"
+      className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-40 transition-colors"
     >
       {pending ? (
         <>
@@ -159,12 +159,12 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
   ]
 
   return (
-    <div className="flex items-center gap-3 mb-8">
+    <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-6 sm:mb-8">
       {steps.map((step, i) => (
-        <div key={step.number} className="flex items-center gap-3">
+        <div key={step.number} className="flex items-center gap-2 sm:gap-3">
           <div className="flex items-center gap-2">
             <div
-              className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${
+              className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${
                 step.number < currentStep
                   ? 'bg-emerald-100 text-emerald-700'
                   : step.number === currentStep
@@ -189,7 +189,7 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
             </span>
           </div>
           {i < steps.length - 1 && (
-            <div className={`w-12 h-px ${step.number < currentStep ? 'bg-emerald-300' : 'bg-gray-200'}`} />
+            <div className={`w-6 sm:w-12 h-px ${step.number < currentStep ? 'bg-emerald-300' : 'bg-gray-200'}`} />
           )}
         </div>
       ))}
@@ -242,8 +242,10 @@ function AccountStep({
       )}
 
       <form action={formAction}>
+        {/* lg+: personal + billing on the left, company (the longest card) on the right. */}
+        <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-4">
         {/* Personal info */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 mb-4">
           <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('personalInfo')}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field name="firstName" label={t('firstName')} placeholder="John" defaultValue={defaultAccount.firstName || ''} required />
@@ -254,7 +256,7 @@ function AccountStep({
         </div>
 
         {/* Company info */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 mb-4 lg:row-span-2">
           <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('company')}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field name="company" label={t('companyName')} placeholder="Sunbnb Oy" defaultValue={defaultAccount.company || ''} required />
@@ -274,11 +276,12 @@ function AccountStep({
         </div>
 
         {/* Billing */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 mb-6 lg:col-start-1">
           <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('billing')}</h3>
           <div className="grid grid-cols-1 gap-4">
             <Field name="bankAccount" label={t('iban')} placeholder="FI12 3456 7891 2345" defaultValue={defaultAccount.bankAccount || ''} />
           </div>
+        </div>
         </div>
 
         <div className="flex justify-end">
@@ -353,14 +356,14 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
         <p className="text-sm text-gray-500 mt-1">{t('connectFormSubtitle')}</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+      <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 mb-4">
         <p className="text-sm text-gray-500 mb-4">{t('connectMollieDesc')}</p>
 
         {/* Tab switcher */}
         <div className="flex border-b border-gray-200 mb-4">
           <button
             onClick={() => setTab('existing')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 text-sm font-medium border-b-2 transition-colors ${
               tab === 'existing'
                 ? 'border-gray-900 text-gray-900'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -370,7 +373,7 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
           </button>
           <button
             onClick={() => setTab('new')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 text-sm font-medium border-b-2 transition-colors ${
               tab === 'new'
                 ? 'border-gray-900 text-gray-900'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -385,7 +388,7 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
             <p className="text-xs text-gray-500">{t('existingAccountDesc')}</p>
             <a
               href="/api/mollie/authorize"
-              className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m9.86-4.122a4.5 4.5 0 0 0-1.242-7.244l4.5-4.5a4.5 4.5 0 0 1 6.364 6.364l-1.757 1.757" />
@@ -406,7 +409,7 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
               href="https://my.mollie.com/signup"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
@@ -425,7 +428,7 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
             )}
 
             <form onSubmit={handleClientLink} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label htmlFor="ob-givenName" className={labelCls}>{t('firstName')} *</label>
                   <input id="ob-givenName" name="givenName" required defaultValue={partnerData?.firstName ?? ''} className={inputCls} />
@@ -451,7 +454,7 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
                 <input id="ob-street" name="streetAndNumber" defaultValue={partnerData?.address ?? ''} placeholder="e.g. Keizersgracht 126" className={inputCls} />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div>
                   <label htmlFor="ob-postalCode" className={labelCls}>{t('postalCode')}</label>
                   <input id="ob-postalCode" name="postalCode" placeholder="1015 AA" defaultValue={partnerData?.postalCode ?? ''} className={inputCls} />
@@ -460,7 +463,7 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
                   <label htmlFor="ob-city" className={labelCls}>{t('city')}</label>
                   <input id="ob-city" name="city" placeholder="Amsterdam" defaultValue={partnerData?.city ?? ''} className={inputCls} />
                 </div>
-                <div>
+                <div className="col-span-2 sm:col-span-1">
                   <label htmlFor="ob-country" className={labelCls}>{t('country')} *</label>
                   <select id="ob-country" name="country" required defaultValue={partnerData?.country ?? 'NL'} className={inputCls}>
                     <option value="">{t('selectCountry')}</option>
@@ -471,7 +474,7 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label htmlFor="ob-reg" className={labelCls}>{t('registrationNumber')}</label>
                   <input id="ob-reg" name="registrationNumber" placeholder="12345678" className={inputCls} />
@@ -485,7 +488,7 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
               <button
                 type="submit"
                 disabled={submitting}
-                className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-40 transition-colors"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-40 transition-colors"
               >
                 {submitting ? (
                   <>
@@ -507,10 +510,10 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
       </div>
 
       {/* Do this later */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col-reverse items-start gap-1 sm:flex-row sm:justify-between sm:items-center sm:gap-4">
         <button
           onClick={() => router.push('/dashboard')}
-          className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+          className="min-h-10 sm:min-h-0 text-sm text-gray-500 hover:text-gray-700 transition-colors"
         >
           {t('doLater')}
         </button>
@@ -533,7 +536,10 @@ export default function OnboardingView({
 
   return (
     <div className="min-h-screen bg-gray-50/50">
-      <div className="container mx-auto px-4 py-8 max-w-3xl">
+      {/* Step 1's three form cards pair up on lg, so it gets the wider frame;
+          the payments step stays at form-reading width. */}
+      <div className="page-container py-6 sm:py-8">
+      <div className={`max-w-3xl ${step === 1 ? 'lg:max-w-5xl' : ''}`}>
 
         {/* Header */}
         <div className="mb-2">
@@ -551,6 +557,7 @@ export default function OnboardingView({
         ) : (
           <MollieStep partnerData={partnerData} />
         )}
+      </div>
       </div>
     </div>
   )

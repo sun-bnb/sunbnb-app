@@ -133,10 +133,11 @@ export default function DayCloseView({
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col">
 
       {/* Page header */}
-      <div className="bg-white dark:bg-gray-900 border-b-2 border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center gap-3">
+      <div className="bg-white dark:bg-gray-900 border-b-2 border-gray-200 dark:border-gray-700 px-4 py-3">
+        <div className="max-w-lg md:max-w-2xl lg:max-w-5xl mx-auto w-full flex items-center gap-3">
         <Link
           href={backHref}
-          className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors shrink-0"
+          className="flex items-center gap-1.5 min-h-10 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors shrink-0"
           aria-label={t('backToMenu')}
         >
           <svg
@@ -159,11 +160,13 @@ export default function DayCloseView({
             {siteName} · {t('todayLine', { date: todayLabel })}
           </p>
         </div>
+        </div>
       </div>
 
       {/* Day-totals summary header */}
       {showTotals && (
-        <div className="bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-4 py-3 flex items-center gap-6">
+        <div className="bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-4 py-3">
+          <div className="max-w-lg md:max-w-2xl lg:max-w-5xl mx-auto w-full flex items-center gap-6">
           <div>
             <div className="text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">
               {t('totalCash')}
@@ -181,11 +184,12 @@ export default function DayCloseView({
               {grandCount}
             </div>
           </div>
+          </div>
         </div>
       )}
 
       {/* Page body */}
-      <div className="flex-1 px-4 py-4 space-y-3 max-w-lg mx-auto w-full">
+      <div className="flex-1 px-4 py-4 lg:py-6 space-y-3 max-w-lg md:max-w-2xl lg:max-w-5xl mx-auto w-full">
 
         {/* Loading */}
         {phase === 'loading' && (
@@ -202,7 +206,7 @@ export default function DayCloseView({
         )}
 
         {phase === 'ready' && (
-          <>
+          <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-6 lg:items-start">
             {/* Desglose por empleado */}
             {tills.length > 0 ? (
               <div className="space-y-2">
@@ -244,6 +248,8 @@ export default function DayCloseView({
               </div>
             )}
 
+            {/* Close actions — beside the breakdown on desktop */}
+            <div className="space-y-3 lg:sticky lg:top-4">
             {/* What Confirm does — pre-close info note */}
             {closePhase !== 'done' && openTillsCount > 0 && (
               <div className="px-3 py-2.5 rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold space-y-1">
@@ -335,7 +341,8 @@ export default function DayCloseView({
                 )}
               </div>
             )}
-          </>
+            </div>
+          </div>
         )}
       </div>
     </div>

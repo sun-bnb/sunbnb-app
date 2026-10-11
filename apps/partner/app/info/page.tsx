@@ -125,7 +125,7 @@ export default function InfoPage() {
                 key={idx}
                 // Each list item can fade/slide in
                 variants={chapterVariants}
-                className="ml-[20px] pb-2 cursor-pointer"
+                className="mx-[20px] pb-2 cursor-pointer"
               >
                 {/* Title row */}
                 <div

@@ -25,7 +25,7 @@ export function EmbedCodeCard({ restaurantId }: { restaurantId: string }) {
   }
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-xs">
+    <section className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 shadow-xs sm:p-5">
       <h3 className="text-sm font-medium text-gray-700 mb-1">{t('embedHeading')}</h3>
       <p className="text-xs text-gray-500 mb-3">{t('embedHint')}</p>
       <pre className="overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-800">
@@ -34,7 +34,7 @@ export function EmbedCodeCard({ restaurantId }: { restaurantId: string }) {
       <button
         type="button"
         onClick={copy}
-        className="mt-3 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+        className="mt-3 min-h-10 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 sm:w-auto"
       >
         {copied ? t('embedCopied') : t('embedCopy')}
       </button>

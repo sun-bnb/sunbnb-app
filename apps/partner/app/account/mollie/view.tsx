@@ -188,11 +188,11 @@ function ReadinessPanel() {
       )}
 
       {!report.ready && (
-        <div className="mt-3 flex items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             onClick={handleRerun}
             disabled={rerunning}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-2.5 sm:py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
           >
             {rerunning ? (
               <>
@@ -205,7 +205,7 @@ function ReadinessPanel() {
           </button>
           <button
             onClick={fetchReadiness}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-2.5 sm:py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
           >
             Refresh
           </button>
@@ -268,7 +268,7 @@ export default function MollieView({ isConnected, profileId, onboardingStatus, s
   }
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-3xl">
+    <div className="page-container py-6">
 
       {/* Header */}
       <div className="mb-6">
@@ -299,9 +299,11 @@ export default function MollieView({ isConnected, profileId, onboardingStatus, s
         </div>
       )}
 
+      {/* lg+: connection card and the how-it-works aside sit side by side. */}
+      <div className="lg:grid lg:grid-cols-3 lg:items-start lg:gap-6">
       {/* Connection status card */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4 lg:mb-0 lg:col-span-2 min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
           <h2 className="text-sm font-semibold text-gray-900">Connection status</h2>
           <div className="flex items-center gap-2">
             {isConnected ? (
@@ -323,9 +325,9 @@ export default function MollieView({ isConnected, profileId, onboardingStatus, s
             {/* Connected state — show details */}
             <div className="space-y-3 mb-5">
               {profileId && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500">Profile ID</span>
-                  <span className="text-gray-900 font-mono text-xs">{profileId}</span>
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="text-gray-500 shrink-0">Profile ID</span>
+                  <span className="text-gray-900 font-mono text-xs break-all text-right">{profileId}</span>
                 </div>
               )}
               <div className="flex items-center justify-between text-sm">
@@ -359,11 +361,11 @@ export default function MollieView({ isConnected, profileId, onboardingStatus, s
               </div>
             )}
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <button
                 onClick={handleRefresh}
                 disabled={refreshing}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2.5 sm:py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
               >
                 {refreshing ? (
                   <>
@@ -377,7 +379,7 @@ export default function MollieView({ isConnected, profileId, onboardingStatus, s
               <button
                 onClick={handleDisconnect}
                 disabled={disconnecting}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-40 transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2.5 sm:py-2 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-40 transition-colors"
               >
                 {disconnecting ? (
                   <>
@@ -405,7 +407,7 @@ export default function MollieView({ isConnected, profileId, onboardingStatus, s
             <div className="flex border-b border-gray-200 mb-4">
               <button
                 onClick={() => setTab('existing')}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 text-sm font-medium border-b-2 transition-colors ${
                   tab === 'existing'
                     ? 'border-gray-900 text-gray-900'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -415,7 +417,7 @@ export default function MollieView({ isConnected, profileId, onboardingStatus, s
               </button>
               <button
                 onClick={() => setTab('new')}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 text-sm font-medium border-b-2 transition-colors ${
                   tab === 'new'
                     ? 'border-gray-900 text-gray-900'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -435,7 +437,7 @@ export default function MollieView({ isConnected, profileId, onboardingStatus, s
       </div>
 
       {/* Info card */}
-      <div className="bg-gray-50 rounded-xl border border-gray-200 p-5">
+      <div className="bg-gray-50 rounded-xl border border-gray-200 p-5 lg:sticky lg:top-6">
         <h2 className="text-sm font-semibold text-gray-900 mb-2">How it works</h2>
         <ul className="space-y-2 text-sm text-gray-600">
           <li className="flex items-start gap-2">
@@ -452,6 +454,7 @@ export default function MollieView({ isConnected, profileId, onboardingStatus, s
           </li>
         </ul>
       </div>
+      </div>
 
     </div>
   )
@@ -467,7 +470,7 @@ function ExistingAccountTab() {
       </p>
       <a
         href="/api/mollie/authorize"
-        className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
+        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m9.86-4.122a4.5 4.5 0 0 0-1.242-7.244l4.5-4.5a4.5 4.5 0 0 1 6.364 6.364l-1.757 1.757" />
@@ -569,7 +572,7 @@ function ClientLinkTab({ partnerData, onSwitchToExisting }: { partnerData: Partn
           href="https://my.mollie.com/signup"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
@@ -594,7 +597,7 @@ function ClientLinkTab({ partnerData, onSwitchToExisting }: { partnerData: Partn
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Owner info */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label htmlFor="cl-givenName" className={labelCls}>First name *</label>
             <input
@@ -652,7 +655,7 @@ function ClientLinkTab({ partnerData, onSwitchToExisting }: { partnerData: Partn
           />
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <div>
             <label htmlFor="cl-postalCode" className={labelCls}>Postal code</label>
             <input
@@ -673,7 +676,7 @@ function ClientLinkTab({ partnerData, onSwitchToExisting }: { partnerData: Partn
               className={inputCls}
             />
           </div>
-          <div>
+          <div className="col-span-2 sm:col-span-1">
             <label htmlFor="cl-country" className={labelCls}>Country *</label>
             <select
               id="cl-country"
@@ -691,7 +694,7 @@ function ClientLinkTab({ partnerData, onSwitchToExisting }: { partnerData: Partn
         </div>
 
         {/* Optional business fields */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label htmlFor="cl-reg" className={labelCls}>Registration number</label>
             <input
@@ -715,7 +718,7 @@ function ClientLinkTab({ partnerData, onSwitchToExisting }: { partnerData: Partn
         <button
           type="submit"
           disabled={submitting}
-          className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-40 transition-colors"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-40 transition-colors"
         >
           {submitting ? (
             <>

@@ -54,7 +54,7 @@ export default function StepLocation({
         )}
       </div>
 
-      <div className={`h-[450px] rounded overflow-hidden transition-all ${
+      <div className={`h-[360px] sm:h-[450px] lg:h-[520px] rounded overflow-hidden transition-all ${
         hasLocation
           ? 'border-2 border-green-300'
           : 'border-2 border-dashed border-amber-300'

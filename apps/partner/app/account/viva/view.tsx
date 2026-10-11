@@ -90,7 +90,7 @@ export default function VivaView({
   }
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-3xl">
+    <div className="page-container py-6">
       <div className="mb-6">
         <h1 className="text-lg font-semibold text-gray-900">{t('title')}</h1>
         <p className="text-sm text-gray-500 mt-0.5">{t('subtitle')}</p>
@@ -115,8 +115,10 @@ export default function VivaView({
         </div>
       )}
 
-      <div className="card mb-4">
-        <div className="flex items-center justify-between mb-4">
+      {/* lg+: connection card and the how-it-works aside sit side by side. */}
+      <div className="lg:grid lg:grid-cols-3 lg:items-start lg:gap-6">
+      <div className="card mb-4 lg:mb-0 lg:col-span-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
           <h2 className="text-sm font-semibold text-gray-900">{t('connectionStatus')}</h2>
           {isConnected ? (
             <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700">
@@ -134,7 +136,7 @@ export default function VivaView({
         {!isConnected && (
           <>
             <p className="text-sm text-gray-500 mb-4">{t('notConnectedDesc')}</p>
-            <button onClick={handleConnect} disabled={connecting} className="btn-primary inline-flex items-center gap-2">
+            <button onClick={handleConnect} disabled={connecting} className="btn-primary w-full sm:w-auto min-h-10 inline-flex items-center justify-center gap-2">
               {connecting ? (
                 <>
                   <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -160,7 +162,7 @@ export default function VivaView({
                 {email ? t('pendingNote', { email }) : t('pendingNoteNoEmail')}
               </p>
             </div>
-            <button onClick={handleRefresh} disabled={refreshing} className="btn-ghost border border-gray-200 rounded-lg px-4 py-2 inline-flex items-center gap-2">
+            <button onClick={handleRefresh} disabled={refreshing} className="btn-ghost border border-gray-200 rounded-lg px-4 py-2 min-h-10 inline-flex items-center justify-center gap-2">
               {refreshing ? (
                 <>
                   <div className="w-3.5 h-3.5 border-2 border-gray-400/30 border-t-gray-500 rounded-full animate-spin" />
@@ -177,9 +179,9 @@ export default function VivaView({
           <>
             <div className="space-y-3 mb-5">
               {merchantId && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500">{t('merchantId')}</span>
-                  <span className="text-gray-900 font-mono text-xs">{merchantId}</span>
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="text-gray-500 shrink-0">{t('merchantId')}</span>
+                  <span className="text-gray-900 font-mono text-xs break-all text-right">{merchantId}</span>
                 </div>
               )}
               <div className="flex items-center justify-between text-sm">
@@ -195,8 +197,8 @@ export default function VivaView({
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-3">
-              <button onClick={handleRefresh} disabled={refreshing} className="btn-ghost border border-gray-200 rounded-lg px-4 py-2 inline-flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <button onClick={handleRefresh} disabled={refreshing} className="btn-ghost border border-gray-200 rounded-lg px-4 py-2 min-h-10 inline-flex items-center justify-center gap-2">
                 {refreshing ? (
                   <>
                     <div className="w-3.5 h-3.5 border-2 border-gray-400/30 border-t-gray-500 rounded-full animate-spin" />
@@ -206,7 +208,7 @@ export default function VivaView({
                   t('refreshButton')
                 )}
               </button>
-              <button onClick={handleDisconnect} disabled={disconnecting} className="btn-danger">
+              <button onClick={handleDisconnect} disabled={disconnecting} className="btn-danger min-h-10">
                 {disconnecting ? t('disconnecting') : t('disconnectButton')}
               </button>
             </div>
@@ -230,6 +232,7 @@ export default function VivaView({
             {t('howItWorksStep3')}
           </li>
         </ul>
+      </div>
       </div>
     </div>
   )

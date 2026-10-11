@@ -302,10 +302,10 @@ function WorkingHoursSlot({
   }
 
   const inputCls =
-    'text-sm text-gray-700 bg-transparent border border-gray-200 rounded-sm px-1.5 py-0.5 focus:outline-hidden focus:border-blue-400'
+    'flex-1 min-w-0 sm:flex-none min-h-[36px] sm:min-h-0 text-sm text-gray-700 bg-transparent border border-gray-200 rounded-sm px-1.5 py-0.5 focus:outline-hidden focus:border-blue-400'
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 w-full sm:w-auto">
       <input
         type="time"
         value={openTime}
@@ -491,7 +491,7 @@ export default function GeneralView() {
   const canUseAvailabilityOnly = ((site as any).subscriptionFeatures?.OFF_PLATFORM_BILLING ?? false) as boolean
 
   return (
-    <div className="pt-2">
+    <div className="pt-2 px-4 min-[800px]:px-0">
 
       {/* Save status indicator — sticky top bar */}
       <div className={`flex items-center justify-center gap-2 px-3 py-2 rounded mb-4 text-sm transition-all ${
@@ -505,6 +505,11 @@ export default function GeneralView() {
         {saveStatus === 'error' && <><WarningAmberIcon fontSize="small" /> {t('errorSaving')}</>}
         {saveStatus === 'idle' && <><CloudDoneIcon fontSize="small" /> {t('upToDate')}</>}
       </div>
+
+      {/* Two columns from lg: setup (name → pricing → hours → map) on the left,
+          publishing + rules on the right. Source order = phone order. */}
+      <div className="lg:grid lg:grid-cols-2 lg:gap-x-10 lg:items-start">
+      <div className="min-w-0">
 
       {/* Site name */}
       <div className="mb-5">
@@ -526,7 +531,7 @@ export default function GeneralView() {
       {/* Billing type — Reservations */}
       <div className="mb-5">
         <h3 className="text-sm font-medium text-gray-700 mb-2">{t('reservationBilling')}</h3>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <button
             type="button"
             onClick={() => {
@@ -585,7 +590,7 @@ export default function GeneralView() {
       {/* Pricing — only for paid */}
       {isPaid && (
         <div className="mb-5">
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             <TextField
               fullWidth
               label={t('basePrice')}
@@ -599,7 +604,7 @@ export default function GeneralView() {
               helperText={t('basePriceHelper')}
             />
             <TextField
-              sx={{ width: 180, flexShrink: 0 }}
+              sx={{ width: { xs: '100%', sm: 180 }, flexShrink: 0 }}
               label={t('taxRate')}
               type="number"
               value={vat}
@@ -637,7 +642,7 @@ export default function GeneralView() {
                   isActive ? 'border-gray-200 bg-white' : 'border-transparent bg-gray-50'
                 }`}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
                   <Switch
                     size="small"
                     checked={isActive}
@@ -659,7 +664,7 @@ export default function GeneralView() {
                   </span>
 
                   {isActive ? (
-                    <div className="flex-1 flex flex-col gap-1">
+                    <div className="order-last sm:order-none w-full sm:w-auto sm:flex-1 flex flex-col gap-1">
                       {slots.map(slot => (
                         <WorkingHoursSlot
                           key={slot.id}
@@ -680,7 +685,7 @@ export default function GeneralView() {
                       size="small"
                       startIcon={<AddIcon fontSize="small" />}
                       onClick={() => onAddHours(day.key)}
-                      sx={{ textTransform: 'none', fontSize: '0.7rem', minWidth: 0, ml: 1 }}
+                      sx={{ textTransform: 'none', fontSize: '0.7rem', minWidth: 0, ml: { xs: 'auto', sm: 1 } }}
                     >
                       {t('split')}
                     </Button>
@@ -709,7 +714,7 @@ export default function GeneralView() {
           <span>{t('locationCoords', { lat: Number(mapCoords.lat).toFixed(5), lng: Number(mapCoords.lng).toFixed(5) })}</span>
         </div>
 
-        <div className="h-[400px] rounded-sm overflow-hidden border-2 border-green-300">
+        <div className="h-[320px] sm:h-[400px] rounded-sm overflow-hidden border-2 border-green-300">
           <SafeAPIProvider apiKey={apiKey}>
             <SafeMap
               mapId="site-map"
@@ -736,7 +741,10 @@ export default function GeneralView() {
         </div>
       </div>
 
-      <Divider sx={{ mb: 3 }} />
+      </div>
+      <div className="min-w-0">
+
+      <Divider sx={{ mb: 3, display: { lg: 'none' } }} />
 
       {/* Site visibility */}
       <div className="mb-5">
@@ -784,7 +792,7 @@ export default function GeneralView() {
       {isPaid && (
         <div className="mb-5">
           <h3 className="text-sm font-medium text-gray-700 mb-2">{t('paymentProvider')}</h3>
-          <div className="rounded-lg border border-gray-200 bg-white p-4 flex items-center justify-between gap-3">
+          <div className="rounded-lg border border-gray-200 bg-white p-4 flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <PaymentsIcon fontSize="small" className="text-gray-500" />
@@ -933,7 +941,7 @@ export default function GeneralView() {
           </div>
         )}
 
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <button
             type="button"
             disabled={layoutLocked}
@@ -986,7 +994,7 @@ export default function GeneralView() {
       <div className="mb-4">
         <h3 className="text-sm font-medium text-red-600 mb-2">{t('dangerZone')}</h3>
         <div className="rounded-lg border border-red-200 p-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <div className="text-sm font-medium text-gray-700">{t('deleteSite')}</div>
               <div className="text-xs text-gray-500">
@@ -998,12 +1006,15 @@ export default function GeneralView() {
               color="error"
               size="small"
               onClick={() => setDeleteDialogOpen(true)}
-              sx={{ textTransform: 'none', whiteSpace: 'nowrap', ml: 2 }}
+              sx={{ textTransform: 'none', whiteSpace: 'nowrap', ml: { xs: 0, sm: 2 }, alignSelf: { xs: 'flex-start', sm: 'auto' } }}
             >
               {t('deleteSite')}
             </Button>
           </div>
         </div>
+      </div>
+
+      </div>
       </div>
 
       {/* Delete confirmation dialog */}

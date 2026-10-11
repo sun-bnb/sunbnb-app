@@ -73,8 +73,8 @@ export default function RentalBookingCard({
       <div className={`rounded-2xl border-3 ${borderColor} ${bgColor} overflow-hidden`}>
         {/* ── Info strip — compact, glanceable ── */}
         <div className="px-4 pt-3 pb-2">
-          <div className="flex items-center justify-between">
-            <span className="text-lg font-black truncate">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-lg font-black truncate min-w-0">
               {booking.rentalItem.name}
               {booking.quantity > 1 && (
                 <span className="text-base font-bold text-gray-500 ml-1">×{booking.quantity}</span>
@@ -102,7 +102,7 @@ export default function RentalBookingCard({
               )}
             </div>
           </div>
-          <div className="flex items-center justify-between mt-0.5">
+          <div className="flex items-center justify-between gap-2 mt-0.5">
             <span className="text-sm font-semibold text-gray-500">
               {booking.durationType === 'hours'
                 ? `${formatTime(booking.from)} – ${formatTime(booking.to)}`

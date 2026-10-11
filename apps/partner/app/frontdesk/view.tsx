@@ -385,8 +385,8 @@ function BoardCard({ item, expanded, onToggle }: {
         <button onClick={onToggle} className="w-full text-left px-3.5 py-3">
           <div className="flex items-start gap-3">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-sm font-semibold text-gray-900 truncate">
+              <div className="flex items-center gap-2 mb-0.5 min-w-0">
+                <span className="text-sm font-semibold text-gray-900 truncate min-w-0">
                   {item.guestName || t('guest')}
                 </span>
                 <Chip
@@ -441,7 +441,7 @@ function BoardCard({ item, expanded, onToggle }: {
                     component={Link}
                     href={detailHref}
                     onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                    sx={{ color: '#9ca3af', p: 0.4 }}
+                    sx={{ color: '#9ca3af', p: { xs: 1, sm: 0.4 } }}
                   >
                     <OpenInNewIcon sx={{ fontSize: 15 }} />
                   </IconButton>
@@ -509,7 +509,7 @@ function BoardCard({ item, expanded, onToggle }: {
                 )}
                 <div className="flex items-center gap-2 text-xs text-gray-400">
                   <TagIcon sx={{ fontSize: 15, color: '#d1d5db' }} />
-                  <span className="font-mono text-[10px] select-all">{item.id}</span>
+                  <span className="font-mono text-xs select-all break-all">{item.id}</span>
                 </div>
               </div>
             </div>
@@ -556,7 +556,7 @@ function BoardCard({ item, expanded, onToggle }: {
                 ) : (
                   <button
                     onClick={startEditNotes}
-                    className="w-full text-left text-xs px-2.5 py-2 rounded-md border border-dashed border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                    className="w-full text-left text-xs px-2.5 py-2 min-h-10 rounded-md border border-dashed border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50 transition-colors flex items-center gap-2"
                   >
                     <NoteIcon sx={{ fontSize: 14, color: '#9ca3af' }} />
                     {sunbed.internalNotes ? (
@@ -598,7 +598,7 @@ function BoardCard({ item, expanded, onToggle }: {
                       fontSize: '0.75rem',
                       lineHeight: 1.5,
                       px: 1.5,
-                      minHeight: 30,
+                      minHeight: { xs: 40, sm: 30 },
                     }}
                   >
                     {t(a.labelKey as any)}
@@ -741,9 +741,9 @@ export default function TodayBoardView({ data }: { data: TodayBoardData }) {
   const completedCount = laneItems['completed']?.length ?? 0
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6">
+    <div className="page-container py-4 sm:py-6">
       {/* Header row */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-900">{t('title')}</h1>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -754,15 +754,15 @@ export default function TodayBoardView({ data }: { data: TodayBoardData }) {
         </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
           <TextField
             value={searchInput}
             onChange={e => handleSearchChange(e.target.value)}
             placeholder={t('searchPlaceholder')}
             size="small"
             sx={{
-              width: 240,
-              '& .MuiInputBase-root': { fontSize: '0.85rem', borderRadius: '8px' },
+              width: { xs: '100%', sm: 240 },
+              '& .MuiInputBase-root': { fontSize: '0.85rem', borderRadius: '8px', minHeight: { xs: 44, sm: 'auto' } },
               '& .MuiInputBase-input::placeholder': { fontSize: '0.82rem' },
             }}
             slotProps={{
@@ -788,7 +788,7 @@ export default function TodayBoardView({ data }: { data: TodayBoardData }) {
           />
 
           {!isSearching && data.sites.length > 1 && (
-            <FormControl size="small" sx={{ minWidth: 160 }}>
+            <FormControl size="small" sx={{ minWidth: 160, width: { xs: '100%', sm: 'auto' } }}>
               <Select
                 value={selectedSiteId}
                 onChange={e => setSelectedSiteId(e.target.value)}
@@ -830,7 +830,7 @@ export default function TodayBoardView({ data }: { data: TodayBoardData }) {
           )}
 
           {!searchLoading && searchResults && searchResults.length > 0 && (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 md:grid md:grid-cols-2 xl:grid-cols-3 md:gap-3 md:items-start">
               {searchResults.map(item => (
                 <BoardCard
                   key={item.id}
@@ -884,7 +884,9 @@ export default function TodayBoardView({ data }: { data: TodayBoardData }) {
 
           {/* ── Swim lanes ── */}
           {totalCount > 0 && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            /* Lanes: stacked on phones; arriving + on-site side by side on
+               tablets with completed full-width below; three columns from lg. */
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start md:[&>*:last-child]:col-span-2 lg:[&>*:last-child]:col-span-1">
               {LANES.map(lane => {
                 const items = laneItems[lane.key] ?? []
                 const colors = laneColors[lane.accentColor]!

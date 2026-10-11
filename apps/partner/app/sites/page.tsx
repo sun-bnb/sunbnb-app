@@ -38,10 +38,10 @@ function StatusBadge({ status, t }: { status: string | null | undefined; t: T })
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
       isActive
-        ? 'bg-emerald-50 text-emerald-700'
+        ? 'bg-green-50 text-green-700'
         : 'bg-gray-100 text-gray-500'
     }`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+      <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-green-500' : 'bg-gray-400'}`} />
       {isActive ? t('active') : (status || t('draft'))}
     </span>
   )
@@ -86,7 +86,7 @@ function AddSiteCard({ allowed, tier, currentCount, maxSites, t }: {
     return (
       <Link
         href="/sites/create"
-        className="group flex flex-col items-center justify-center bg-white rounded-xl border-2 border-dashed border-gray-300 hover:border-gray-400 hover:bg-gray-50 transition-all duration-200 min-h-[260px]"
+        className="group flex flex-col items-center justify-center bg-white rounded-xl border-2 border-dashed border-gray-300 hover:border-gray-400 hover:bg-gray-50 transition-all duration-200 min-h-[120px] sm:min-h-[260px]"
       >
         <div className="w-12 h-12 rounded-full bg-gray-100 group-hover:bg-gray-200 flex items-center justify-center mb-3 transition-colors">
           <svg className="w-6 h-6 text-gray-400 group-hover:text-gray-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -101,7 +101,7 @@ function AddSiteCard({ allowed, tier, currentCount, maxSites, t }: {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 min-h-[260px] opacity-60">
+    <div className="flex flex-col items-center justify-center bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 min-h-[120px] sm:min-h-[260px] opacity-60">
       <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
         <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
@@ -247,7 +247,7 @@ export default async function Sites() {
     ).ready
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-5xl">
+    <div className="page-container py-6">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-lg font-semibold text-gray-900">{t('title')}</h1>
@@ -257,7 +257,7 @@ export default async function Sites() {
       </div>
 
       {/* Grid — Add-site card is always the first element */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 xl:gap-5">
         <AddSiteCard
           allowed={siteLimit.allowed}
           tier={siteLimit.tier}

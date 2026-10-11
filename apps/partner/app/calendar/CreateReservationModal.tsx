@@ -96,7 +96,7 @@ export default function CreateReservationModal({
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 sm:p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-white w-full sm:max-w-lg sm:rounded-xl rounded-t-2xl shadow-xl overflow-hidden max-h-[92vh] sm:max-h-[90vh] flex flex-col">
+      <div className="bg-white w-full sm:max-w-lg md:max-w-2xl sm:rounded-xl rounded-t-2xl shadow-xl overflow-hidden max-h-[92dvh] sm:max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b-2 border-gray-200">
           <h2 className="text-lg font-bold text-gray-900">{t('title')}</h2>
@@ -129,7 +129,8 @@ export default function CreateReservationModal({
             </div>
           </div>
 
-          {/* Guest info */}
+          {/* Guest info — name + contact side by side from md */}
+          <div className="space-y-4 sm:space-y-5 md:space-y-0 md:grid md:grid-cols-2 md:gap-3">
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1.5">{t('guestName')}</label>
             <input
@@ -149,6 +150,7 @@ export default function CreateReservationModal({
               placeholder={t('optional')}
               className="w-full border-2 rounded-xl px-4 py-3 text-base"
             />
+          </div>
           </div>
 
           {/* Notes */}
@@ -215,7 +217,7 @@ export default function CreateReservationModal({
                 {t('noSunbedsFree')}
               </div>
             ) : (
-              <div className="grid grid-cols-5 gap-2 max-h-[220px] overflow-y-auto p-1">
+              <div className="grid grid-cols-5 md:grid-cols-8 gap-2 max-h-[220px] md:max-h-[280px] overflow-y-auto p-1">
                 {availableItems.map(item => (
                   <button
                     key={item.id}

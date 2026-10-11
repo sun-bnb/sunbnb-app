@@ -95,7 +95,9 @@ export default async function RestaurantOrdersPage(
   }
 
   return (
-    <div className="w-screen max-w-6xl">
+    // w-full, not w-screen: 100vw ignores the scrollbar and any parent gutter,
+    // which pushed the kitchen dashboard into a horizontal page scroll.
+    <div className="page-container">
       <OrdersView scope={{ kind: 'restaurant', id: restaurant.id }} orders={orders} tableMap={tableMap} accessKey={accessKey} />
     </div>
   )

@@ -525,7 +525,7 @@ function OrderCard({
             </div>
           </div>
         </div>
-        <div className="text-right">
+        <div className="text-right shrink-0 pl-2">
           <div className="text-lg font-bold text-gray-900">€{order.totalPrice.toFixed(2)}</div>
         </div>
       </div>
@@ -702,16 +702,18 @@ export default function Orders({
         ))}
       </div>
 
-      {/* Open Tabs panel — 1 col on phones, 2 on tablets, 3 on wide screens */}
+      {/* Open Tabs panel — 1 col on phones, 2 on tablets, 3 on wide screens,
+          4 when the board itself is ≥1400px wide (container query: this view
+          is also mounted in the narrower restaurant orders frame). */}
       {activeTab === 'tabs' && (
-        <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+        <div className="@container flex-1 overflow-y-auto p-4 bg-gray-50">
           {openTabs.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-gray-400">
               <div className="text-5xl mb-3">🧾</div>
               <p className="text-sm font-medium">{t('tabsEmpty')}</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 items-start">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 @min-[1400px]:grid-cols-4 gap-3 items-start">
               {openTabs.map(tab => (
                 <TabCard
                   key={tab.id}
@@ -728,7 +730,7 @@ export default function Orders({
 
       {/* Order list — same responsive grid */}
       {activeTab !== 'tabs' && (
-        <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+        <div className="@container flex-1 overflow-y-auto p-4 bg-gray-50">
           {tabOrders.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-gray-400">
               <div className="text-5xl mb-3">
@@ -742,7 +744,7 @@ export default function Orders({
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 items-start">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 @min-[1400px]:grid-cols-4 gap-3 items-start">
               {tabOrders.map(order => (
                 <OrderCard
                   key={order.id}

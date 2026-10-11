@@ -16,7 +16,10 @@
     "subscription": "Subscription",
     "signOut": "Sign out",
     "language": "Language",
-    "devices": "Devices"
+    "devices": "Devices",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "accountMenu": "Account menu"
   },
   "App": {
     "mollieNotConnected": "Mollie Payments not connected. Connect your Mollie account to accept online payments.",
@@ -467,7 +470,8 @@
     "instructions": "Drag an element onto the canvas to place it.",
     "totalElements": "{count, plural, one {# element} other {# elements}}",
     "totalSunbedsLabel": "{count, plural, one {# sunbed} other {# sunbeds}}",
-    "parcelsLabel": "{count, plural, one {# parcel} other {# parcels}}"
+    "parcelsLabel": "{count, plural, one {# parcel} other {# parcels}}",
+    "bestOnLargerScreen": "The layout editor works best on a larger screen."
   },
   "ReadinessChecklist": {
     "title": "Things to complete before going live",

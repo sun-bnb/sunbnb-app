@@ -18,14 +18,14 @@ export default function StepDone({ data }: { data: WizardData }) {
       <p className="text-sm text-gray-500 text-center max-w-md mb-6">
         <strong>{data.name}</strong> {t('siteCreatedDescription')}
       </p>
-      <div className="flex gap-3">
+      <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
         <Link href={`/sites/${data.siteId}/general`}>
-          <Button variant="contained" sx={{ textTransform: 'none' }}>
+          <Button variant="contained" fullWidth sx={{ textTransform: 'none' }}>
             {t('goToSettings')}
           </Button>
         </Link>
         <Link href={`/sites/${data.siteId}/inventory`}>
-          <Button variant="outlined" sx={{ textTransform: 'none' }}>
+          <Button variant="outlined" fullWidth sx={{ textTransform: 'none' }}>
             {t('setUpInventory')}
           </Button>
         </Link>

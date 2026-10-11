@@ -136,7 +136,7 @@ export default function Content() {
   const displayImage = preview || site.image
 
   return (
-    <div className="pt-2">
+    <div className="pt-2 px-4 min-[800px]:px-0">
 
       {/* Save status indicator */}
       <div className={`flex items-center justify-center gap-2 px-3 py-2 rounded mb-4 text-sm transition-all ${
@@ -150,6 +150,11 @@ export default function Content() {
         {saveStatus === 'error' && <><WarningAmberIcon fontSize="small" /> {t('errorSaving')}</>}
         {saveStatus === 'idle' && <><CloudDoneIcon fontSize="small" /> {t('upToDate')}</>}
       </div>
+
+      {/* Two columns from lg: photo + description left, services right.
+          Source order = phone order. */}
+      <div className="lg:grid lg:grid-cols-2 lg:gap-x-10 lg:items-start">
+      <div className="min-w-0">
 
       {/* Cover photo */}
       <div className="mb-5">
@@ -169,7 +174,7 @@ export default function Content() {
             <img
               src={displayImage}
               alt="Cover"
-              className={`w-full h-48 object-cover transition-opacity ${uploading || dragging ? 'opacity-50' : ''}`}
+              className={`w-full h-48 lg:h-56 object-cover transition-opacity ${uploading || dragging ? 'opacity-50' : ''}`}
             />
             {uploading && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/20">
@@ -182,7 +187,8 @@ export default function Content() {
                 <p className="text-sm font-medium text-blue-600 mt-1">{t('dropToReplace')}</p>
               </div>
             )}
-            <div className={`absolute inset-0 bg-black/0 hover:bg-black/30 transition-all flex items-center justify-center opacity-0 hover:opacity-100 ${uploading || dragging ? 'pointer-events-none' : ''}`}>
+            {/* Touch screens have no hover: below sm the Replace button sits in the corner, always visible. */}
+            <div className={`absolute inset-0 bg-black/0 sm:hover:bg-black/30 transition-all flex items-end sm:items-center justify-end sm:justify-center p-2 sm:p-0 opacity-100 sm:opacity-0 sm:hover:opacity-100 ${uploading || dragging ? 'pointer-events-none' : ''}`}>
               <Button
                 variant="contained"
                 size="small"
@@ -206,7 +212,7 @@ export default function Content() {
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onClick={() => fileRef.current?.click()}
-            className={`relative rounded-lg border-2 border-dashed p-8 text-center cursor-pointer transition-all ${
+            className={`relative rounded-lg border-2 border-dashed p-6 sm:p-8 text-center cursor-pointer transition-all ${
               dragging
                 ? 'border-blue-400 bg-blue-50'
                 : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100'
@@ -252,7 +258,10 @@ export default function Content() {
         />
       </div>
 
-      <Divider sx={{ mb: 3 }} />
+      </div>
+      <div className="min-w-0">
+
+      <Divider sx={{ mb: 3, display: { lg: 'none' } }} />
 
       {/* Services */}
       <div className="mb-5">
@@ -260,7 +269,7 @@ export default function Content() {
         <p className="text-xs text-gray-500 mb-3">
           {t('onSiteServicesDesc')}
         </p>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-2">
           {ALL_SERVICES.map(service => {
             const selected = services.includes(service.value)
             return (
@@ -290,6 +299,8 @@ export default function Content() {
             )
           })}
         </div>
+      </div>
+      </div>
       </div>
     </div>
   )

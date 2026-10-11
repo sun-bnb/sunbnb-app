@@ -85,89 +85,92 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-10">
+      <div className="w-full max-w-sm sm:max-w-md">
         <div className="flex items-center gap-2 justify-center mb-10">
           <Image alt="Sunbnb" src={sunbnbLogo} className="w-8 h-8" />
           <span className="text-sm font-bold text-gray-900">sunbnb</span>
           <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider ml-1">Partner</span>
         </div>
 
-        {submitted ? (
-          <div className="text-center">
-            <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-6 h-6 text-emerald-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-              </svg>
-            </div>
-            <h2 className="text-xl font-bold text-gray-900">{t('successTitle')}</h2>
-            <p className="mt-2 text-sm text-gray-500 leading-relaxed">
-              {t('successBody')}
-            </p>
-            <Link href="/sign-in" className="inline-block mt-6 text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors">
-              {t('backToSignIn')}
-            </Link>
-          </div>
-        ) : (
-          <>
+        {/* Phones: bare form on the page. Tablet/desktop: framed card so it doesn't float. */}
+        <div className="sm:rounded-2xl sm:border sm:border-gray-200 sm:bg-white sm:p-8 sm:shadow-xs">
+          {submitted ? (
             <div className="text-center">
-              <h2 className="text-2xl font-bold text-gray-900 tracking-tight">{t('title')}</h2>
-              <p className="mt-1.5 text-sm text-gray-500">{t('subtitle')}</p>
-            </div>
-
-            {error && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600">
-                {error}
+              <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-emerald-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                </svg>
               </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="mt-8 space-y-3">
-              <div>
-                <label htmlFor="reset-email" className="block text-xs font-medium text-gray-600 mb-1.5">{t('email')}</label>
-                <div className="relative">
-                  <input
-                    id="reset-email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    autoComplete="email"
-                    required
-                    className={`w-full px-3.5 py-2.5 text-sm bg-white border rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-400/30 transition-all placeholder:text-gray-300 text-gray-900 pr-9 ${inputBorder(emailState)}`}
-                  />
-                  {emailState !== 'idle' && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                      {emailState === 'valid'
-                        ? <span className="text-emerald-500"><CheckIcon /></span>
-                        : <span className="text-red-400"><XIcon /></span>
-                      }
-                    </span>
-                  )}
-                </div>
-              </div>
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-2.5 text-sm font-semibold text-white bg-gray-900 rounded-xl hover:bg-gray-800 transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoading ? (
-                  <span className="inline-flex items-center gap-2">
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    {t('sending')}
-                  </span>
-                ) : (
-                  t('send')
-                )}
-              </button>
-            </form>
-
-            <div className="mt-6 text-center">
-              <Link href="/sign-in" className="text-sm text-gray-400 hover:text-gray-600 transition-colors">
+              <h2 className="text-xl font-bold text-gray-900">{t('successTitle')}</h2>
+              <p className="mt-2 text-sm text-gray-500 leading-relaxed">
+                {t('successBody')}
+              </p>
+              <Link href="/sign-in" className="inline-block mt-6 py-2 text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors">
                 {t('backToSignIn')}
               </Link>
             </div>
-          </>
-        )}
+          ) : (
+            <>
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-gray-900 tracking-tight">{t('title')}</h2>
+                <p className="mt-1.5 text-sm text-gray-500">{t('subtitle')}</p>
+              </div>
+
+              {error && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600">
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="mt-8 space-y-3">
+                <div>
+                  <label htmlFor="reset-email" className="block text-xs font-medium text-gray-600 mb-1.5">{t('email')}</label>
+                  <div className="relative">
+                    <input
+                      id="reset-email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                      required
+                      className={`w-full px-3.5 py-2.5 text-base sm:text-sm bg-white border rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-400/30 transition-all placeholder:text-gray-300 text-gray-900 pr-9 ${inputBorder(emailState)}`}
+                    />
+                    {emailState !== 'idle' && (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                        {emailState === 'valid'
+                          ? <span className="text-emerald-500"><CheckIcon /></span>
+                          : <span className="text-red-400"><XIcon /></span>
+                        }
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-2.5 text-sm font-semibold text-white bg-gray-900 rounded-xl hover:bg-gray-800 transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? (
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      {t('sending')}
+                    </span>
+                  ) : (
+                    t('send')
+                  )}
+                </button>
+              </form>
+
+              <div className="mt-6 text-center">
+                <Link href="/sign-in" className="inline-block py-2 text-sm text-gray-400 hover:text-gray-600 transition-colors">
+                  {t('backToSignIn')}
+                </Link>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )

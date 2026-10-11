@@ -16,7 +16,7 @@ export default async function Site() {
   }
   
   return (
-    <div className="container mx-auto max-w-[768px]">
+    <div className="page-container">
       <CreateSiteView  site={site} apiKey={apiKey} />
     </div>
   )

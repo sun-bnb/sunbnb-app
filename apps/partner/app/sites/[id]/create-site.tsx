@@ -61,7 +61,7 @@ export default function CreateSite({ site, apiKey }: { site: SiteProps, apiKey: 
           <div className="mt-4 mb-2">
             Site location
           </div>
-          <div className="h-[500px]">
+          <div className="h-[360px] sm:h-[500px]">
             <SafeAPIProvider apiKey={apiKey}>
               <SafeMap mapId={'7bd5d546975a15b5'}
                 defaultZoom={9}
@@ -96,8 +96,8 @@ export default function CreateSite({ site, apiKey }: { site: SiteProps, apiKey: 
   )
 
   return (
-    <div className="container mx-auto px-4 mt-2">
-      { generalTab }
+    <div className="page-container mt-2">
+      <div className="max-w-3xl">{ generalTab }</div>
     </div>
   )
 

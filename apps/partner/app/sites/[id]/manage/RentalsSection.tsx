@@ -29,8 +29,8 @@ export default function RentalsSection({
   return (
     <div className="mt-6 mb-4">
       {/* Header */}
-      <div className="flex items-center justify-between mb-3 px-1">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 mb-3 px-1">
+        <div className="flex items-center gap-2 min-w-0">
           <span className="text-xl font-black">🏄</span>
           {bookings.length > 0 && (
             <span className="text-base font-black text-gray-600 dark:text-gray-300">
@@ -56,7 +56,7 @@ export default function RentalsSection({
           {t('noRentals')}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
           {bookings.map(booking => (
             <RentalBookingCard
               key={booking.id}

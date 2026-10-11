@@ -1,5 +1,6 @@
 'use client'
 
+import { computeOpenZoom } from './open-zoom'
 import React, { useEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -304,10 +305,15 @@ export default function ManageView({
     const vp = viewportRef.current
     const { w: cw } = contentSizeRef.current
     if (!vp || !cw) return
-    // Open at 80% of fit-to-width so the whole parcel shows with side margins,
-    // not edge-to-edge — but never below MIN_OPEN_ZOOM, so a parcel much wider
-    // than the viewport opens at a readable zoom (and pans) instead of tiny.
-    const fit = Math.min(ZOOM_MAX, Math.max(MIN_OPEN_ZOOM, (vp.clientWidth / cw) * DEFAULT_ZOOM_RATIO))
+    // Phone: fill the width but keep seats tappable (pans if wider); desktop/
+    // tablet: 80% of fit-to-width. See open-zoom.ts.
+    const fit = computeOpenZoom({
+      viewportW: vp.clientWidth,
+      contentW: cw,
+      zoomMax: ZOOM_MAX,
+      desktopRatio: DEFAULT_ZOOM_RATIO,
+      desktopMin: MIN_OPEN_ZOOM,
+    })
     commit(fit, 0, 0) // clampAxis centers
   }
 
@@ -994,9 +1000,15 @@ export default function ManageView({
   }, [effectiveParcel, showRentals])
 
   // ── Render ────────────────────────────────────────────────────────────────
+  // Desktop (lg+): the seat detail and the multiselect sheet dock as a right
+  // side panel instead of a bottom sheet, so the grid (the main tool) stays
+  // visible and usable beside them. The root reserves the panel's width and
+  // the right-hand FABs shift left of it. Phones/tablets keep the bottom sheet.
+  const sidePanelOpen = !!liveSelectedItem || selectedIds.length > 0
+  const fabRightClass = sidePanelOpen ? 'right-6 lg:right-[30.5rem] xl:right-[34.5rem]' : 'right-6'
   return (
     <div
-      className={`flex flex-col h-[calc(100dvh-var(--impersonation-offset,0px))] overflow-hidden px-2 pt-2 mx-auto w-full max-w-(--breakpoint-lg) transition-colors dark:bg-gray-950 dark:text-gray-100 ${isDark ? 'dark' : ''}`}
+      className={`flex flex-col h-[calc(100dvh-var(--impersonation-offset,0px))] overflow-hidden px-2 pt-2 lg:px-4 lg:pt-3 mx-auto w-full max-w-(--breakpoint-lg) lg:max-w-none transition-colors dark:bg-gray-950 dark:text-gray-100 ${sidePanelOpen ? 'lg:pr-[29rem] xl:pr-[33rem]' : ''} ${isDark ? 'dark' : ''}`}
     >
       {/* Back link to manage landing — shown only when backHref is provided.
           On the sunbed view, seat stats (O/R/Free/Comp) are right-aligned on
@@ -1089,7 +1101,7 @@ export default function ManageView({
       {/* One destination at a time — the selected parcel (pan/zoom canvas), or
           the rentals view (normal vertical scroll). */}
       {showRentals ? (
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto pb-28">
           <RentalsSection
             siteId={site.id!}
             accessKey={accessKey}
@@ -1157,7 +1169,7 @@ export default function ManageView({
           onClick={() => setShowGuests(true)}
           aria-label={t('guests')}
           title={t('guests')}
-          className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-accent dark:bg-gray-700 text-white text-2xl shadow-lg flex items-center justify-center hover:bg-accent-hover dark:hover:bg-gray-600 active:scale-95 transition select-none"
+          className={`fixed bottom-6 ${fabRightClass} z-40 w-14 h-14 rounded-full bg-accent dark:bg-gray-700 text-white text-2xl shadow-lg flex items-center justify-center hover:bg-accent-hover dark:hover:bg-gray-600 active:scale-95 transition select-none`}
         >
           <span aria-hidden="true">🔍</span>
         </button>
@@ -1171,7 +1183,7 @@ export default function ManageView({
           onClick={() => selectView(showRentals ? backParcel! : 'rentals')}
           aria-label={showRentals ? t('parcel', { n: '' }).trim() : t('rentals')}
           title={showRentals ? t('parcel', { n: '' }).trim() : t('rentals')}
-          className="fixed bottom-24 right-6 z-40 w-14 h-14 rounded-full bg-accent dark:bg-gray-700 text-white text-2xl shadow-lg flex items-center justify-center hover:bg-accent-hover dark:hover:bg-gray-600 active:scale-95 transition select-none"
+          className={`fixed bottom-24 ${fabRightClass} z-40 w-14 h-14 rounded-full bg-accent dark:bg-gray-700 text-white text-2xl shadow-lg flex items-center justify-center hover:bg-accent-hover dark:hover:bg-gray-600 active:scale-95 transition select-none`}
         >
           <span aria-hidden="true">{showRentals ? '⛱️' : '🏄'}</span>
         </button>
@@ -1279,9 +1291,9 @@ export default function ManageView({
           count + the bulk verbs that apply to the current composition; the × ends
           multiselect (same lifecycle as the selection). */}
       {selectedIds.length > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-40 flex justify-center pointer-events-none">
+        <div className="fixed inset-x-0 bottom-0 z-40 flex justify-center pointer-events-none lg:inset-x-auto lg:top-[var(--impersonation-offset,0px)] lg:right-0 lg:w-[28rem] xl:w-[32rem] lg:items-stretch">
           <div
-            className="pointer-events-auto bg-white dark:bg-gray-900 dark:text-gray-100 w-full max-w-lg rounded-t-2xl border-t border-x border-gray-200 dark:border-gray-800 p-4 sm:p-5 shadow-xl animate-slide-up"
+            className="pointer-events-auto bg-white dark:bg-gray-900 dark:text-gray-100 w-full max-w-lg max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl border-t border-x border-gray-200 dark:border-gray-800 p-4 sm:p-5 lg:p-6 shadow-xl animate-slide-up lg:max-w-none lg:max-h-none lg:h-full lg:rounded-none lg:border-t-0 lg:border-r-0 lg:animate-none"
             style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom, 2rem))' }}
           >
             {/* Header — count where the seat number sits in BedDetail */}

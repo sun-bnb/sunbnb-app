@@ -304,10 +304,11 @@ export default function TrendsView({
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col">
 
       {/* Page header — mirrors DailySummaryView */}
-      <div className="bg-white dark:bg-gray-900 border-b-2 border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center gap-3">
+      <div className="bg-white dark:bg-gray-900 border-b-2 border-gray-200 dark:border-gray-700 px-4 py-3">
+        <div className="max-w-lg md:max-w-3xl xl:max-w-6xl mx-auto w-full flex items-center gap-3">
         <Link
           href={backHref}
-          className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors shrink-0"
+          className="flex items-center gap-1.5 min-h-10 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors shrink-0"
           aria-label={t('backToMenu')}
         >
           <svg
@@ -328,20 +329,21 @@ export default function TrendsView({
           </h1>
           <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 truncate">{siteName}</p>
         </div>
+        </div>
       </div>
 
       {/* Body */}
-      <div className="flex-1 px-4 py-4 space-y-4 max-w-lg mx-auto w-full">
+      <div className="flex-1 px-4 py-4 lg:py-6 space-y-4 max-w-lg md:max-w-3xl xl:max-w-6xl mx-auto w-full">
 
         {/* ── Window selector ── */}
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {WINDOWS.map(({ days, label }) => (
             <button
               key={days}
               type="button"
               onClick={() => handleWindowChange(days)}
               aria-pressed={selectedDays === days}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+              className={`px-3 min-h-10 sm:min-h-0 sm:py-1.5 text-xs font-semibold rounded-lg transition-colors ${
                 selectedDays === days
                   ? 'bg-accent text-white'
                   : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -367,7 +369,7 @@ export default function TrendsView({
           <>
             {/* ── Metric toggle (segmented control) ── */}
             <div
-              className="flex rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden"
+              className="flex md:max-w-md rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden"
               role="group"
               aria-label={t('metricToggleLabel')}
             >
@@ -377,7 +379,7 @@ export default function TrendsView({
                   type="button"
                   onClick={() => setTrendMetric(m)}
                   aria-pressed={trendMetric === m}
-                  className={`flex-1 py-2 text-xs font-semibold transition-colors ${
+                  className={`flex-1 min-w-0 px-1 min-h-10 sm:min-h-0 sm:py-2 text-xs font-semibold transition-colors ${
                     trendMetric === m
                       ? 'bg-accent text-white'
                       : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -395,16 +397,16 @@ export default function TrendsView({
               </div>
             ) : (
               <>
-                <div className={`grid gap-3 ${trendViewModel.tiles.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                <div className={`grid gap-2 sm:gap-3 lg:gap-4 ${trendViewModel.tiles.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
                   {trendViewModel.tiles.map((tile) => (
                     <div
                       key={tile.label}
-                      className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3"
+                      className="min-w-0 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-2.5 sm:p-3 lg:p-4"
                     >
                       <div className="text-xs text-gray-500 dark:text-gray-400 font-medium leading-tight">{tile.label}</div>
-                      <div className="text-lg font-black text-gray-900 dark:text-gray-100 mt-0.5 tabular-nums">{tile.value}</div>
+                      <div className="text-base sm:text-lg lg:text-2xl font-black text-gray-900 dark:text-gray-100 mt-0.5 tabular-nums break-words">{tile.value}</div>
                       {tile.date && (
-                        <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{formatDay(tile.date)}</div>
+                        <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{formatDay(tile.date)}</div>
                       )}
                     </div>
                   ))}
@@ -412,7 +414,7 @@ export default function TrendsView({
 
                 {/* ── Revenue channel legend ── */}
                 {trendMetric === 'revenue' && (
-                  <div className="flex items-center gap-4 px-1">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
                     <div className="flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-xs shrink-0" style={{ backgroundColor: '#16a34a' }} />
                       <span className="text-xs text-gray-500 dark:text-gray-400">{t('channelCash')}</span>
@@ -428,9 +430,12 @@ export default function TrendsView({
                   </div>
                 )}
 
+                {/* ── Chart + daily breakdown — stacked on phones/tablets, side by
+                    side at xl (the chart takes the wider column; a lone chart spans). */}
+                <div className="space-y-4 xl:space-y-0 xl:grid xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] xl:gap-4 xl:items-start xl:[&>*:only-child]:col-span-2">
                 {/* ── Chart ── */}
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
-                  <div className="h-44">
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3 lg:p-4">
+                  <div className="h-44 md:h-64 xl:h-80">
                     <SafeResponsiveContainer width="100%" height="100%">
                       <SafeBarChart
                         data={trendViewModel.isStacked ? data.revenue.rows : trendViewModel.bars}
@@ -489,13 +494,13 @@ export default function TrendsView({
                     <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">
                       {t('dailyBreakdown')}
                     </div>
-                    <div className="max-h-64 overflow-y-auto">
+                    <div className="max-h-64 xl:max-h-[18.5rem] overflow-y-auto">
                       {[...data.revenue.rows].reverse().map((row) => {
                         const seats = seatsByDate.get(row.date) ?? 0
                         return (
                           <div
                             key={row.date}
-                            className="flex items-center justify-between py-1.5 border-b border-gray-100 dark:border-gray-700 last:border-b-0 text-sm"
+                            className="flex items-center justify-between gap-3 py-1.5 border-b border-gray-100 dark:border-gray-700 last:border-b-0 text-sm"
                           >
                             <div className="flex flex-col min-w-0">
                               <span className="text-gray-600 dark:text-gray-400">{formatDayLong(row.date)}</span>
@@ -505,7 +510,7 @@ export default function TrendsView({
                                 </span>
                               )}
                             </div>
-                            <span className="font-semibold text-gray-900 dark:text-gray-100 tabular-nums">
+                            <span className="shrink-0 font-semibold text-gray-900 dark:text-gray-100 tabular-nums">
                               €{row.total.toFixed(2)}
                             </span>
                           </div>
@@ -514,6 +519,7 @@ export default function TrendsView({
                     </div>
                   </div>
                 )}
+                </div>
 
                 {/* ── CSV export ── */}
                 <div className="flex justify-end">
@@ -521,7 +527,7 @@ export default function TrendsView({
                     type="button"
                     onClick={downloadCsv}
                     disabled={downloading}
-                    className="text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 disabled:opacity-50 transition-colors"
+                    className="min-h-10 px-2 -mr-2 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 disabled:opacity-50 transition-colors"
                   >
                     {downloading ? '…' : `↓ ${t('downloadCsv')}`}
                   </button>

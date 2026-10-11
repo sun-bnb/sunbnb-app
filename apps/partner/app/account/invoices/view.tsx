@@ -32,16 +32,18 @@ export default function CommissionInvoicesView(props: Props) {
   const total = props.invoices.reduce((n, i) => n + i.totalAmount, 0)
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-10">
+    <div className="page-container py-6 sm:py-10">
       <h1 className="text-xl font-bold text-gray-900 mb-1">Commission invoices</h1>
-      <p className="text-xs text-gray-400 mb-8">
+      <p className="text-xs text-gray-400 mb-8 max-w-2xl">
         Invoices Sunbnb has issued to you for platform commission. These are separate
         documents from your own sales receipts — your sales are invoiced gross, and the
         commission is billed to you here.
       </p>
 
+      {/* lg+: months become a sticky side rail beside the invoice table. */}
+      <div className={props.months.length > 1 ? 'lg:grid lg:grid-cols-[12rem_minmax(0,1fr)] lg:items-start lg:gap-8' : ''}>
       {props.months.length > 1 && (
-        <div className="flex flex-wrap gap-2 mb-6">
+        <nav aria-label="Months" className="flex flex-wrap gap-2 mb-6 lg:mb-0 lg:flex-col lg:flex-nowrap lg:sticky lg:top-6">
           {props.months.map((m) => {
             const active = m.year === props.year && m.month === props.month
             return (
@@ -50,8 +52,8 @@ export default function CommissionInvoicesView(props: Props) {
                 href={`/account/invoices?year=${m.year}&month=${m.month}`}
                 className={
                   active
-                    ? 'rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white'
-                    : 'rounded-md border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50'
+                    ? 'rounded-md bg-accent px-3 py-2.5 sm:py-1.5 text-xs font-medium text-white lg:flex lg:justify-between'
+                    : 'rounded-md border border-gray-200 px-3 py-2.5 sm:py-1.5 text-xs text-gray-600 hover:bg-gray-50 lg:flex lg:justify-between'
                 }
               >
                 {monthLabel(m.year, m.month)}
@@ -61,11 +63,11 @@ export default function CommissionInvoicesView(props: Props) {
               </Link>
             )
           })}
-        </div>
+        </nav>
       )}
 
-      <div className="card">
-        <div className="flex items-baseline justify-between mb-4">
+      <div className="card min-w-0">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-4">
           <h2 className="text-sm font-semibold text-gray-900">
             {monthLabel(props.year, props.month)}
           </h2>
@@ -82,7 +84,41 @@ export default function CommissionInvoicesView(props: Props) {
             No commission invoices for this month.
           </p>
         ) : (
-          <table className="w-full text-xs">
+          <>
+          {/* Phone: one card per invoice — five numeric columns don't fit 360px. */}
+          <ul className="sm:hidden divide-y divide-gray-100 -mx-4 border-t border-gray-100">
+            {props.invoices.map((inv) => (
+              <li key={inv.invoiceId}>
+                <Link
+                  href={`/account/invoices/${inv.invoiceId}`}
+                  className="flex items-start justify-between gap-3 px-4 py-3 hover:bg-gray-50"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-gray-900 break-all">
+                      {inv.invoiceNumber ?? '(no number)'}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
+                      <span>{inv.invoicedAt.slice(0, 10)}</span>
+                      {inv.reverseCharge && (
+                        <span className="badge bg-blue-50 border-blue-200 text-blue-700">
+                          reverse charge
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="text-sm font-medium text-gray-900">
+                      {inv.totalAmount.toFixed(2)} €
+                    </div>
+                    <div className="mt-0.5 text-xs text-gray-500">
+                      {inv.totalCharge.toFixed(2)} + {inv.totalTax.toFixed(2)} VAT
+                    </div>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <table className="hidden sm:table w-full text-xs lg:text-sm">
             <thead>
               <tr className="text-gray-500 border-b border-gray-200">
                 <th className="text-left py-2 font-medium">Number</th>
@@ -120,7 +156,9 @@ export default function CommissionInvoicesView(props: Props) {
               ))}
             </tbody>
           </table>
+          </>
         )}
+      </div>
       </div>
     </div>
   )

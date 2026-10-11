@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import CreateReservationModal from './CreateReservationModal'
@@ -111,6 +111,15 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
   const [loadingDay, setLoadingDay] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
 
+  // Below lg the day detail renders under the calendar — on a phone that is
+  // below the fold, so bring it into view when a day is picked.
+  const mobileDayRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!selectedDay || !mobileDayRef.current) return
+    if (typeof window === 'undefined' || !window.matchMedia('(max-width: 1023px)').matches) return
+    mobileDayRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [selectedDay])
+
   const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`
   const selectedSite = sites.find(s => s.id === siteId)
 
@@ -192,10 +201,10 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
   const todayStr = new Date().toISOString().slice(0, 10)
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-5xl">
+    <div className="page-container py-4 sm:py-6">
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
         <div>
           <h1 className="text-lg font-semibold text-gray-900">{t('title')}</h1>
           <p className="text-sm text-gray-500 mt-0.5">{t('subtitle')}</p>
@@ -203,11 +212,11 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
 
         {/* Site selector */}
         {sites.length > 1 && (
-          <div className="relative">
+          <div className="relative w-full sm:w-auto">
             <select
               value={siteId}
               onChange={(e) => { setSiteId(e.target.value); setSelectedDay(null) }}
-              className="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-8 py-2 text-sm text-gray-900 focus:outline-hidden focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 transition-colors cursor-pointer"
+              className="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-8 py-2 min-h-10 w-full sm:w-auto text-sm text-gray-900 focus:outline-hidden focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 transition-colors cursor-pointer"
             >
               {sites.map(s => (
                 <option key={s.id} value={s.id}>{s.name}</option>
@@ -223,11 +232,11 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
       <div className="flex gap-4">
 
         {/* Calendar grid */}
-        <div className={`flex-1 bg-white rounded-xl border border-gray-200 overflow-hidden transition-all ${selectedDay ? 'lg:max-w-[calc(100%-320px)]' : ''}`}>
+        <div className={`flex-1 min-w-0 bg-white rounded-xl border border-gray-200 overflow-hidden transition-all ${selectedDay ? 'lg:max-w-[calc(100%-320px)] xl:max-w-[calc(100%-400px)]' : ''}`}>
 
           {/* Month nav */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between gap-2 px-3 sm:px-5 py-3 sm:py-4 border-b border-gray-100">
+            <div className="flex items-center gap-3 min-w-0">
               <h2 className="text-base font-semibold text-gray-900">
                 {t(MONTH_KEYS[month]!)} {year}
               </h2>
@@ -238,13 +247,13 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
             <div className="flex items-center gap-1">
               <button
                 onClick={goToToday}
-                className="px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
+                className="px-2.5 min-h-10 sm:min-h-0 sm:py-1 text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
               >
                 {t('today')}
               </button>
               <button
                 onClick={prevMonth}
-                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+                className="w-10 h-10 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
@@ -252,7 +261,7 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
               </button>
               <button
                 onClick={nextMonth}
-                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+                className="w-10 h-10 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
@@ -264,7 +273,7 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
           {/* Weekday headers */}
           <div className="grid grid-cols-7 border-b border-gray-100">
             {WEEKDAY_KEYS.map(k => (
-              <div key={k} className="py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wider">
+              <div key={k} className="py-2 text-center text-xs font-medium text-gray-400 uppercase sm:tracking-wider truncate">
                 {t(k)}
               </div>
             ))}
@@ -274,7 +283,7 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
           <div className="grid grid-cols-7">
             {/* Empty leading cells */}
             {Array.from({ length: startOffset }).map((_, i) => (
-              <div key={`empty-${i}`} className="min-h-[80px] border-b border-r border-gray-50 bg-gray-50/50" />
+              <div key={`empty-${i}`} className="min-h-14 sm:min-h-[80px] xl:min-h-[104px] border-b border-r border-gray-50 bg-gray-50/50" />
             ))}
 
             {/* Day cells */}
@@ -290,7 +299,7 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
                 <button
                   key={dateStr}
                   onClick={() => setSelectedDay(isSelected ? null : dateStr)}
-                  className={`min-h-[80px] p-1.5 border-b border-r border-gray-50 text-left transition-colors relative group
+                  className={`min-h-14 sm:min-h-[80px] xl:min-h-[104px] min-w-0 p-1 sm:p-1.5 border-b border-r border-gray-50 text-left transition-colors relative group
                     ${isWeekend ? 'bg-gray-50/30' : ''}
                     ${isSelected ? 'bg-gray-900/3 ring-1 ring-inset ring-gray-900/10' : 'hover:bg-gray-50'}
                   `}
@@ -312,8 +321,8 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
                     </div>
                   )}
                   {count > 0 && (
-                    <span className="text-[10px] text-gray-400 mt-0.5 block">
-                      {count} {t('res')}
+                    <span className="text-xs text-gray-400 mt-0.5 block truncate">
+                      {count}<span className="hidden sm:inline"> {t('res')}</span>
                     </span>
                   )}
                 </button>
@@ -322,13 +331,13 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
 
             {/* Trailing empty cells to complete the grid */}
             {Array.from({ length: (7 - ((startOffset + totalDays) % 7)) % 7 }).map((_, i) => (
-              <div key={`trail-${i}`} className="min-h-[80px] border-b border-r border-gray-50 bg-gray-50/50" />
+              <div key={`trail-${i}`} className="min-h-14 sm:min-h-[80px] xl:min-h-[104px] border-b border-r border-gray-50 bg-gray-50/50" />
             ))}
           </div>
 
           {/* Capacity legend */}
           {selectedSite && (
-            <div className="flex items-center gap-4 px-5 py-3 border-t border-gray-100 text-[11px] text-gray-400">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 sm:px-5 py-3 border-t border-gray-100 text-xs text-gray-400">
               <span className="flex items-center gap-1.5">
                 <span className="w-3 h-1.5 rounded-full bg-emerald-400" /> {t('legendAvailable')}
               </span>
@@ -342,7 +351,7 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
 
         {/* Day detail panel */}
         {selectedDay && (
-          <div className="hidden lg:flex lg:flex-col w-[300px] bg-white rounded-xl border border-gray-200 overflow-hidden shrink-0">
+          <div className="hidden lg:flex lg:flex-col w-[300px] xl:w-96 bg-white rounded-xl border border-gray-200 overflow-hidden shrink-0">
 
             {/* Panel header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
@@ -389,9 +398,9 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
                       onClick={() => router.push(`/reservations/${r.id}`)}
                       className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors"
                     >
-                      <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center justify-between gap-2 mb-1">
                         <span className="text-sm font-medium text-gray-900 truncate">{r.userName}</span>
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusBadge(r.status)}`}>
+                        <span className={`shrink-0 text-xs font-medium px-1.5 py-0.5 rounded-full ${statusBadge(r.status)}`}>
                           {r.status}
                         </span>
                       </div>
@@ -437,21 +446,22 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
 
       {/* Mobile day detail (below the calendar) */}
       {selectedDay && (
-        <div className="lg:hidden mt-4 bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div ref={mobileDayRef} className="lg:hidden mt-4 scroll-mt-4 bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <div>
               <h3 className="text-sm font-semibold text-gray-900">
                 {new Date(selectedDay + 'T12:00:00').toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short' })}
               </h3>
-              <p className="text-[11px] text-gray-400 mt-0.5">
-                {dayReservations.length} {dayReservations.length === 1 ? 'reservation' : 'reservations'}
+              <p className="text-xs text-gray-400 mt-0.5">
+                {t('reservations', { count: dayReservations.length })}
               </p>
             </div>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
-                title="Create reservation"
+                className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+                title={t('createReservation')}
+                aria-label={t('createReservation')}
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -459,7 +469,7 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
               </button>
               <button
                 onClick={() => setSelectedDay(null)}
-                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-400"
+                className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-400"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -479,20 +489,20 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
                   onClick={() => router.push(`/reservations/${r.id}`)}
                   className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors"
                 >
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between gap-2 mb-1">
                     <span className="text-sm font-medium text-gray-900 truncate">{r.userName}</span>
-                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusBadge(r.status)}`}>
+                    <span className={`shrink-0 text-xs font-medium px-1.5 py-0.5 rounded-full ${statusBadge(r.status)}`}>
                       {r.status}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-gray-400">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-400">
                     <span>{formatDateRange(r.from, r.to)}</span>
                     <span>·</span>
-                    <span>{daysBetween(r.from, r.to)} {daysBetween(r.from, r.to) === 1 ? 'day' : 'days'}</span>
+                    <span>{t('days', { count: daysBetween(r.from, r.to) })}</span>
                     {r.itemCount > 0 && (
                       <>
                         <span>·</span>
-                        <span>{r.itemCount} {r.itemCount === 1 ? 'item' : 'items'}</span>
+                        <span>{t('items', { count: r.itemCount })}</span>
                       </>
                     )}
                   </div>

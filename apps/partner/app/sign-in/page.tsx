@@ -10,7 +10,7 @@ import sunbnbLogo from '@/app/sunbnb-logo.svg'
 
 function PartnerBrandingPanel() {
   return (
-    <div className="flex-1 min-w-0 bg-gray-900 relative overflow-hidden flex flex-col justify-between p-12">
+    <div className="flex-1 min-w-0 w-[50vw] 2xl:w-[55vw] bg-gray-900 relative overflow-hidden flex flex-col justify-between p-12 xl:p-16">
       {/* Decorative elements */}
       <div className="absolute -top-24 -right-24 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
       <div className="absolute bottom-20 -left-16 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl" />
@@ -36,7 +36,7 @@ function PartnerBrandingPanel() {
             effortlessly.
           </span>
         </h1>
-        <p className="mt-5 text-gray-400 text-lg leading-relaxed max-w-md">
+        <p className="mt-5 text-gray-400 text-lg leading-relaxed max-w-md xl:max-w-lg">
           Real-time bookings, interactive site maps, and automated payments — all in one place.
         </p>
       </div>
@@ -106,7 +106,7 @@ function SignInContent() {
         No separate registration needed — just sign in and you&apos;re all set.
       </p>
 
-      <p className="mt-8 text-[11px] text-gray-400 text-center leading-relaxed">
+      <p className="mt-8 text-xs text-gray-400 text-center leading-relaxed">
         By signing in, you agree to our{' '}
         <a href="/tos" className="underline hover:text-gray-600 transition-colors">Terms of Service</a>
         {' '}and{' '}
@@ -116,7 +116,7 @@ function SignInContent() {
       <div className="mt-10 pt-6 border-t border-gray-100 text-center">
         <p className="text-xs text-gray-400">
           Want to book a sunbed instead?{' '}
-          <a href="https://sunbnb.app" className="text-blue-600 hover:text-blue-700 font-medium transition-colors">
+          <a href="https://sunbnb.app" className="inline-block py-1 text-blue-600 hover:text-blue-700 font-medium transition-colors">
             Visit sunbnb.app
           </a>
         </p>

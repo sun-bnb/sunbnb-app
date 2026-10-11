@@ -75,6 +75,11 @@ export default function StepContent({
         Make your site stand out. Everything here is optional and can be updated later.
       </p>
 
+      {/* Two columns from lg: photo + description left, services right.
+          Source order = phone order. */}
+      <div className="lg:grid lg:grid-cols-2 lg:gap-x-10 lg:items-start">
+      <div className="min-w-0">
+
       {/* Cover photo */}
       <div className="mb-5">
         <h3 className="text-sm font-medium text-gray-700 mb-2">Cover photo</h3>
@@ -87,7 +92,7 @@ export default function StepContent({
               alt="Preview"
               className="w-full h-48 object-cover"
             />
-            <div className="absolute inset-0 bg-black/0 hover:bg-black/30 transition-all flex items-center justify-center opacity-0 hover:opacity-100">
+            <div className="absolute inset-0 bg-black/0 sm:hover:bg-black/30 transition-all flex items-end sm:items-center justify-end sm:justify-center p-2 sm:p-0 opacity-100 sm:opacity-0 sm:hover:opacity-100">
               <div className="flex gap-2">
                 <Button
                   variant="contained"
@@ -135,7 +140,7 @@ export default function StepContent({
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onClick={() => fileRef.current?.click()}
-            className={`relative rounded-lg border-2 border-dashed p-8 text-center cursor-pointer transition-all ${
+            className={`relative rounded-lg border-2 border-dashed p-6 sm:p-8 text-center cursor-pointer transition-all ${
               dragging
                 ? 'border-blue-400 bg-blue-50'
                 : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100'
@@ -181,7 +186,10 @@ export default function StepContent({
         />
       </div>
 
-      <Divider sx={{ mb: 3 }} />
+      </div>
+      <div className="min-w-0">
+
+      <Divider sx={{ mb: 3, display: { lg: 'none' } }} />
 
       {/* Services */}
       <div>
@@ -189,7 +197,7 @@ export default function StepContent({
         <p className="text-xs text-gray-500 mb-3">
           Select what's available at your beach. These are shown as icons on the booking page.
         </p>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-2">
           {ALL_SERVICES.map(service => {
             const selected = data.services.includes(service.value)
             return (
@@ -219,6 +227,8 @@ export default function StepContent({
             )
           })}
         </div>
+      </div>
+      </div>
       </div>
     </div>
   )

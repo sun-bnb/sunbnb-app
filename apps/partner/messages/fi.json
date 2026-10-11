@@ -16,7 +16,10 @@
     "subscription": "Tilaus",
     "signOut": "Kirjaudu ulos",
     "language": "Kieli",
-    "devices": "Laitteet"
+    "devices": "Laitteet",
+    "openMenu": "Avaa valikko",
+    "closeMenu": "Sulje valikko",
+    "accountMenu": "Tilivalikko"
   },
   "App": {
     "mollieNotConnected": "Mollie-maksuja ei ole yhdistetty. Yhdistä Mollie-tilisi vastaanottaaksesi verkkomaksuja.",
@@ -467,7 +470,8 @@
     "instructions": "Vedä elementti pohjalle sijoittaaksesi sen.",
     "totalElements": "{count, plural, one {# elementti} other {# elementtiä}}",
     "totalSunbedsLabel": "{count, plural, one {# aurinkotuoli} other {# aurinkotuolia}}",
-    "parcelsLabel": "{count, plural, one {# kortteli} other {# korttelia}}"
+    "parcelsLabel": "{count, plural, one {# kortteli} other {# korttelia}}",
+    "bestOnLargerScreen": "Asettelueditori toimii parhaiten suuremmalla näytöllä."
   },
   "ReadinessChecklist": {
     "title": "Tehtävät ennen julkaisua",

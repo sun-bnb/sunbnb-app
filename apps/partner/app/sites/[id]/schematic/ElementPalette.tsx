@@ -42,7 +42,7 @@ export default function ElementPalette() {
   }
 
   return (
-    <div className="w-56 border-r border-gray-200 bg-white p-3 flex flex-col gap-3 overflow-y-auto">
+    <div className="hidden md:flex w-56 shrink-0 border-r border-gray-200 bg-white p-3 flex-col gap-3 overflow-y-auto">
       <div>
         <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">{t('surfacesHeading')}</div>
         <div className="flex flex-col gap-1">{SURFACE_TYPES.map(tile)}</div>

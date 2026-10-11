@@ -40,7 +40,10 @@ export default function CreateRestaurantView({ availableSites }: Props) {
   }
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-lg">
+    // md+ with linkable sites: name + site picker side by side in a wider
+    // (max-w-2xl) card; otherwise the single-field form stays max-w-lg.
+    <div className="page-container py-6">
+      <div className={`max-w-lg ${availableSites.length > 0 ? 'md:max-w-2xl' : ''}`}>
       <div className="mb-6">
         <h1 className="text-lg font-semibold text-gray-900">Create restaurant</h1>
         <p className="text-sm text-gray-500 mt-0.5">
@@ -48,9 +51,10 @@ export default function CreateRestaurantView({ availableSites }: Props) {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+      <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6 space-y-5">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 md:items-start">
         {/* Name */}
-        <div>
+        <div className={availableSites.length > 0 ? '' : 'md:col-span-2'}>
           <label htmlFor="restaurant-name" className="block text-sm font-medium text-gray-700 mb-1">
             Restaurant name <span className="text-red-500">*</span>
           </label>
@@ -61,7 +65,7 @@ export default function CreateRestaurantView({ availableSites }: Props) {
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Chiringuito El Sol"
             required
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+            className="w-full px-3 py-2.5 text-base sm:py-2 sm:text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-gray-900 focus:border-transparent"
           />
         </div>
 
@@ -75,7 +79,7 @@ export default function CreateRestaurantView({ availableSites }: Props) {
               id="linked-site"
               value={siteId}
               onChange={(e) => setSiteId(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-gray-900 focus:border-transparent bg-white"
+              className="w-full px-3 py-2.5 text-base sm:py-2 sm:text-sm border border-gray-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-gray-900 focus:border-transparent bg-white"
             >
               <option value="">No site link</option>
               {availableSites.map((site) => (
@@ -89,6 +93,7 @@ export default function CreateRestaurantView({ availableSites }: Props) {
             </p>
           </div>
         )}
+        </div>
 
         {/* Error display */}
         {errors.length > 0 && (
@@ -102,11 +107,12 @@ export default function CreateRestaurantView({ availableSites }: Props) {
         )}
 
         {/* Actions */}
-        <div className="flex items-center gap-3 pt-1">
+        {/* Phone: full-width primary on top, Cancel under it; sm+: inline row. */}
+        <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:gap-3">
           <button
             type="submit"
             disabled={submitting}
-            className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            className="min-h-10 w-full px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors sm:w-auto"
           >
             {submitting ? 'Creating…' : 'Create restaurant'}
           </button>
@@ -114,12 +120,13 @@ export default function CreateRestaurantView({ availableSites }: Props) {
             type="button"
             onClick={() => router.push('/restaurants')}
             disabled={submitting}
-            className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+            className="min-h-10 w-full px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors sm:w-auto"
           >
             Cancel
           </button>
         </div>
       </form>
+      </div>
     </div>
   )
 }

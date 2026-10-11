@@ -21,19 +21,20 @@ export default function CommissionInvoiceDocument({
   invoice: CommissionInvoiceModel
 }) {
   return (
-    <div className="max-w-2xl mx-auto px-6 py-10">
-      <div className="flex items-center justify-between mb-6 print:hidden">
-        <Link href="/account/invoices" className="text-xs text-gray-500 hover:underline">
+    <div className="page-container py-6 sm:py-10">
+    <div className="max-w-3xl">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-6 print:hidden">
+        <Link href="/account/invoices" className="inline-flex items-center min-h-10 text-xs text-gray-500 hover:underline">
           ← All commission invoices
         </Link>
-        <button type="button" onClick={() => window.print()} className="btn-ghost text-xs">
+        <button type="button" onClick={() => window.print()} className="btn-ghost text-xs inline-flex items-center min-h-10">
           Print / save as PDF
         </button>
       </div>
 
-      <div className="card print:border-0 print:shadow-none">
+      <div className="card lg:p-8 print:border-0 print:shadow-none">
         {/* Header */}
-        <div className="flex justify-between items-start border-b border-gray-200 pb-4 mb-4">
+        <div className="flex justify-between items-start gap-3 border-b border-gray-200 pb-4 mb-4">
           <div>
             <h1 className="text-base font-bold text-gray-900">Factura</h1>
             <p className="text-xs text-gray-500 mt-0.5">
@@ -47,13 +48,14 @@ export default function CommissionInvoiceDocument({
 
         {/* The two parties. Both are named: this is a factura completa (F1),
             not a simplified receipt. */}
-        <div className="grid grid-cols-2 gap-6 mb-6 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6 text-xs print:grid-cols-2">
           <Party title="Issued by" party={invoice.issuer} />
           <Party title="Billed to" party={invoice.recipient} />
         </div>
 
         {/* Lines */}
-        <table className="w-full text-xs mb-4">
+        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 mb-4">
+        <table className="w-full text-xs">
           <thead>
             <tr className="text-gray-500 border-b border-gray-200">
               <th className="text-left py-2 font-medium">Description</th>
@@ -66,18 +68,19 @@ export default function CommissionInvoiceDocument({
             {invoice.lines.map((line, i) => (
               <tr key={i} className="border-b border-gray-100">
                 <td className="py-2 text-gray-800">{line.description ?? '—'}</td>
-                <td className="py-2 text-right text-gray-600">{line.charge.toFixed(2)}</td>
-                <td className="py-2 text-right text-gray-600">
+                <td className="py-2 pl-2 text-right text-gray-600 whitespace-nowrap">{line.charge.toFixed(2)}</td>
+                <td className="py-2 pl-2 text-right text-gray-600 whitespace-nowrap">
                   {line.vatRate === null ? '—' : `${line.vatRate}%`}
                   {line.vat > 0 && (
                     <span className="text-gray-400"> · {line.vat.toFixed(2)}</span>
                   )}
                 </td>
-                <td className="py-2 text-right text-gray-800">{line.total.toFixed(2)}</td>
+                <td className="py-2 pl-2 text-right text-gray-800 whitespace-nowrap">{line.total.toFixed(2)}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
 
         {/* Totals */}
         <div className="flex flex-col items-end gap-1 text-xs border-t border-gray-200 pt-3">
@@ -127,6 +130,7 @@ export default function CommissionInvoiceDocument({
         )}
       </div>
     </div>
+    </div>
   )
 }
 
@@ -139,8 +143,8 @@ function Party({
 }) {
   return (
     <div>
-      <div className="text-gray-400 uppercase tracking-wide text-[10px] mb-1">{title}</div>
-      <div className="font-medium text-gray-900">{party.name || '—'}</div>
+      <div className="text-gray-400 uppercase tracking-wide text-xs mb-1">{title}</div>
+      <div className="font-medium text-gray-900 break-words">{party.name || '—'}</div>
       {party.vatId && <div className="text-gray-600">{party.vatId}</div>}
       {party.address && <div className="text-gray-500 whitespace-pre-line">{party.address}</div>}
     </div>

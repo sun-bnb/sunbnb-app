@@ -501,10 +501,13 @@ export default function BedDetail({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 lg:inset-y-0 lg:top-[var(--impersonation-offset,0px)] lg:left-auto lg:right-0 lg:w-[28rem] xl:w-[32rem] lg:items-stretch lg:bg-transparent"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-white dark:bg-gray-900 dark:text-gray-100 w-full max-w-lg rounded-t-2xl p-4 sm:p-5 shadow-xl animate-slide-up"
+      {/* Phone/tablet: modal bottom sheet over a dimmed grid. Desktop (lg+):
+          a docked right side panel with no backdrop, so the grid stays live
+          beside it (the manage view reserves the panel's width). */}
+      <div className="bg-white dark:bg-gray-900 dark:text-gray-100 w-full max-w-lg max-h-[92dvh] overflow-y-auto overscroll-contain rounded-t-2xl p-4 sm:p-5 lg:p-6 shadow-xl animate-slide-up lg:max-w-none lg:max-h-none lg:h-full lg:rounded-none lg:border-l lg:border-gray-200 lg:dark:border-gray-800 lg:animate-none"
            style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom, 2rem))' }}>
         {/* Header — big number, plain status */}
         <div className="flex items-center justify-between mb-4 sm:mb-5">

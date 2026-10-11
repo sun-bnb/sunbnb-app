@@ -86,11 +86,18 @@ export default function ReservationsView({ restaurantId }: { restaurantId: strin
   return (
     <div className="pt-2">
       <RestaurantSubNav restaurantId={restaurantId} active="reservations" />
-      <div className="p-4 space-y-4">
+      <div className="py-4 space-y-4">
         <RestaurantHeader restaurantId={restaurantId} />
         {loading ? (
           <div className="text-sm text-gray-500">{t('loading')}</div>
         ) : (
+          // Phone → lg: list then waitlist, stacked. xl+: the waitlist becomes
+          // a 22rem side panel beside the day's reservations.
+          <div className="flex flex-col gap-4 xl:grid xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
+          {/* ReservationList (@repo/table-reservations-ui) renders six MUI filter
+              toggles in one non-wrapping group (~390px). Below sm the group is
+              capped to the row and scrolls sideways; toggles get 40px tap height. */}
+          <div className="min-w-0 max-sm:[&_.MuiToggleButtonGroup-root]:max-w-full max-sm:[&_.MuiToggleButtonGroup-root]:overflow-x-auto max-sm:[&_.MuiToggleButton-root]:min-h-10 max-sm:[&_.MuiToggleButton-root]:shrink-0 max-sm:[&_.MuiToggleButton-root]:whitespace-nowrap">
           <ReservationList
             date={date}
             reservations={items}
@@ -122,10 +129,9 @@ export default function ReservationsView({ restaurantId }: { restaurantId: strin
               return res
             }}
           />
-        )}
+          </div>
 
-        {!loading && (
-          <section className="rounded-lg border border-gray-200 bg-white">
+          <section className="min-w-0 rounded-lg border border-gray-200 bg-white">
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
               <h2 className="text-sm font-semibold text-gray-900">{t('waitlistHeading')}</h2>
               <span className="text-xs text-gray-400">{waitlist.length}</span>
@@ -135,7 +141,7 @@ export default function ReservationsView({ restaurantId }: { restaurantId: strin
             ) : (
               <ul className="divide-y divide-gray-100">
                 {waitlist.map((w) => (
-                  <li key={w.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <li key={w.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="truncate text-sm font-medium text-gray-900">{w.guestName}</span>
@@ -160,7 +166,7 @@ export default function ReservationsView({ restaurantId }: { restaurantId: strin
                         const res = await removeRestaurantWaitlistEntry(restaurantId, w.id)
                         if (res.status === 'ok') await refresh()
                       }}
-                      className="shrink-0 text-xs text-gray-500 hover:text-red-600"
+                      className="-mr-2 inline-flex min-h-10 shrink-0 items-center rounded-lg px-2 text-xs text-gray-500 hover:text-red-600"
                     >
                       {t('waitlistRemove')}
                     </button>
@@ -169,6 +175,7 @@ export default function ReservationsView({ restaurantId }: { restaurantId: strin
               </ul>
             )}
           </section>
+          </div>
         )}
       </div>
     </div>
