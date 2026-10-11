@@ -392,6 +392,30 @@ guessed id from another account behaves like a missing row (null/false).
   `AERIAL_STALE_RUNNING_MS` 10 min is reclaimable; a `done` descriptor is returned cached — no second
   model call), `saveAerialDescriptor`, `failAerialExtraction`.
 
+## Assistant SQL sandbox (`src/assistant-claim.ts`) - track 030 D1
+
+Model-written SQL runs against the REAL database as role `assistant_reader`; Postgres enforces
+isolation even if the app's SQL checker is bypassed. Migration `20261011120000_assistant_reader_role_and_views`.
+- **Role** `assistant_reader`: NOLOGIN in the migration (ops script sets LOGIN/PASSWORD), read-only default,
+  `statement_timeout 3s`, `lock_timeout 2s`, idle-in-txn 10s, CONNECTION LIMIT 5, no CREATE, `search_path = assistant, public`.
+- **Views** in schema `assistant` (all `security_invoker` + `security_barrier`, allowlisted columns only): `site`, `parcel`,
+  `unit`, `sunbed`, `layout_element` (handle = last 6 of id), `product`, `rental_item`, `working_hours`, `reservation`
+  (`paid_via` derived), `reservation_seat` (reservation_id, sunbed_id), `food_order`, `food_order_item`, `invoice`.
+  Real cuids are exposed only where another view joins on them (parcel/unit/sunbed/reservation/food_order/invoice ids).
+  Timestamps are `timestamptz` (stored UTC `timestamp`); the runner sets the site TimeZone.
+- **Base tables**: column-level `GRANT SELECT` on exactly the columns the views read (denied columns fail even directly),
+  RLS ENABLED (not FORCED; owner/app roles bypass) with `assistant_site` policies `TO assistant_reader`.
+  `payment_ref` is NOT granted: `paid_via` comes from SECURITY DEFINER helpers that re-check the site.
+- **Claim**: `signAssistantClaim({siteId, accountId, ttlSec<=300}, secret)` -> `siteId.accountId.exp.hexHmac`, carried in the
+  txn-local GUC `assistant.claim`; `assistant.current_site_id()` (SECURITY DEFINER) verifies HMAC vs `assistant.claim_secret`
+  (reader has no grant) and expiry; anything else -> NULL -> zero rows.
+- **Runner** `runAssistantSql(sql, params, {siteId, accountId, timeZone?, maxRows?})` -> `{columns, rows, truncated}`:
+  separate pg Pool (max 3), `BEGIN READ ONLY`, txn-local pins, wrapped `SELECT * FROM (...) LIMIT $n` (extended protocol, no stacked statements), ROLLBACK, DISCARD ALL.
+- **Env**: `ASSISTANT_DB_URL` (reader URL, may be a read replica), `ASSISTANT_DB_CLAIM_SECRET` (app + DB), `ASSISTANT_DB_PASSWORD` (ops script only).
+- **Ops**: `scripts/setup-assistant-reader.sh <local|integration|test|production>` after the migration (header documents building the URL).
+- **Residual**: PUBLIC-executable pg_catalog functions (e.g. `pg_advisory_lock`) cannot be revoked by a non-superuser; point
+  `ASSISTANT_DB_URL` at a read replica to keep session-lock abuse off the primary. Tests: `assistant-reader.integration.test.ts`.
+
 ## Coastline lookup (`src/coastline-lookup.ts`, `src/coastline-overpass.ts`) — track 027 → 030 S7a
 
 - `@repo/data/coastline-lookup` — `shoreAround(lat, lng, radiusM)`: the DB-then-Overpass shoreline

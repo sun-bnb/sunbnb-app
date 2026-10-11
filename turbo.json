@@ -3,6 +3,9 @@
   "ui": "tui",
   "globalEnv": [
     "POSTGRES_URL",
+    "ASSISTANT_DB_URL",
+    "ASSISTANT_DB_PASSWORD",
+    "ASSISTANT_DB_CLAIM_SECRET",
     "STRIPE_SECRET_KEY",
     "STRIPE_CONNECT_SECRET_KEY",
     "STRIPE_PUBLIC_KEY",

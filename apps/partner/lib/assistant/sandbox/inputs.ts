@@ -1,28 +1,28 @@
 /**
  * What a run_js script gets to read (track 030 G4) — all of it scoped to the route-bound site.
  *
- *  - `data`: the G1 snapshot tables (the same allowlisted, PII-free, surrogate-id copy the `sql`
- *    tool queries), read back out of the per-site PGlite with a row cap. Only the allowlisted
- *    columns are selected by name. Model input never reaches the real database: the table names
- *    come from the schema allowlist, matched against the script text.
+ *  - `data`: the `assistant.*` views (the same allowlisted, PII-free views the `sql` tool queries),
+ *    read through `runAssistantSql` as the DB-enforced `assistant_reader` role -- Postgres, not this
+ *    file, limits the rows to the claimed site. Table names come from the `sql-schema.ts` list,
+ *    matched against the script text; the SELECT is built from that name only, never from model input.
  *  - `scene`: the G2 site scene in the local metre frame (x east, y north): parcels with corners,
  *    anchor and row bearing, schematic elements, and — when the script mentions them — every seat
  *    position and the shoreline.
  *  - `frame`: the constants the in-sandbox `geo.toLocal` / `geo.fromLocal` need.
  */
-import type { PGlite } from '@electric-sql/pglite'
+import { runAssistantSql } from '@repo/data/assistant-claim'
 import prisma from '@repo/data/PrismaCient'
 import { formatSeatId } from '@repo/data/seat-label'
 import { M_PER_DEG, describeFrame, toLocal, type Frame, type Pt } from '../geo/frame'
 import { elementPolygon } from '../geo/features'
 import { centroid } from '../geo/shapes'
-import { SNAPSHOT_TABLES, type SnapshotTableName } from '../snapshot/schema'
+import { ASSISTANT_VIEWS, VIEW_NAMES, type AssistantViewName } from '../sql-schema'
 import { elementHandle } from '../tools/helpers'
 import { loadElements, seatLocal, type SiteBase } from '../tools/spatial-data'
 import { shoreScene } from '../tools/spatial'
 import type { SandboxFrame } from './run'
 
-/** Rows per snapshot table handed to a script (newest first for reservations / orders / invoices). */
+/** Rows per view handed to a script (newest first for reservations / orders / invoices). */
 export const DATA_ROW_CAP = 5000
 /** Seat positions in `scene.seats`. */
 export const SCENE_SEAT_CAP = 5000
@@ -31,10 +31,10 @@ export const SCENE_SHORE_RADIUS_M = 600
 
 const word = (name: string) => new RegExp(`\\b${name}\\b`)
 
-/** Snapshot tables the script names (a dynamic `data[x]` access loads them all). */
-export function referencedTables(code: string): SnapshotTableName[] {
-  if (/\bdata\s*\[/.test(code)) return SNAPSHOT_TABLES.map((t) => t.name)
-  return SNAPSHOT_TABLES.filter((t) => word(t.name).test(code)).map((t) => t.name)
+/** Views the script names (a dynamic `data[x]` access loads them all). */
+export function referencedTables(code: string): AssistantViewName[] {
+  if (/\bdata\s*\[/.test(code)) return [...VIEW_NAMES]
+  return VIEW_NAMES.filter((n) => word(n).test(code))
 }
 
 export const sceneWants = (code: string) => ({ seats: /\bseats\b/.test(code), shoreline: /shore/i.test(code) })
@@ -42,26 +42,39 @@ export const sceneWants = (code: string) => ({ seats: /\bseats\b/.test(code), sh
 const jsonSafe = (v: unknown): unknown =>
   typeof v === 'bigint' ? Number(v) : v instanceof Date ? v.toISOString() : v instanceof Uint8Array ? null : v
 
-const quoteIdent = (s: string) => `"${s.replace(/"/g, '""')}"`
+/** Newest-first ordering for the tables that can exceed the cap; the rest read in view order. */
+const ORDER: Partial<Record<AssistantViewName, string>> = {
+  reservation: ' ORDER BY created_at DESC',
+  food_order: ' ORDER BY created_at DESC',
+  invoice: ' ORDER BY invoiced_at DESC',
+}
 
-/** Read the named tables from a site snapshot: plain row objects, allowlisted columns only, capped. */
-export async function readSnapshotTables(db: PGlite, tables: readonly SnapshotTableName[], cap = DATA_ROW_CAP) {
+/**
+ * Read the named views for the claimed site as plain row objects, capped. `siteId` / `accountId`
+ * are the route-bound ids (never model input); the database enforces that nothing else is visible.
+ * A failing view is reported in `notes` and left out rather than failing the whole script.
+ */
+export async function readAssistantTables(siteId: string, accountId: string, tables: readonly AssistantViewName[], cap = DATA_ROW_CAP) {
   const data: Record<string, Record<string, unknown>[]> = {}
   const truncated: Record<string, { loaded: number; total: number }> = {}
+  const notes: string[] = []
+  const ctx = { siteId, accountId, maxRows: cap }
   for (const name of tables) {
-    const def = SNAPSHOT_TABLES.find((t) => t.name === name)
-    if (!def) continue
-    const cols = def.columns.map((c) => quoteIdent(c.name)).join(', ')
-    const order = def.columns.some((c) => c.name === 'id') ? ' ORDER BY "id"' : ''
-    const res = await db.query<Record<string, unknown>>(`SELECT ${cols} FROM ${quoteIdent(def.name)}${order} LIMIT ${cap + 1}`)
-    const rows = res.rows.slice(0, cap).map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, jsonSafe(v)])))
-    data[name] = rows
-    if (res.rows.length > cap) {
-      const n = await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM ${quoteIdent(def.name)}`)
-      truncated[name] = { loaded: cap, total: n.rows[0]?.n ?? cap }
+    if (!ASSISTANT_VIEWS.some((v) => v.name === name)) continue
+    try {
+      const res = await runAssistantSql(`SELECT * FROM assistant.${name}${ORDER[name] ?? ''} LIMIT ${cap}`, [], ctx)
+      data[name] = res.rows.map((r) => Object.fromEntries(res.columns.map((col, i) => [col, jsonSafe(r[i])])))
+      if (res.truncated || res.rows.length >= cap) {
+        const n = await runAssistantSql(`SELECT count(*) AS n FROM assistant.${name}`, [], { siteId, accountId, maxRows: 1 })
+        const total = Number(n.rows[0]?.[0] ?? cap)
+        if (total > cap) truncated[name] = { loaded: cap, total }
+      }
+    } catch (err) {
+      data[name] = []
+      notes.push(`data.${name} could not be read (${(err instanceof Error ? err.message : String(err)).split('\n')[0]!.slice(0, 120)}); it is empty`)
     }
   }
-  return { data, truncated }
+  return { data, truncated, notes }
 }
 
 export function sandboxFrame(frame: Frame): SandboxFrame {

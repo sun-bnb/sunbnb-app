@@ -6,19 +6,14 @@ const withNextIntl = createNextIntlPlugin()
 const nextConfig = {
   // @repo/agent ships TypeScript source (track 030).
   transpilePackages: ['@repo/agent'],
-  // The assistant's `sql` tool runs an in-process Postgres (PGlite, track 030 G1). Bundling it
-  // breaks the `new URL('./pglite.wasm', import.meta.url)` asset lookups in its dist, so it is
-  // required from node_modules at runtime instead, and its WASM + filesystem bundle are traced
-  // into the function explicitly (extensions are not used and stay out — ~14 MB instead of 23 MB).
   // The `run_js` sandbox (G4) uses QuickJS's single-file build: the WASM is embedded in its JS, so
   // there is no asset to trace; it stays external so the 3 MB module is required once from
   // node_modules instead of being parsed through the bundler.
-  serverExternalPackages: ['@electric-sql/pglite', 'quickjs-emscripten-core', '@jitl/quickjs-singlefile-cjs-release-sync'],
+  serverExternalPackages: ['quickjs-emscripten-core', '@jitl/quickjs-singlefile-cjs-release-sync'],
   // The assistant's how-to markdown is read from disk at runtime; trace it into the function bundle.
   outputFileTracingIncludes: {
     '/api/assistant': [
       './lib/assistant/knowledge/**',
-      './node_modules/@electric-sql/pglite/dist/{pglite.wasm,pglite.data,initdb.wasm}',
     ],
   },
   // Dev is served over mkcert HTTPS on this host (server.js); Next 16 blocks

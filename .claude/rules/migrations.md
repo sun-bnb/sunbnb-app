@@ -69,3 +69,10 @@ Reference-data seeds embedded in a `migration.sql` (e.g. the `no-show-deposit`
 `ServiceCode`) **must be idempotent** — `ON CONFLICT DO NOTHING` / `WHERE NOT EXISTS`.
 A migration runs exactly once per DB and is replayed from scratch on a fresh one;
 non-idempotent seeds break both.
+
+## Assistant views pin columns
+
+`assistant.*` views (track 030) depend on base-table columns and types. A migration that drops, renames or retypes a
+column they read fails with "cannot drop column ... because other objects depend on it". In that (contract) migration
+`DROP VIEW` the affected `assistant.*` view first and recreate it (and its column `GRANT`) in the same migration.
+

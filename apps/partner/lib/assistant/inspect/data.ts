@@ -1,11 +1,13 @@
 /**
- * `data` aspect: the entity-relationship model of what `sql` can query. Tables, columns, types and
- * meanings are GENERATED from `snapshot/schema.ts` (the allowlist), so a column added there shows up
- * here and a column that is not allowlisted can never appear. Only the relationships and their
- * example queries are written by hand (`RELATIONSHIPS`); the test checks every one against the
- * schema and executes the examples on an empty snapshot database.
+ * `data` aspect: the entity-relationship model of what `sql` can query. Views, columns, types and
+ * meanings are GENERATED from `sql-schema.ts` (the static description of the `assistant.*` views),
+ * so a column added there shows up here. Only the relationships and their example queries are
+ * written by hand (`RELATIONSHIPS`); the unit test checks every one against the schema and the
+ * integration test (`sql.integration.test.ts`) runs the examples and the column lists against the
+ * real `assistant_reader` views.
  */
-import { SNAPSHOT_TABLES, SNAPSHOT_VIEWS, type ColumnDef } from '../snapshot/schema'
+import { assistantDataConfigured, DATA_ACCESS_NOT_CONFIGURED } from '../data-access'
+import { ASSISTANT_VIEWS, type ColumnDef } from '../sql-schema'
 import type { InspectProvider } from './types'
 
 export interface Relationship {
@@ -21,32 +23,32 @@ export const RELATIONSHIPS: readonly Relationship[] = [
   {
     from: 'site',
     to: 'parcel',
-    meaning: 'The snapshot is ONE site: every row in every table belongs to the open site, so there is no site_id to join on.',
+    meaning: 'Every view holds ONE site: every row in every view belongs to the open site, so there is no site_id to join or filter on.',
     sql: 'SELECT s.name, s.layout_mode, (SELECT count(*) FROM parcel) AS parcels FROM site s',
   },
   {
-    from: 'seat.parcel_id',
+    from: 'sunbed.parcel_id',
     to: 'parcel.id',
-    meaning: 'A parcel (grid block of sunbeds) holds many seats. seat.parcel is the parcel NUMBER (0 = none); seat.parcel_id is the join key.',
-    sql: "SELECT p.number, count(*) AS seats FROM parcel p JOIN seat s ON s.parcel_id = p.id WHERE s.status <> 'pool' GROUP BY p.number ORDER BY p.number",
+    meaning: 'A parcel (grid block of sunbeds) holds many sunbeds. sunbed.parcel is the parcel NUMBER (0 = none); sunbed.parcel_id is the join key.',
+    sql: "SELECT p.number, count(*) AS seats FROM parcel p JOIN sunbed s ON s.parcel_id = p.id WHERE s.status <> 'pool' GROUP BY p.number ORDER BY p.number",
   },
   {
-    from: 'seat.unit_id',
-    to: 'seat.unit_id',
+    from: 'sunbed.unit_id',
+    to: 'unit.id',
     meaning: 'Beds sharing a unit_id stand under one parasol (a pair). A unit is the spot a QR card and a device name.',
-    sql: 'SELECT unit_id, count(*) AS beds FROM seat WHERE unit_id IS NOT NULL GROUP BY unit_id HAVING count(*) > 1 LIMIT 20',
+    sql: 'SELECT u.parcel, u.row_idx, u.seq, u.sunbed_count FROM unit u WHERE u.sunbed_count > 1 ORDER BY u.parcel, u.row_idx, u.seq LIMIT 20',
   },
   {
     from: 'reservation_seat.reservation_id',
     to: 'reservation.id',
-    meaning: 'A reservation holds one or more seats through reservation_seat (many to many with seat).',
-    sql: 'SELECT r.id, r.starts_at, count(rs.seat_id) AS seats FROM reservation r JOIN reservation_seat rs ON rs.reservation_id = r.id GROUP BY r.id, r.starts_at ORDER BY r.starts_at DESC LIMIT 10',
+    meaning: 'A reservation holds one or more sunbeds through reservation_seat (many to many with sunbed).',
+    sql: 'SELECT r.id, r.starts_at, count(rs.sunbed_id) AS seats FROM reservation r JOIN reservation_seat rs ON rs.reservation_id = r.id GROUP BY r.id, r.starts_at ORDER BY r.starts_at DESC LIMIT 10',
   },
   {
-    from: 'reservation_seat.seat_id',
-    to: 'seat.id',
-    meaning: 'Which physical sunbeds a booking holds. The view reservation_seat_label already joins the labels.',
-    sql: "SELECT seat_label, count(*) AS bookings FROM reservation_seat_label WHERE status = 'confirmed' GROUP BY seat_label ORDER BY bookings DESC LIMIT 10",
+    from: 'reservation_seat.sunbed_id',
+    to: 'sunbed.id',
+    meaning: 'Which physical sunbeds a booking holds; join sunbed for the seat_label.',
+    sql: "SELECT s.seat_label, count(*) AS bookings FROM reservation r JOIN reservation_seat rs ON rs.reservation_id = r.id JOIN sunbed s ON s.id = rs.sunbed_id WHERE r.status = 'confirmed' GROUP BY s.seat_label ORDER BY bookings DESC LIMIT 10",
   },
   {
     from: 'reservation.split_from_id',
@@ -55,10 +57,10 @@ export const RELATIONSHIPS: readonly Relationship[] = [
     sql: 'SELECT id, split_from_id FROM reservation WHERE split_from_id IS NOT NULL LIMIT 10',
   },
   {
-    from: 'food_order.seat_id',
-    to: 'seat.id',
+    from: 'food_order.sunbed_id',
+    to: 'sunbed.id',
     meaning: 'The sunbed an F&B order is delivered to (null for dine-in tables, see table_label).',
-    sql: 'SELECT s.seat_label, count(*) AS orders, sum(o.total_price) AS revenue FROM food_order o JOIN seat s ON s.id = o.seat_id GROUP BY s.seat_label ORDER BY revenue DESC LIMIT 10',
+    sql: 'SELECT s.seat_label, count(*) AS orders, sum(o.total_price) AS revenue FROM food_order o JOIN sunbed s ON s.id = o.sunbed_id GROUP BY s.seat_label ORDER BY revenue DESC LIMIT 10',
   },
   {
     from: 'food_order.reservation_id',
@@ -92,8 +94,8 @@ export const RELATIONSHIPS: readonly Relationship[] = [
   },
   {
     from: 'layout_element',
-    to: 'seat',
-    meaning: 'Schematic sites only: elements (water, bar, deck) and seats share the x/y metre canvas; relate them with describe_site_area / measure rather than SQL.',
+    to: 'sunbed',
+    meaning: 'Schematic sites only: elements (water, bar, deck) and sunbeds share the x/y metre canvas; relate them with describe_site_area / measure rather than SQL. PostGIS (ST_Distance, ST_MakePoint ...) is available for ad-hoc geometry.',
     sql: 'SELECT type, label, x, y, width, height FROM layout_element ORDER BY z LIMIT 20',
   },
   {
@@ -105,13 +107,13 @@ export const RELATIONSHIPS: readonly Relationship[] = [
   {
     from: 'rental_item',
     to: 'working_hours',
-    meaning: 'Rental equipment and opening hours are standalone catalogues (rental bookings are not in the snapshot).',
+    meaning: 'Rental equipment and opening hours are standalone catalogues (rental bookings are not queryable).',
     sql: 'SELECT day, open_time, close_time FROM working_hours ORDER BY day, open_time',
   },
 ]
 
 const TREE =
-  'site (1 row) -> parcel(item_group) -> unit -> seat(inventory_item); layout_element, product, rental_item, working_hours hang off the site; reservation <-> seat via reservation_seat; food_order -> food_order_item; invoice -> reservation | food_order.'
+  'site (1 row) -> parcel -> unit -> sunbed; layout_element, product, rental_item, working_hours hang off the site; reservation <-> sunbed via reservation_seat; food_order -> food_order_item; invoice -> reservation | food_order. All are views in schema `assistant` (bare names work).'
 
 /** Unit hint derived from the column's name/doc/type so the model reads numbers correctly. */
 export function columnUnit(table: string, col: ColumnDef): string | null {
@@ -122,7 +124,7 @@ export function columnUnit(table: string, col: ColumnDef): string | null {
   if (/(^|_)vat$/.test(n)) return 'percent'
   if (/minutes$/.test(n) || n === 'prep_time') return 'minutes'
   if (col.type === 'timestamptz') return 'timestamp (site time zone)'
-  if (col.type === 'double precision' && /price|amount|tax|charge|fee/.test(n)) return table === 'seat' || table === 'parcel' ? 'EUR per day' : 'EUR'
+  if (col.type === 'double precision' && /price|amount|tax|charge|fee/.test(n)) return table === 'sunbed' || table === 'parcel' ? 'EUR per day' : 'EUR'
   return null
 }
 
@@ -130,27 +132,28 @@ const involves = (rel: Relationship, table: string) => rel.from.split('.')[0] ==
 
 export const dataProvider: InspectProvider = {
   name: 'data',
-  summary: 'Entity-relationship model of the site data the sql tool can query: tables, columns with meaning and units, keys, relationships, example SQL.',
+  summary: 'Entity-relationship model of the site data the sql tool can query: views, columns with meaning and units, keys, relationships, example SQL.',
   examples: ['What tables and columns can I query?', 'How do reservations connect to seats?', 'Where do I find revenue per product?'],
-  topics: 'a table or view name (e.g. seat, reservation, parcel_summary) for its columns and relationships',
+  topics: 'a view name (e.g. sunbed, reservation, parcel) for its columns and relationships',
   describe(_ctx, topic) {
+    if (!assistantDataConfigured()) {
+      return { ok: false, error: DATA_ACCESS_NOT_CONFIGURED, reason: DATA_ACCESS_NOT_CONFIGURED, detail: 'The sql tool is switched off on this deployment, so there is no queryable data model. Use the specific read tools.' }
+    }
     if (!topic) {
       return {
         ok: true,
         model: TREE,
-        tables: [
-          ...SNAPSHOT_TABLES.map((t) => ({ name: t.name, about: t.doc, columns: t.columns.length })),
-          ...SNAPSHOT_VIEWS.map((v) => ({ name: v.name, about: `view: ${v.doc}`, columns: null })),
-        ],
+        tables: ASSISTANT_VIEWS.map((t) => ({ name: t.name, about: t.doc, columns: t.columns.length })),
         relationships: RELATIONSHIPS.map((r) => ({ from: r.from, to: r.to, meaning: r.meaning, sql: r.sql })),
         notes: [
-          'Join keys (id, *_id, unit_id) are per-copy surrogate integers: use them to join, never to name things. Refer to parcels by number, seats by seat_label, elements by handle, products by name.',
+          'The data is live and limited to the open site by the database: there is no site_id, and other sites cannot be read.',
+          'Join keys (id, *_id, unit_id) are opaque ids: use them to join, never to name things. Refer to parcels by number, seats by seat_label, elements by handle, products by name.',
           'No guest names, emails, phones, payment references or bank data exist in this data.',
-          'Pass topic = a table name for its columns and units.',
+          'Pass topic = a view name for its columns and units.',
         ],
       }
     }
-    const t = SNAPSHOT_TABLES.find((x) => x.name === topic)
+    const t = ASSISTANT_VIEWS.find((x) => x.name === topic)
     if (t) {
       return {
         ok: true,
@@ -160,8 +163,6 @@ export const dataProvider: InspectProvider = {
         relationships: RELATIONSHIPS.filter((r) => involves(r, t.name)),
       }
     }
-    const v = SNAPSHOT_VIEWS.find((x) => x.name === topic)
-    if (v) return { ok: true, view: v.name, about: v.doc, sql: v.sql.replace(/\s+/g, ' ').trim() }
-    return { ok: false, error: 'unknown_topic', detail: `topic must be one of: ${[...SNAPSHOT_TABLES.map((x) => x.name), ...SNAPSHOT_VIEWS.map((x) => x.name)].join(', ')}` }
+    return { ok: false, error: 'unknown_topic', detail: `topic must be one of: ${ASSISTANT_VIEWS.map((x) => x.name).join(', ')}` }
   },
 }

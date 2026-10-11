@@ -1,25 +1,19 @@
 /**
- * The per-site data snapshot the assistant's `sql` tool queries (track 030 G1).
+ * Static description of the `assistant.*` views the `sql` tool queries (track 030 D2).
  *
- * WHY a copy: model-written SQL cannot be tenant-isolated against the real database (a `SET` /
- * `set_config` defeats GUC- or RLS-based scoping), so `load.ts` copies ONLY the open site's rows,
- * ONLY the columns listed here, into a throwaway in-process Postgres (PGlite) and the model
- * queries that.
+ * The views live in Postgres (migration `20261011120000_assistant_reader_role_and_views`, owned by
+ * `packages/data`); Postgres is the allowlist and the tenant boundary (role `assistant_reader`,
+ * column grants, RLS on a signed site claim). THIS file only tells the model what exists, so it is
+ * pure documentation: a column listed here that the view lacks fails the integration test
+ * (`sql.integration.test.ts` compares it with the live view's columns), and the unit test refuses
+ * any column name matching `DENIED_COLUMN`.
  *
- * THIS FILE IS THE ALLOWLIST. A column reaches the model only if it is listed below AND `load.ts`
- * maps it — new Prisma columns are never exposed automatically. Join keys are per-snapshot
- * surrogate integers (`id` 1..n), never the real cuids, so nothing the model reads can be passed
- * back to a write tool as an id; the model-facing handles stay parcel numbers, seat labels,
- * element handles and names.
- *
- * To expose a new column: (1) add it to the table below with a one-line doc (the doc is shown to
- * the model in the tool description), (2) map it in that table's mapper in `load.ts`, (3) make
- * sure its name does not match `DENIED_COLUMN` — the test fails otherwise, and the deny-list is
- * deliberately never relaxed for convenience (no IBAN, tokens, payment refs, emails, phones,
- * personal ids, provider ids, guest names).
+ * Ids: real cuids appear only where another view joins on them (parcel/unit/sunbed/reservation/
+ * food_order/invoice `id`). They are join keys, never names -- refer to parcels by number, seats by
+ * seat_label, elements by handle, products by name.
  */
 
-export type SqlType = 'text' | 'integer' | 'double precision' | 'boolean' | 'timestamptz' | 'date' | 'text[]'
+export type SqlType = 'text' | 'integer' | 'double precision' | 'boolean' | 'timestamptz' | 'text[]'
 
 export interface ColumnDef {
   name: string
@@ -34,9 +28,9 @@ export interface TableDef {
 }
 
 const c = (name: string, type: SqlType, doc: string): ColumnDef => ({ name, type, doc })
-const ID = c('id', 'integer', 'snapshot row id (join key only)')
+const ID = c('id', 'text', 'join key only')
 
-export const SNAPSHOT_TABLES = [
+export const ASSISTANT_VIEWS = [
   {
     name: 'site',
     doc: 'the open site (one row)',
@@ -52,7 +46,7 @@ export const SNAPSHOT_TABLES = [
       c('layout_height', 'double precision', 'schematic canvas height, m'),
       c('lat', 'double precision', 'site centre'),
       c('lng', 'double precision', 'site centre'),
-      c('time_zone', 'text', 'IANA zone; this database runs in it'),
+      c('time_zone', 'text', 'IANA zone; timestamps render in it'),
       c('default_seat_price', 'double precision', 'site-level sunbed price per day (VAT incl.)'),
       c('vat', 'double precision', 'sunbed VAT %'),
       c('rental_vat', 'double precision', 'rental VAT %'),
@@ -60,7 +54,7 @@ export const SNAPSHOT_TABLES = [
       c('order_payment_type', 'text', ''),
       c('app_sales_enabled', 'boolean', 'online sales on'),
       c('payment_provider', 'text', 'effective consumer payment rail name'),
-      c('features', 'text[]', "e.g. {sunbeds,rentals}"),
+      c('features', 'text[]', 'e.g. {sunbeds,rentals}'),
       c('services', 'text[]', 'amenities shown to guests'),
       c('partial_group_booking_enabled', 'boolean', 'guests may book part of a unit'),
       c('no_show_deadline_minutes', 'integer', ''),
@@ -69,7 +63,7 @@ export const SNAPSHOT_TABLES = [
   },
   {
     name: 'parcel',
-    doc: 'parcels = blocks of sunbeds generated as a grid (ItemGroup)',
+    doc: 'parcels = blocks of sunbeds generated as a grid',
     columns: [
       ID,
       c('number', 'integer', 'parcel number shown on the map (the handle for parcel tools)'),
@@ -90,15 +84,26 @@ export const SNAPSHOT_TABLES = [
     ],
   },
   {
-    name: 'seat',
-    doc: 'every sunbed (InventoryItem)',
+    name: 'unit',
+    doc: 'a spot under one parasol: one bed or a pair; the thing a QR card and a device name',
+    columns: [
+      ID,
+      c('parcel', 'integer', 'parcel number'),
+      c('row_idx', 'integer', 'row inside the parcel'),
+      c('seq', 'integer', 'position inside the row'),
+      c('sunbed_count', 'integer', 'beds in the unit (2 = a pair)'),
+    ],
+  },
+  {
+    name: 'sunbed',
+    doc: 'every sunbed / seat',
     columns: [
       ID,
       c('number', 'integer', 'internal running number'),
       c('seat_label', 'text', "stored label 'parcel-RowSeq-member', e.g. '3-102-1'"),
       c('parcel', 'integer', 'parcel number; 0 = in no parcel'),
-      c('parcel_id', 'integer', 'FK parcel.id'),
-      c('unit_id', 'integer', 'beds standing together under one parasol share a unit_id'),
+      c('parcel_id', 'text', 'FK parcel.id'),
+      c('unit_id', 'text', 'FK unit.id; beds sharing a unit_id stand together under one parasol'),
       c('paired', 'boolean', 'unit has more than one bed'),
       c('status', 'text', "'active' | 'disabled' | 'new' | 'pool' (unplaced spare)"),
       c('lat', 'double precision', 'geo sites'),
@@ -115,7 +120,6 @@ export const SNAPSHOT_TABLES = [
     name: 'layout_element',
     doc: 'non-seat things on the map/plan (bar, water, path, ...)',
     columns: [
-      ID,
       c('handle', 'text', 'the element handle used by the layout tools'),
       c('type', 'text', ''),
       c('shape', 'text', ''),
@@ -133,7 +137,6 @@ export const SNAPSHOT_TABLES = [
     name: 'product',
     doc: 'food & drink menu',
     columns: [
-      ID,
       c('name', 'text', ''),
       c('description', 'text', ''),
       c('category', 'text', ''),
@@ -149,7 +152,6 @@ export const SNAPSHOT_TABLES = [
     name: 'rental_item',
     doc: 'rentable equipment',
     columns: [
-      ID,
       c('name', 'text', ''),
       c('description', 'text', ''),
       c('category', 'text', ''),
@@ -164,13 +166,13 @@ export const SNAPSHOT_TABLES = [
     doc: 'opening ranges',
     columns: [
       c('day', 'integer', '0 = Sunday .. 6 = Saturday'),
-      c('open_time', 'text', "'HH:MM' local"),
-      c('close_time', 'text', "'HH:MM' local"),
+      c('open_time', 'text', "'HH24:MI' local"),
+      c('close_time', 'text', "'HH24:MI' local"),
     ],
   },
   {
     name: 'reservation',
-    doc: 'sunbed bookings, newest first, capped (see snapshot_info). No guest identity',
+    doc: 'sunbed bookings. No guest identity',
     columns: [
       ID,
       c('status', 'text', "payment status: 'pending' | 'confirmed' | 'cancelled' | ..."),
@@ -184,19 +186,19 @@ export const SNAPSHOT_TABLES = [
       c('refunded_at', 'timestamptz', ''),
       c('checked_in_at', 'timestamptz', ''),
       c('departed_at', 'timestamptz', ''),
-      c('split_from_id', 'integer', 'FK reservation.id it was split from'),
+      c('split_from_id', 'text', 'FK reservation.id it was split from'),
       c('seat_count', 'integer', ''),
       c('created_at', 'timestamptz', ''),
     ],
   },
   {
     name: 'reservation_seat',
-    doc: 'which seats a reservation holds',
-    columns: [c('reservation_id', 'integer', 'FK reservation.id'), c('seat_id', 'integer', 'FK seat.id')],
+    doc: 'which sunbeds a reservation holds',
+    columns: [c('reservation_id', 'text', 'FK reservation.id'), c('sunbed_id', 'text', 'FK sunbed.id')],
   },
   {
     name: 'food_order',
-    doc: "F&B orders ('order' is reserved), newest first, capped. No guest notes",
+    doc: 'F&B orders. No guest notes',
     columns: [
       ID,
       c('status', 'text', ''),
@@ -205,8 +207,8 @@ export const SNAPSHOT_TABLES = [
       c('total_price', 'double precision', 'VAT incl.'),
       c('amount', 'double precision', 'amount paid'),
       c('paid_via', 'text', 'as reservation.paid_via'),
-      c('seat_id', 'integer', 'FK seat.id delivered to'),
-      c('reservation_id', 'integer', 'FK reservation.id'),
+      c('sunbed_id', 'text', 'FK sunbed.id delivered to'),
+      c('reservation_id', 'text', 'FK reservation.id'),
       c('table_label', 'text', 'dine-in table'),
       c('reject_reason', 'text', ''),
       c('created_at', 'timestamptz', ''),
@@ -219,7 +221,7 @@ export const SNAPSHOT_TABLES = [
     name: 'food_order_item',
     doc: 'order lines',
     columns: [
-      c('order_id', 'integer', 'FK food_order.id'),
+      c('order_id', 'text', 'FK food_order.id'),
       c('name', 'text', 'product name at order time'),
       c('category', 'text', ''),
       c('quantity', 'integer', ''),
@@ -244,66 +246,28 @@ export const SNAPSHOT_TABLES = [
       c('series_code', 'text', "'F' invoice | 'R' credit note"),
       c('tipo_factura', 'text', ''),
       c('product', 'text', ''),
-      c('reservation_id', 'integer', 'FK reservation.id'),
-      c('order_id', 'integer', 'FK food_order.id'),
-      c('credits_invoice_id', 'integer', 'credit note: FK invoice.id it rectifies'),
+      c('reservation_id', 'text', 'FK reservation.id'),
+      c('order_id', 'text', 'FK food_order.id'),
+      c('credits_invoice_id', 'text', 'credit note: FK invoice.id it rectifies'),
       c('invoiced_at', 'timestamptz', ''),
-    ],
-  },
-  {
-    name: 'snapshot_info',
-    doc: 'one row about this copy',
-    columns: [
-      c('loaded_at', 'timestamptz', 'data is as of this moment'),
-      c('reservations_total', 'integer', 'all reservations of the site'),
-      c('reservations_loaded', 'integer', ''),
-      c('orders_total', 'integer', ''),
-      c('orders_loaded', 'integer', ''),
     ],
   },
 ] as const satisfies readonly TableDef[]
 
-export type SnapshotTableName = (typeof SNAPSHOT_TABLES)[number]['name']
-
-export interface ViewDef {
-  name: string
-  doc: string
-  sql: string
-}
-
-export const SNAPSHOT_VIEWS: readonly ViewDef[] = [
-  {
-    name: 'parcel_summary',
-    doc: 'per parcel: number, rows, seats_per_row, seats, active, disabled, new_seats, units, price, category',
-    sql: `SELECT p.number, p.rows, p.seats_per_row, count(s.id)::int AS seats,
-        count(*) FILTER (WHERE s.status = 'active')::int AS active,
-        count(*) FILTER (WHERE s.status = 'disabled')::int AS disabled,
-        count(*) FILTER (WHERE s.status = 'new')::int AS new_seats,
-        count(DISTINCT s.unit_id)::int AS units, p.price, p.category
-      FROM parcel p LEFT JOIN seat s ON s.parcel_id = p.id AND s.status <> 'pool'
-      GROUP BY p.id ORDER BY p.number`,
-  },
-  {
-    name: 'reservation_seat_label',
-    doc: 'reservation_id, starts_at, ends_at, status, seat_label, parcel — one row per booked seat',
-    sql: `SELECT r.id AS reservation_id, r.starts_at, r.ends_at, r.status, s.seat_label, s.parcel
-      FROM reservation r JOIN reservation_seat rs ON rs.reservation_id = r.id JOIN seat s ON s.id = rs.seat_id`,
-  },
-]
+export type AssistantViewName = (typeof ASSISTANT_VIEWS)[number]['name']
+export const VIEW_NAMES: readonly AssistantViewName[] = ASSISTANT_VIEWS.map((v) => v.name)
 
 /**
- * Column names that must NEVER exist in the snapshot, whatever a future edit adds. Matched
- * against every table and view column (test: `snapshot.test.ts`).
+ * Column names that must NEVER be documented (or exist) in these views, whatever a future edit adds.
+ * Defence in depth on top of the database column grants (test: `sql-schema.test.ts`).
  */
 export const DENIED_COLUMN =
   /iban|bank|token|secret|password|hash|payment_?ref|ref$|email|phone|contact|guest|anon|user_?id|employee|account|vat_?number|nif|dni|passport|personal|kyc|stripe|mollie|_viva|viva_|provider_id|terminal|recipient|issuer_(vat|company)|notes?$/i
 
-/** Compact schema listing for the tool description: `table — doc: col type (doc), ...`. */
-export function describeSnapshotSchema(): string {
-  const tables = SNAPSHOT_TABLES.map((t) => {
+/** Compact schema listing for tool descriptions: `view -- doc: col type (doc), ...`. */
+export function describeAssistantSchema(): string {
+  return ASSISTANT_VIEWS.map((t) => {
     const cols = t.columns.map((col) => `${col.name} ${col.type === 'double precision' ? 'float' : col.type}${col.doc ? ` (${col.doc})` : ''}`)
-    return `${t.name} — ${t.doc}: ${cols.join(', ')}`
-  })
-  const views = SNAPSHOT_VIEWS.map((v) => `view ${v.name}: ${v.doc}`)
-  return [...tables, ...views].join('\n')
+    return `${t.name} -- ${t.doc}: ${cols.join(', ')}`
+  }).join('\n')
 }

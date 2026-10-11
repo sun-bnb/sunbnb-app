@@ -11,11 +11,11 @@
  */
 import prisma from '@repo/data/PrismaCient'
 import { inventoryHandler, planInventory } from '../proposals/handlers/inventory'
-import { buildScriptScene, DATA_ROW_CAP, readSnapshotTables, referencedTables, sandboxFrame, sceneWants } from '../sandbox/inputs'
+import { assistantDataConfigured, DATA_ACCESS_NOT_CONFIGURED } from '../data-access'
+import { buildScriptScene, DATA_ROW_CAP, readAssistantTables, referencedTables, sandboxFrame, sceneWants } from '../sandbox/inputs'
 import { runJs, SANDBOX_LIMITS, type SandboxInputs } from '../sandbox/run'
 import { MAX_SCRIPT_OPS, parseScriptProposal, SCRIPT_OPS } from '../sandbox/script-proposal'
-import { getSnapshot } from '../snapshot/load'
-import { SNAPSHOT_TABLES } from '../snapshot/schema'
+import { ASSISTANT_VIEWS } from '../sql-schema'
 import { defineTool } from './helpers'
 import { submitProposal } from './propose-core'
 import { loadSiteBase } from './spatial-data'
@@ -23,7 +23,7 @@ import { loadSiteBase } from './spatial-data'
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 function runJsDescription(): string {
-  const tables = SNAPSHOT_TABLES.map((t) => `${t.name}(${t.columns.map((c) => c.name).join(', ')})`).join('; ')
+  const tables = ASSISTANT_VIEWS.map((t) => `${t.name}(${t.columns.map((c) => c.name).join(', ')})`).join('; ')
   return [
     'Run a short synchronous JavaScript function BODY over the open site and get its return value. Use it for computation SQL',
     'cannot express: geometry (distances, gaps, nearest/farthest, alignment, what lies inside what), optimisation, and bulk',
@@ -32,7 +32,7 @@ function runJsDescription(): string {
     `Limits: ${SANDBOX_LIMITS.timeoutMs} ms CPU, ${SANDBOX_LIMITS.memoryBytes / 2 ** 20} MB memory, result <= ${SANDBOX_LIMITS.maxOutputChars} chars of JSON,`,
     `${SANDBOX_LIMITS.maxLogLines} console.log lines. No require/import, fetch, timers, async or file access -- plain modern JS only.`,
     'Globals (read-only, frozen -- copy before changing):',
-    `- data: this site's data tables as arrays of row objects (same anonymous copy as sql: ids are join keys only; max ${DATA_ROW_CAP} rows`,
+    `- data: this site's data tables as arrays of row objects (the same anonymous, site-limited views as sql: ids are join keys only; max ${DATA_ROW_CAP} rows`,
     'per table, newest first for bookings/orders). A table is loaded only when its name appears in the script. Tables: ' + tables + '.',
     '- scene: the site in ONE local metre frame (x = metres EAST, y = metres NORTH; same axes as propose_move by_m): scene.frame,',
     'scene.parcels[{ number, corners[{x,y}x4], centre, anchor (first sunbed / where a parcel `to` move puts it), rowBearingDegrees',
@@ -77,11 +77,15 @@ export const runJsTool = defineTool({
     const tables = referencedTables(code)
     let truncated: Record<string, { loaded: number; total: number }> = {}
     if (tables.length) {
-      let snap = await getSnapshot(ctx.siteId)
-      if (snap.db.closed) snap = await getSnapshot(ctx.siteId) // evicted between lookup and use
-      const read = await readSnapshotTables(snap.db, tables)
-      inputs.data = read.data
-      truncated = read.truncated
+      if (!assistantDataConfigured()) {
+        inputs.data = Object.fromEntries(tables.map((t) => [t, []])) // named tables exist but are empty, so scripts do not crash
+        notes.push(`data tables unavailable (${DATA_ACCESS_NOT_CONFIGURED}): data is empty; use the read tools for site data`)
+      } else {
+        const read = await readAssistantTables(ctx.siteId, ctx.accountId, tables)
+        inputs.data = read.data
+        truncated = read.truncated
+        notes.push(...read.notes)
+      }
     }
     if (base.ok) {
       inputs.scene = await buildScriptScene(ctx.siteId, base, sceneWants(code))

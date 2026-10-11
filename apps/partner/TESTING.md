@@ -103,6 +103,7 @@ Unit config now also includes `components/**/*.test.ts` (pure client modules of 
 | `app/api/cron/purge-assistant-uploads/route.test.ts` | `CRON_SECRET` fail-closed; failed blob delete left unstamped for retry | 2 |
 | `app/assistant/upload-actions.test.ts` / `aerial-actions.test.ts` | `uploadAssistantFile` (sniff, size, daily cap, kill switch) / `saveUploadGeoref` (site owner or sudo, georef validation) | 10 / 5 |
 | `app/sites/[id]/inventory/parcel-ops.test.ts` | `rotateParcel` / `applyParcelConfig` / `rotateUnit` / `setSeatsStatus` compositions (Prisma mocked) | 25 |
+| `lib/assistant/tools/{sql,run-js}.test.ts`, `lib/assistant/inspect/inspect.test.ts` | `sql` tool with `runAssistantSql` mocked: second-layer gate, claim = route-bound site + owner only, Postgres error mapping, 200 row / 30 KB caps, `data_access_not_configured` kill switch; `run_js` data via the reader; `inspect:data` generated from `sql-schema.ts` | 45 / 14 / 40 |
 | `lib/assistant/tools/tools.test.ts` | read tools: site binding, per-call ownership, handles not cuids | 32 |
 | `lib/assistant/proposals/{propose,lifecycle,inventory,layout,place-image,types}.test.ts` | propose tools build before→after; apply/reject/undo (re-auth, expiry, staleness, CAS); `inventory_batch` over an in-memory seat table; layout kinds; `place_image` copy-on-apply + undo | 28/36/45/15/24/7 |
 | `lib/assistant/proposals/validator-parity.test.ts` | propose-time bounds == the real actions' apply-time bounds | 1 |
@@ -114,7 +115,7 @@ Unit config now also includes `components/**/*.test.ts` (pure client modules of 
 
 Integration (`sunbnb_test`): `app/assistant/lifecycle.integration.test.ts` (16 — propose → apply → undo
 through the REAL actions; caught the jsonb key-order staleness bug), `inventory.integration.test.ts`
-(12), `layout.integration.test.ts` (5), `app/sites/[id]/inventory/parcel-ops.integration.test.ts`
+(12), `layout.integration.test.ts` (5), `sql.integration.test.ts` (13 — the `sql` tool / `run_js` data through the REAL `assistant_reader` role: only the claimed site's rows, forged other-site queries empty, error mapping, `sql-schema.ts` == live view columns, every `inspect:data` example runs; needs `ASSISTANT_DB_URL`/`ASSISTANT_DB_CLAIM_SECRET` in `.env.local` + `scripts/setup-assistant-reader.sh integration`), `app/sites/[id]/inventory/parcel-ops.integration.test.ts`
 (13 — editor/assistant parity on real Postgres).
 
 `packages/agent` has its own Vitest suite (`cd packages/agent && npm run test`: claude-model,

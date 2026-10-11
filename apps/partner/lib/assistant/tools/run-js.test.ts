@@ -1,22 +1,21 @@
 /**
- * `run_js` (track 030 G4): the tool feeds the sandbox ONLY the route-bound site's snapshot rows and
+ * `run_js` (track 030 G4): the tool feeds the sandbox ONLY the route-bound site's data rows (read through the DB-enforced reader) and
  * scene, and a script's `proposal` is strictly re-parsed (inventory ops only, no delete, parcels by
  * number within the site, <= 50 ops) before it goes through the normal propose path.
  */
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest'
 
 vi.mock('@/app/auth', () => ({ auth: vi.fn().mockResolvedValue(null) }))
-vi.mock('../snapshot/load', () => ({ getSnapshot: vi.fn() }))
+vi.mock('@repo/data/assistant-claim', () => ({ runAssistantSql: vi.fn() }))
 vi.mock('./spatial-data', () => ({ loadSiteBase: vi.fn(), loadElements: vi.fn().mockResolvedValue([]), seatLocal: vi.fn() }))
 vi.mock('./spatial', () => ({ shoreScene: vi.fn() }))
 vi.mock('../proposals/handlers/inventory', () => ({ inventoryHandler: { kind: 'inventory_batch' }, planInventory: vi.fn() }))
 vi.mock('../proposals/create', () => ({ createProposalFor: vi.fn() }))
 
-import type { PGlite } from '@electric-sql/pglite'
 import { executeToolCall } from '@repo/agent/loop'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
-import { getSnapshot } from '../snapshot/load'
+import { runAssistantSql } from '@repo/data/assistant-claim'
 import { createProposalFor } from '../proposals/create'
 import { planInventory } from '../proposals/handlers/inventory'
 import { geoFrame, toLocal, type Frame } from '../geo/frame'
@@ -40,16 +39,13 @@ const parcel = (group: number, cx: number) => ({
   poly: square(cx, 0),
 })
 
-// Real PGlite snapshots per site, built from mapped rows (two tenants with different seats).
-const dbs: Record<string, PGlite> = {}
-async function snapshotFor(site: string, labels: string[]) {
-  const { buildDatabase } = await vi.importActual<typeof import('../snapshot/load')>('../snapshot/load')
-  const rows = {
-    site: [{ name: site }], parcel: [], seat: labels.map((l, i) => ({ id: i + 1, number: i + 1, seat_label: l, parcel: 1, status: 'active', secret_extra: 'LEAK' })),
-    layout_element: [], product: [], rental_item: [], working_hours: [], reservation: [], reservation_seat: [], food_order: [],
-    food_order_item: [], invoice: [], snapshot_info: [],
-  }
-  dbs[site] = await buildDatabase(rows as never, 'UTC')
+/** Stand-in for the DB-enforced reader: serves only the CLAIMED site's rows, like the real views. */
+const SEATS: Record<string, string[]> = { [A]: ['1-101-1', '1-101-2'], [B]: ['9-999-9'] }
+function fakeReader(sql: string, _p: readonly unknown[], c: { siteId: string; accountId: string; maxRows?: number }) {
+  const m = /FROM assistant\.(\w+)/.exec(sql)!
+  if (m[1] === 'sunbed' && /count\(\*\)/.test(sql)) return Promise.resolve({ columns: ['n'], rows: [[SEATS[c.siteId]!.length]], truncated: false })
+  if (m[1] === 'sunbed') return Promise.resolve({ columns: ['id', 'seat_label'], rows: SEATS[c.siteId]!.map((l, i) => [`id${i}`, l]), truncated: false })
+  return Promise.resolve({ columns: ['name'], rows: [], truncated: false })
 }
 
 async function call(input: Record<string, unknown>, c: AssistantToolCtx = ctx) {
@@ -65,33 +61,37 @@ beforeEach(async () => {
   vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER } as never)
   vi.mocked(prisma.inventoryItem.aggregate).mockResolvedValue({ _max: { group: 2 } } as never)
   vi.mocked(loadSiteBase).mockResolvedValue({ ok: true, mode: 'geo', frame, origin: { lat: 39.5, lng: 2.6 }, parcels: [parcel(1, 0), parcel(2, 10)], parcelsWithoutGeometry: [] } as never)
-  if (!dbs[A]) await snapshotFor(A, ['1-101-1', '1-101-2'])
-  if (!dbs[B]) await snapshotFor(B, ['9-999-9'])
-  vi.mocked(getSnapshot).mockImplementation(async (siteId: string) => ({ db: dbs[siteId]!, siteId, loadedAt: new Date(), fingerprint: '', loadMs: 0, counts: {} }) as never)
+  process.env.ASSISTANT_DB_URL = 'postgres://reader@localhost/x'
+  process.env.ASSISTANT_DB_CLAIM_SECRET = 'x'.repeat(40)
+  vi.mocked(runAssistantSql).mockImplementation(fakeReader as never)
   vi.mocked(planInventory).mockImplementation(async (_s, ops) => ({ payload: { ops } }))
   vi.mocked(createProposalFor).mockResolvedValue({ ok: true, card: { actionId: 'act-1', summary: 'Move 2 parcels', preview: { changes: [{ label: 'Parcel 1' }] } } } as never)
 })
 
-afterAll(async () => {
-  await Promise.all(Object.values(dbs).map((d) => d.close()))
+afterAll(() => {
+  delete process.env.ASSISTANT_DB_URL
+  delete process.env.ASSISTANT_DB_CLAIM_SECRET
 })
 
 describe('run_js tool: inputs', () => {
-  it('reads only the ctx site: snapshot rows (allowlisted columns) and scene', async () => {
-    const r = await call({ purpose: 'labels', code: 'return { labels: data.seat.map((s) => s.seat_label), keys: Object.keys(data.seat[0]).sort(), tables: Object.keys(data), parcels: scene.parcels.map((p) => p.number) }' })
+  it('reads only the ctx site: view rows through the claimed reader, and the scene', async () => {
+    const r = await call({ purpose: 'labels', code: 'return { labels: data.sunbed.map((s) => s.seat_label), keys: Object.keys(data.sunbed[0]).sort(), tables: Object.keys(data), parcels: scene.parcels.map((p) => p.number) }' })
     expect(r.ok).toBe(true)
     expect(r.result.labels).toEqual(['1-101-1', '1-101-2'])
-    expect(r.result.keys).not.toContain('secret_extra')
-    expect(r.result.tables).toEqual(['seat'])
+    expect(r.result.keys).toEqual(['id', 'seat_label'])
+    expect(r.result.tables).toEqual(['sunbed'])
     expect(r.result.parcels).toEqual([1, 2])
-    expect(vi.mocked(getSnapshot).mock.calls.every(([s]) => s === A)).toBe(true)
+    expect(vi.mocked(runAssistantSql)).toHaveBeenCalled()
+    // The claim is the route-bound site + owner account, never anything from the script.
+    expect(vi.mocked(runAssistantSql).mock.calls.every(([, , c]) => c.siteId === A && c.accountId === OWNER)).toBe(true)
+    expect(vi.mocked(runAssistantSql).mock.calls[0]![0]).toMatch(/^SELECT \* FROM assistant\.sunbed LIMIT 5000$/)
     expect(vi.mocked(loadSiteBase)).toHaveBeenCalledWith(A)
   })
 
-  it('does not build a snapshot when the script names no table', async () => {
+  it('does not touch the database when the script names no table', async () => {
     const r = await call({ purpose: 'gap', code: 'const [a, b] = scene.parcels; return geo.polygonGap(a.corners, b.corners)' })
     expect(r).toMatchObject({ ok: true, result: 6 })
-    expect(getSnapshot).not.toHaveBeenCalled()
+    expect(runAssistantSql).not.toHaveBeenCalled()
   })
 
   it('returns sandbox errors (timeout) as a tool result', async () => {
@@ -101,9 +101,33 @@ describe('run_js tool: inputs', () => {
 
   it('is refused for a non-owner before anything is read', async () => {
     vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: 'someone-else' } as never)
-    const r = await call({ purpose: 'x', code: 'return data.seat' })
+    const r = await call({ purpose: 'x', code: 'return data.sunbed' })
     expect(r).toEqual({ ok: false, error: 'forbidden' })
-    expect(getSnapshot).not.toHaveBeenCalled()
+    expect(runAssistantSql).not.toHaveBeenCalled()
+  })
+})
+
+describe('run_js tool: data access switch', () => {
+  it('without ASSISTANT_DB_URL the data tables are empty and the script is told why, instead of throwing', async () => {
+    delete process.env.ASSISTANT_DB_URL
+    const r = await call({ purpose: 'x', code: 'return data.sunbed.length' })
+    expect(r).toMatchObject({ ok: true, result: 0, notes: [expect.stringContaining('data_access_not_configured')] })
+    expect(runAssistantSql).not.toHaveBeenCalled()
+  })
+
+  it('a view that fails to read is reported and left empty, the script still runs', async () => {
+    vi.mocked(runAssistantSql).mockRejectedValue(Object.assign(new Error('permission denied for view sunbed'), { code: '42501' }))
+    const r = await call({ purpose: 'x', code: 'return data.sunbed.length' })
+    expect(r).toMatchObject({ ok: true, result: 0, notes: [expect.stringContaining('data.sunbed could not be read')] })
+  })
+
+  it('reports truncation with the real total when a view exceeds the cap', async () => {
+    vi.mocked(runAssistantSql).mockImplementation(((sql: string) =>
+      /count\(\*\)/.test(sql)
+        ? Promise.resolve({ columns: ['n'], rows: [[7000]], truncated: false })
+        : Promise.resolve({ columns: ['id'], rows: Array.from({ length: 5000 }, (_, i) => [`i${i}`]), truncated: false })) as never)
+    const r = await call({ purpose: 'x', code: 'return data.sunbed.length' })
+    expect(r).toMatchObject({ ok: true, result: 5000, dataTruncated: { sunbed: { loaded: 5000, total: 7000 } } })
   })
 })
 

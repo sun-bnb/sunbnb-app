@@ -1,6 +1,6 @@
 /**
  * The system inspector (track 030 G3): every aspect is read-only, bound to the route's site/account,
- * compact, and generated from the live registries (snapshot schema, registered propose tools) rather
+ * compact, and generated from the live registries (sql-schema, registered propose tools) rather
  * than hand-copied.
  */
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest'
@@ -39,9 +39,8 @@ import { getAssistantTools, type AssistantToolCtx } from '../tools'
 import { defineTool, type AssistantTool } from '../tools/helpers'
 import { loadSeaModel, loadSiteBase } from '../tools/spatial-data'
 import { knowledgeTopicIds } from '../knowledge'
-import { buildDatabase } from '../snapshot/load'
-import { DENIED_COLUMN, SNAPSHOT_TABLES, SNAPSHOT_VIEWS } from '../snapshot/schema'
-import { checkSql, runReadOnly } from '../tools/sql'
+import { ASSISTANT_VIEWS, DENIED_COLUMN } from '../sql-schema'
+import { checkSql } from '../tools/sql'
 import { INSPECT_ASPECTS, INSPECT_PROVIDERS, MAX_INSPECT_BYTES } from './index'
 import { RELATIONSHIPS } from './data'
 import { describeEditor, OP_META, referencedKnowledgeTopics } from './editor'
@@ -69,6 +68,8 @@ const siteRow = (over: Record<string, unknown> = {}) => ({
 })
 
 beforeEach(() => {
+  process.env.ASSISTANT_DB_URL = 'postgres://reader@localhost/x'
+  process.env.ASSISTANT_DB_CLAIM_SECRET = 'x'.repeat(40)
   vi.clearAllMocks()
   registry.extra = []
   registry.hide = []
@@ -151,13 +152,13 @@ describe('catalog', () => {
   })
 })
 
-describe('data (ER model generated from snapshot/schema.ts)', () => {
-  it('overview has every table and view; each table topic has exactly the allowlisted columns, none denied', async () => {
+describe('data (ER model generated from sql-schema.ts)', () => {
+  it('overview has every view; each topic has exactly the documented columns, none denied', async () => {
     const o = await inspect('data')
     const names = o.tables.map((t: any) => t.name)
-    for (const t of SNAPSHOT_TABLES) expect(names).toContain(t.name)
-    for (const v of SNAPSHOT_VIEWS) expect(names).toContain(v.name)
-    for (const t of SNAPSHOT_TABLES) {
+    for (const t of ASSISTANT_VIEWS) expect(names).toContain(t.name)
+    expect(names).toEqual(ASSISTANT_VIEWS.map((t) => t.name))
+    for (const t of ASSISTANT_VIEWS) {
       const d = await inspect('data', t.name)
       expect(d.columns.map((c: any) => c.name)).toEqual(t.columns.map((c) => c.name))
       expect(d.columns.map((c: any) => c.type)).toEqual(t.columns.map((c) => c.type))
@@ -165,25 +166,33 @@ describe('data (ER model generated from snapshot/schema.ts)', () => {
       expect(size(d)).toBeLessThanOrEqual(MAX_INSPECT_BYTES)
     }
     expect(o.notes.join(' ')).toMatch(/No guest names/)
+    expect(o.model).toMatch(/sunbed/)
+    expect(o.model).not.toMatch(/\bseat\(|snapshot/i)
   })
 
   it('gives units for metres, degrees, money and percent', async () => {
     const col = async (t: string, c: string) => (await inspect('data', t)).columns.find((x: any) => x.name === c)
     expect((await col('parcel', 'gap_between_rows')).unit).toBe('metres')
     expect((await col('parcel', 'rotation')).unit).toBe('degrees')
-    expect((await col('seat', 'price')).unit).toBe('EUR per day')
+    expect((await col('sunbed', 'price')).unit).toBe('EUR per day')
     expect((await col('site', 'vat')).unit).toBe('percent')
-    expect((await col('seat', 'x')).unit).toBe('metres')
+    expect((await col('sunbed', 'x')).unit).toBe('metres')
   })
 
-  it('an unknown or non-allowlisted table is refused', async () => {
-    for (const bad of ['user', 'partner_account', 'invoice_line', 'pg_catalog']) {
+  it('an unknown or non-allowlisted table is refused (including the old snapshot names)', async () => {
+    for (const bad of ['user', 'partner_account', 'invoice_line', 'pg_catalog', 'seat', 'snapshot_info', 'parcel_summary']) {
       expect((await inspect('data', bad)).error).toBe('unknown_topic')
     }
   })
 
-  it('every relationship names real table.column pairs', () => {
-    const cols = (t: string) => SNAPSHOT_TABLES.find((x) => x.name === t)?.columns.map((c) => c.name)
+  it('reports data_access_not_configured (data aspect and catalog) instead of throwing when the reader env is unset', async () => {
+    delete process.env.ASSISTANT_DB_URL
+    expect(await inspect('data')).toMatchObject({ ok: false, reason: 'data_access_not_configured' })
+    expect((await inspect('catalog')).dataAccess).toMatch(/data_access_not_configured/)
+  })
+
+  it('every relationship names real view.column pairs', () => {
+    const cols = (t: string) => ASSISTANT_VIEWS.find((x) => x.name === t)?.columns.map((c) => c.name)
     for (const r of RELATIONSHIPS) {
       for (const end of [r.from, r.to]) {
         const [table, column] = end.split('.')
@@ -193,26 +202,17 @@ describe('data (ER model generated from snapshot/schema.ts)', () => {
     }
   })
 
-  it('every example SQL passes the sql tool gate and executes on the real snapshot schema', async () => {
-    const empty = Object.fromEntries(SNAPSHOT_TABLES.map((t) => [t.name, []])) as never
-    const db = await buildDatabase(empty, 'UTC')
-    try {
-      for (const r of RELATIONSHIPS) {
-        const checked = checkSql(r.sql)
-        expect(checked.ok, r.sql).toBe(true)
-        if (checked.ok) {
-          const res = await runReadOnly(db, checked.query)
-          expect(res.ok, `${r.from} -> ${r.to}: ${JSON.stringify(res)}`).toBe(true)
-        }
-      }
-    } finally {
-      await db.close()
+  it('every example SQL passes the sql tool gate and only names documented views (sql.integration.test.ts runs them for real)', () => {
+    const views = new Set(ASSISTANT_VIEWS.map((v) => v.name))
+    for (const r of RELATIONSHIPS) {
+      expect(checkSql(r.sql).ok, r.sql).toBe(true)
+      for (const m of r.sql.matchAll(/\b(?:from|join)\s+([a-z_]+)/gi)) expect(views.has(m[1]!.toLowerCase() as never), `${m[1]} in: ${r.sql}`).toBe(true)
     }
-  }, 60_000)
+  })
 
-  it('covers every FK-like column of the snapshot with a relationship (a new *_id column fails until documented)', () => {
+  it('covers every FK-like column with a relationship (a new *_id column fails until documented)', () => {
     const linked = new Set(RELATIONSHIPS.flatMap((r) => [r.from, r.to]))
-    for (const t of SNAPSHOT_TABLES) {
+    for (const t of ASSISTANT_VIEWS) {
       for (const c of t.columns) {
         if (c.name === 'id' || !/_id$/.test(c.name)) continue
         expect(linked.has(`${t.name}.${c.name}`), `${t.name}.${c.name} needs a RELATIONSHIPS entry`).toBe(true)

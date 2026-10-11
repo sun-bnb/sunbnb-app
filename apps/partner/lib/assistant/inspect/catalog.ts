@@ -4,6 +4,7 @@
  * tools actually registered, so it never points at a tool the model does not have (e.g. `run_js`
  * until it is registered).
  */
+import { assistantDataConfigured, DATA_ACCESS_NOT_CONFIGURED } from '../data-access'
 import { registeredTools } from './tool-source'
 import type { InspectProvider } from './types'
 
@@ -38,6 +39,9 @@ export function catalogProvider(all: () => readonly InspectProvider[]): InspectP
         howToUse: 'inspect({ aspect, topic? }) is read-only and always about the OPEN site and its owner account. Call it when unsure where information lives; prefer inspect, sql and the spatial tools over asking the user.',
         aspects: all().map((p) => ({ aspect: p.name, summary: p.summary, ...(p.topics ? { topic: p.topics } : {}), examples: p.examples })),
         whereToLook: TOOL_GUIDE.map((g) => ({ question: g.question, use: g.use.filter(registered) })).filter((g) => g.use.length > 0),
+        ...(assistantDataConfigured()
+          ? {}
+          : { dataAccess: `${DATA_ACCESS_NOT_CONFIGURED}: the sql tool (and run_js data tables) are switched off on this deployment; use the specific read tools.` }),
       }
     },
   }

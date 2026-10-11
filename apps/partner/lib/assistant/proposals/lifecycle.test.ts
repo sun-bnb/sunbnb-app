@@ -43,7 +43,6 @@ import { storedPreview } from './create'
 import { HANDLERS } from './registry'
 import { summarizeDiff } from './types'
 import { CONV, OWNER, SITE, siteRow } from './test-support'
-import * as snapshotCache from '../snapshot/cache'
 
 const ACTION = 'act-1'
 const HOUR = 3_600_000
@@ -547,41 +546,5 @@ describe('undoProposal', () => {
     row = r
     expect(await undoProposal(ACTION)).toMatchObject({ status: 'ok' })
     expect(accountFields.restoreAccountFields).toHaveBeenCalledWith(OWNER, { values: { city: 'Malaga' } })
-  })
-})
-
-describe('sql snapshot invalidation (track 030 G1)', () => {
-  /** A stand-in cached snapshot for SITE; `close` proves it was disposed. */
-  function cacheFor(siteId: string) {
-    const close = vi.fn(async () => {})
-    snapshotCache.cacheSet(siteId, { promise: Promise.resolve({ db: { close } }), expiresAt: Date.now() + HOUR })
-    return close
-  }
-  beforeEach(() => snapshotCache.resetSnapshotCache())
-
-  it("an applied proposal drops that site's data copy (the next sql call reloads), other sites keep theirs", async () => {
-    const mine = cacheFor(SITE)
-    const other = cacheFor('other-site')
-    row = await propose('site_fields', { fields: { price: 9.5 } })
-    expect(await applyProposal(ACTION)).toMatchObject({ status: 'ok' })
-    expect(snapshotCache.cachedSiteIds()).toEqual(['other-site'])
-    await Promise.resolve()
-    expect(mine).toHaveBeenCalled()
-    expect(other).not.toHaveBeenCalled()
-  })
-
-  it('an undo drops it too', async () => {
-    cacheFor(SITE)
-    row = await propose('site_fields', { fields: { price: 9.5 } }, { status: 'applied', appliedAt: new Date(Date.now() - HOUR), snapshot: { price: 9 } })
-    state.site = siteRow({ price: 9.5 })
-    expect(await undoProposal(ACTION)).toMatchObject({ status: 'ok' })
-    expect(snapshotCache.cachedSiteIds()).toEqual([])
-  })
-
-  it('a rejected proposal changed nothing and keeps the copy', async () => {
-    cacheFor(SITE)
-    row = await propose('site_fields', { fields: { price: 9.5 } })
-    expect(await rejectProposal(ACTION)).toMatchObject({ status: 'ok' })
-    expect(snapshotCache.cachedSiteIds()).toEqual([SITE])
   })
 })

@@ -33,6 +33,7 @@
     "./reservation-machine-apply": "./src/reservation-machine-apply.ts",
     "./flags": "./src/flags.ts",
     "./assistant": "./src/assistant.ts",
+    "./assistant-claim": "./src/assistant-claim.ts",
     "./preferences": "./src/preferences.ts",
     "./impersonation": "./src/impersonation.ts",
     "./mollie-tokens": "./src/mollie-tokens.ts",
