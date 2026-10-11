@@ -1,7 +1,11 @@
 /**
- * Assistant INVENTORY proposals end to end against sunbnb_test (track 030 S4a): the propose tool stores
- * a map preview, `applyAssistantAction` runs the REAL parcel actions, and the database must end up
- * exactly where the preview said (preview == result); `undoAssistantAction` restores the snapshot.
+ * Assistant INVENTORY actions end to end against sunbnb_test (track 030 S4a; act-immediately since
+ * 2026-10-11): the propose_* tool stores the map preview and applies it in the same call through the
+ * REAL parcel actions, and the database must end up exactly where the preview said (preview ==
+ * result); `undoAssistantAction` restores the snapshot. Deletes are the exception: the tool leaves
+ * them pending, nothing is written until the typed-confirm `applyAssistantAction`. A stale pending
+ * proposal is created directly (`planInventory` + `createProposalFor`) to keep exercising the
+ * lifecycle's stale check, which still guards that Apply.
  */
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest'
 import { cleanDatabase, disconnectDatabase, prisma } from '@/app/test/setup'
@@ -21,6 +25,8 @@ import { createConversation } from '@repo/data/assistant'
 import { getAssistantTools, type AssistantToolCtx } from '@/lib/assistant/tools'
 import { syncChairsWithLayout } from '@/app/sites/[id]/inventory/actions'
 import type { ChairConfig } from '@/app/sites/[id]/inventory/chair-util'
+import { createProposalFor } from '@/lib/assistant/proposals/create'
+import { inventoryHandler, planInventory } from '@/lib/assistant/proposals/handlers/inventory'
 import { applyAssistantAction, undoAssistantAction } from './actions'
 
 const tools = getAssistantTools()
@@ -35,6 +41,13 @@ async function propose(name: string, input: Record<string, unknown>) {
   const res = ex.result as { ok?: boolean; actionId?: string; error?: string; errors?: string[]; warnings?: string[] }
   expect(ex.errors, JSON.stringify(ex)).toEqual([])
   expect(res.ok, JSON.stringify(res)).toBe(true)
+  return res
+}
+/** A write tool must WRITE in the same call and say so. */
+async function act(name: string, input: Record<string, unknown>) {
+  const res = (await propose(name, input)) as Awaited<ReturnType<typeof propose>> & { status?: string }
+  expect(res.status, JSON.stringify(res)).toBe('applied')
+  expect((await prisma.assistantAction.findUniqueOrThrow({ where: { id: res.actionId } })).status).toBe('applied')
   return res
 }
 const previewOf = async (actionId: string) =>
@@ -63,15 +76,14 @@ beforeEach(async () => {
   mockUserId = ownerId
 })
 
-describe('create parcel: propose -> apply -> undo', () => {
+describe('create parcel: act immediately -> undo', () => {
   it('the database ends up exactly where the previewed ghost seats were; undo removes the parcel completely', async () => {
-    const res = await propose('propose_create_parcel', { anchor: { lat: 36.8, lng: -4.5 }, rows: 2, seats_per_row: 4, rotation: 15 })
+    const res = await act('propose_create_parcel', { anchor: { lat: 36.8, lng: -4.5 }, rows: 2, seats_per_row: 4, rotation: 15 })
     const actionId = res.actionId!
     const geometry = (await previewOf(actionId)).geometry
-    expect(await prisma.inventoryItem.count({ where: { siteId } })).toBe(0) // proposing wrote nothing
     expect(geometry.added).toHaveLength(8)
 
-    expect(await applyAssistantAction(actionId)).toMatchObject({ status: 'ok' })
+    // Written by the tool call itself -- there is no separate apply step.
     const rows = await seatRows()
     expect(rows).toHaveLength(8)
     const preview = geometry.added.map((a: any) => [a.at.lat, a.at.lng, a.at.rotation]).sort()
@@ -88,8 +100,7 @@ describe('create parcel: propose -> apply -> undo', () => {
   })
 
   it('undo is refused (in_use) once a reservation includes the created sunbeds', async () => {
-    const { actionId } = await propose('propose_create_parcel', { anchor: { lat: 36.8, lng: -4.5 }, rows: 1, seats_per_row: 2 })
-    await applyAssistantAction(actionId!)
+    const { actionId } = await act('propose_create_parcel', { anchor: { lat: 36.8, lng: -4.5 }, rows: 1, seats_per_row: 2 })
     const seat = (await seatRows())[0]!
     await prisma.reservation.create({
       data: {
@@ -104,17 +115,16 @@ describe('create parcel: propose -> apply -> undo', () => {
   })
 })
 
-describe('rotate parcel: propose -> apply -> undo', () => {
+describe('rotate parcel: act immediately -> undo', () => {
   it('preview == result for every seat; undo restores positions, rotation, ItemGroup and labels exactly', async () => {
     await seedParcel({ rotation: 30 })
     const before = await seatRows()
     const igBefore = await prisma.itemGroup.findFirstOrThrow()
-    const { actionId } = await propose('propose_rotate', { target: { parcel: 1 }, degrees: 90 })
+    const { actionId } = await act('propose_rotate', { target: { parcel: 1 }, degrees: 90 })
     const geometry = (await previewOf(actionId!)).geometry
     expect(geometry.moved).toHaveLength(8)
-    expect((await seatRows()).map((r) => r.locationLat)).toEqual(before.map((r) => r.locationLat)) // untouched
+    expect((await seatRows()).map((r) => r.locationLat)).not.toEqual(before.map((r) => r.locationLat)) // already moved
 
-    expect(await applyAssistantAction(actionId!)).toMatchObject({ status: 'ok' })
     const after = await seatRows()
     const byId = new Map(after.map((r) => [r.id, r]))
     for (const m of geometry.moved) {
@@ -138,8 +148,7 @@ describe('rotate parcel: propose -> apply -> undo', () => {
     await seedParcel({ pairSeats: false, intraPairGap: 0.4 })
     const unitsBefore = await units()
     expect(unitsBefore).toBe(8) // every seat its own unit
-    const { actionId } = await propose('propose_rotate', { target: { parcel: 1 }, degrees: 45 })
-    await applyAssistantAction(actionId!)
+    const { actionId } = await act('propose_rotate', { target: { parcel: 1 }, degrees: 45 })
     expect(await units()).toBe(8)
     const members = await prisma.inventoryItem.groupBy({ by: ['sunbedGroupId'], where: { siteId }, _count: { _all: true } })
     expect(members.every((m) => m._count._all === 1)).toBe(true)
@@ -149,20 +158,23 @@ describe('rotate parcel: propose -> apply -> undo', () => {
 
   it('STALE undo: a seat moved after apply is never clobbered', async () => {
     await seedParcel()
-    const { actionId } = await propose('propose_rotate', { target: { parcel: 1 }, degrees: 90 })
-    await applyAssistantAction(actionId!)
+    const { actionId } = await act('propose_rotate', { target: { parcel: 1 }, degrees: 90 })
     const seat = (await seatRows())[0]!
     await prisma.inventoryItem.update({ where: { id: seat.id }, data: { locationLat: '10.5' } })
     expect(await undoAssistantAction(actionId!)).toEqual({ status: 'error', errors: ['stale'] })
     expect((await prisma.inventoryItem.findUniqueOrThrow({ where: { id: seat.id } })).locationLat).toBe('10.5')
   })
 
-  it('STALE apply: a seat moved after the proposal makes the card stale; nothing is written', async () => {
+  it('STALE apply (a pending proposal): a seat moved after it was stored makes the card stale; nothing is written', async () => {
     await seedParcel()
-    const { actionId } = await propose('propose_rotate', { target: { parcel: 1 }, degrees: 90 })
+    const planned = await planInventory(siteId, [{ op: 'rotate', target: { parcel: 1 }, degrees: 90 }])
+    if ('errors' in planned) throw new Error(planned.errors.join('; '))
+    const made = await createProposalFor(ctx(), inventoryHandler, planned.payload)
+    if (!made.ok) throw new Error(made.error)
+    const actionId = made.card.actionId
     const seat = (await seatRows())[0]!
     await prisma.inventoryItem.update({ where: { id: seat.id }, data: { rotation: 77 } })
-    expect(await applyAssistantAction(actionId!)).toEqual({ status: 'error', errors: ['stale'] })
+    expect(await applyAssistantAction(actionId)).toEqual({ status: 'error', errors: ['stale'] })
     expect((await prisma.itemGroup.findFirstOrThrow()).rotation).toBe(0)
   })
 })
@@ -171,9 +183,8 @@ describe('move / status / reverse / delete', () => {
   it('move parcel by metres: preview == result, undo restores; the ItemGroup anchor moves with the seats', async () => {
     await seedParcel()
     const before = await seatRows()
-    const { actionId } = await propose('propose_move', { target: { parcel: 1 }, by_m: { dx: 4, dy: -3 } })
+    const { actionId } = await act('propose_move', { target: { parcel: 1 }, by_m: { dx: 4, dy: -3 } })
     const geometry = (await previewOf(actionId!)).geometry
-    await applyAssistantAction(actionId!)
     const byId = new Map((await seatRows()).map((r) => [r.id, r]))
     for (const m of geometry.moved) {
       expect(parseFloat(byId.get(m.id)!.locationLat)).toBeCloseTo(m.after.lat, 9)
@@ -188,8 +199,7 @@ describe('move / status / reverse / delete', () => {
 
   it('disable a unit via its seat id, then undo', async () => {
     await seedParcel()
-    const { actionId } = await propose('propose_set_status', { target: { seats: ['1-1-1'] }, status: 'disabled' })
-    await applyAssistantAction(actionId!)
+    const { actionId } = await act('propose_set_status', { target: { seats: ['1-1-1'] }, status: 'disabled' })
     expect((await seatRows()).filter((r) => r.status === 'disabled')).toHaveLength(2)
     await undoAssistantAction(actionId!)
     expect((await seatRows()).every((r) => r.status === 'active')).toBe(true)
@@ -198,9 +208,8 @@ describe('move / status / reverse / delete', () => {
   it('reverse numbering: the QR warning count is exact, labels change, undo restores them', async () => {
     await seedParcel()
     const before = await seatRows()
-    const res = await propose('propose_reverse', { parcel: 1, what: 'numbering' })
+    const res = await act('propose_reverse', { parcel: 1, what: 'numbering' })
     expect(res.warnings).toContain('QR cards for 8 seats need reprinting')
-    await applyAssistantAction(res.actionId!)
     const after = await seatRows()
     expect(after.map((r) => r.seatLabel)).not.toEqual(before.map((r) => r.seatLabel))
     expect(after.filter((r) => r.seatLabel !== before.find((b) => b.id === r.id)!.seatLabel).length).toBeGreaterThan(0)
@@ -209,29 +218,36 @@ describe('move / status / reverse / delete', () => {
     expect(restored.map((r) => [r.id, r.number, r.seatLabel])).toEqual(before.map((r) => [r.id, r.number, r.seatLabel]))
   })
 
-  it('delete is applied for real and is NOT undoable', async () => {
+  it('delete stays PENDING: the tool writes nothing; the typed-confirm Apply deletes for real and it is NOT undoable', async () => {
     await seedParcel()
-    const { actionId } = await propose('propose_delete', { target: { parcel: 1 } })
-    expect((await previewOf(actionId!)).geometry.removed).toHaveLength(8)
-    expect(await applyAssistantAction(actionId!)).toMatchObject({ status: 'ok' })
+    const res = await propose('propose_delete', { target: { parcel: 1 } })
+    expect(res).toMatchObject({ status: 'proposed' })
+    const actionId = res.actionId!
+    expect((await previewOf(actionId)).geometry.removed).toHaveLength(8)
+    expect((await prisma.assistantAction.findUniqueOrThrow({ where: { id: actionId } })).status).toBe('proposed')
+    expect(await prisma.inventoryItem.count({ where: { siteId } })).toBe(8) // nothing written yet
+    expect(await units()).toBe(4)
+
+    expect(await applyAssistantAction(actionId)).toMatchObject({ status: 'ok' })
     expect(await prisma.inventoryItem.count({ where: { siteId } })).toBe(0)
-    expect(await undoAssistantAction(actionId!)).toMatchObject({ status: 'error', errors: ['not_undoable', expect.any(String)] })
+    expect(await undoAssistantAction(actionId)).toMatchObject({ status: 'error', errors: ['not_undoable', expect.any(String)] })
   })
 
-  it('shrinking a parcel removes seats and its undo is refused (the removed beds cannot come back)', async () => {
+  it('shrinking a parcel removes seats, so it stays PENDING (nothing written) until Apply; its undo is then refused (the removed beds cannot come back)', async () => {
     await seedParcel()
-    const { actionId } = await propose('propose_edit_parcel', { parcel: 1, seats_per_row: 2 })
-    expect(await applyAssistantAction(actionId!)).toMatchObject({ status: 'ok' })
+    const res = await propose('propose_edit_parcel', { parcel: 1, seats_per_row: 2 })
+    expect(res).toMatchObject({ status: 'proposed' })
+    expect(await prisma.inventoryItem.count({ where: { siteId } })).toBe(8)
+    expect(await applyAssistantAction(res.actionId!)).toMatchObject({ status: 'ok' })
     expect(await prisma.inventoryItem.count({ where: { siteId } })).toBe(4)
-    const res = await undoAssistantAction(actionId!)
-    expect(res).toMatchObject({ status: 'error', errors: ['in_use', expect.stringMatching(/removed by this change/)] })
+    const undo = await undoAssistantAction(res.actionId!)
+    expect(undo).toMatchObject({ status: 'error', errors: ['in_use', expect.stringMatching(/removed by this change/)] })
   })
 
   it('growing a parcel adds seats; undo deletes exactly those and restores the ItemGroup shape', async () => {
     await seedParcel()
     const before = await seatRows()
-    const { actionId } = await propose('propose_edit_parcel', { parcel: 1, seats_per_row: 6 })
-    await applyAssistantAction(actionId!)
+    const { actionId } = await act('propose_edit_parcel', { parcel: 1, seats_per_row: 6 })
     expect(await prisma.inventoryItem.count({ where: { siteId } })).toBe(12)
     expect(await undoAssistantAction(actionId!)).toMatchObject({ status: 'ok' })
     const restored = await seatRows()
