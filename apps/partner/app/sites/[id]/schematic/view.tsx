@@ -534,7 +534,7 @@ export default function SchematicView() {
   const showRightPanel = showItemPanel || showParcelPanel || showElementPanel
 
   return (
-    <div className="flex flex-col -mt-2">
+    <div className="flex flex-col mt-3">
       {/* Phones: the canvas editor is drag-and-drop and built for a mouse. */}
       <div role="status" className="md:hidden px-4 py-2.5 bg-amber-50 border-b border-amber-200 text-xs text-amber-700">
         {t('bestOnLargerScreen')}

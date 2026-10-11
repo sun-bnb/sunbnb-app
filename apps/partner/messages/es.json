@@ -530,6 +530,8 @@
     "mollie": "Mollie",
     "features": "Funciones",
     "enableRentals": "Activar alquiler de equipos",
+    "groupPricingPayments": "Precios y pagos",
+    "groupOpeningBooking": "Apertura y reservas",
     "dangerZone": "Zona peligrosa",
     "deleteSite": "Eliminar sitio",
     "deleteSiteConfirm": "¿Seguro que quieres eliminar este sitio? Esta acción no se puede deshacer.",

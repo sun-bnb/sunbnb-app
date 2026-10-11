@@ -142,7 +142,7 @@ export default function SiteView(
             )
           })}
         </nav>
-        <AssistantToggle siteId={site.id ?? ''} className="mr-2" />
+        <AssistantToggle siteId={site.id ?? ''} className="mr-2 my-1.5" />
         </div>
         {/* Setup nudges: stacked on phones/tablets; side by side from lg (each
             takes half, or the full row when it is alone). */}

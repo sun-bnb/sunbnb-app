@@ -530,6 +530,8 @@
     "mollie": "Mollie",
     "features": "Ominaisuudet",
     "enableRentals": "Ota laitteiden vuokraus käyttöön",
+    "groupPricingPayments": "Hinnoittelu ja maksut",
+    "groupOpeningBooking": "Aukiolo ja varaukset",
     "dangerZone": "Vaaravyöhyke",
     "deleteSite": "Poista kohde",
     "deleteSiteConfirm": "Haluatko varmasti poistaa tämän kohteen? Toimintoa ei voi kumota.",

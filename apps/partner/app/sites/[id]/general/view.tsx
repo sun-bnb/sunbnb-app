@@ -15,7 +15,6 @@ import Button from '@mui/material/Button'
 import TextField from '@mui/material/TextField'
 import Switch from '@mui/material/Switch'
 import IconButton from '@mui/material/IconButton'
-import Divider from '@mui/material/Divider'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -569,13 +568,10 @@ export default function GeneralView() {
         {saveStatus === 'idle' && <><CloudDoneIcon fontSize="small" /> {t('upToDate')}</>}
       </div>
 
-      {/* Two columns from lg: setup (name → pricing → hours → map) on the left,
-          publishing + rules on the right. Source order = phone order. */}
-      <div className="lg:grid lg:grid-cols-2 lg:gap-x-10 lg:items-start">
-      <div className="min-w-0">
-
+      {/* Row 1: identity + publishing. Two columns from sm, stacked on phones. */}
+      <div className="grid gap-x-10 gap-y-5 sm:grid-cols-2 mb-6">
       {/* Site name */}
-      <div className="mb-5">
+      <div className="flex flex-col">
         <h3 className="text-sm font-medium text-gray-700 mb-2">{t('siteName')}</h3>
         <TextField
           fullWidth
@@ -589,7 +585,92 @@ export default function GeneralView() {
         />
       </div>
 
-      <Divider sx={{ mb: 3 }} />
+      {/* Site visibility */}
+      <div className="flex flex-col">
+        <h3 className="text-sm font-medium text-gray-700 mb-2">{t('visibility')}</h3>
+        <div className={`flex flex-1 items-center justify-between gap-3 rounded-lg border-2 p-4 transition-all ${
+          siteStatus === 'active'
+            ? 'border-green-300 bg-green-50'
+            : 'border-gray-200 bg-gray-50'
+        }`}>
+          <div className="flex items-center gap-3">
+            {siteStatus === 'active' ? (
+              <VisibilityIcon className="text-green-600" />
+            ) : (
+              <VisibilityOffIcon className="text-gray-400" />
+            )}
+            <div>
+              <div className={`text-sm font-medium ${siteStatus === 'active' ? 'text-green-700' : 'text-gray-700'}`}>
+                {siteStatus === 'active' ? t('siteIsLive') : t('siteIsHidden')}
+              </div>
+              <div className="text-xs text-gray-500">
+                {siteStatus === 'active'
+                  ? t('siteIsLiveDesc')
+                  : t('siteIsHiddenDesc')}
+              </div>
+            </div>
+          </div>
+          <Switch
+            checked={siteStatus === 'active'}
+            onChange={async () => {
+              const newStatus = siteStatus === 'active' ? 'hidden' : 'active'
+              const result = await setSiteStatus(site.id!, newStatus)
+              if (result.status === 'ok') {
+                setSiteStatusLocal(newStatus)
+                serverRef.current = { ...serverRef.current, status: newStatus }
+                if (newStatus === 'active') trackOnce(`site_published:${site.id}`, 'site_published')
+              }
+            }}
+            color="success"
+          />
+        </div>
+      </div>
+      </div>
+
+      {/* Row 2: location, full width */}
+      {/* Site location */}
+      <div className="mb-5">
+        <h3 className="text-sm font-medium text-gray-700 mb-2">{t('location')}</h3>
+        <p className="text-xs text-gray-500 mb-3">
+          {t('locationDesc')}
+        </p>
+
+        <div className="flex items-center gap-2 px-3 py-2 rounded-sm mb-3 text-sm bg-green-50 border border-green-200 text-green-700">
+          <CheckCircleIcon fontSize="small" />
+          <span>{t('locationCoords', { lat: Number(mapCoords.lat).toFixed(5), lng: Number(mapCoords.lng).toFixed(5) })}</span>
+        </div>
+
+        <div className="h-[260px] sm:h-[360px] rounded-sm overflow-hidden border-2 border-green-300">
+          <SafeAPIProvider apiKey={apiKey}>
+            <SafeMap
+              mapId="site-map"
+              defaultZoom={15}
+              defaultCenter={{ lat: +site.locationLat!, lng: +site.locationLng! }}
+              gestureHandling="cooperative"
+              disableDefaultUI
+              onClick={(e: any) => {
+                if (e.detail.latLng) {
+                  const { lat, lng } = e.detail.latLng
+                  setMapCoords({ lat, lng })
+                  immediateSave({ lat: lat.toString(), lng: lng.toString() })
+                }
+              }}
+            >
+              <SafeAdvancedMarker position={mapCoords} />
+              <CustomMapControl
+                controlPosition={ControlPosition.TOP_LEFT}
+                onPlaceSelect={setSelectedPlace}
+              />
+              <MapHandler place={selectedPlace} />
+            </SafeMap>
+          </SafeAPIProvider>
+        </div>
+      </div>
+
+      {/* Row 3: functional groups, two columns from lg (left first when stacked) */}
+      <div className="lg:grid lg:grid-cols-2 lg:gap-x-10 lg:items-start border-t border-gray-200 pt-6">
+      <div className="min-w-0 mb-2 lg:mb-0">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 border-b border-gray-200 pb-2 mb-4">{t('groupPricingPayments')}</h3>
 
       {/* Billing type — Reservations */}
       <div className="mb-5">
@@ -684,7 +765,47 @@ export default function GeneralView() {
         </div>
       )}
 
-      <Divider sx={{ mb: 3 }} />
+      {/* Payment provider — read-only; the choice is made per account in Account → Payments */}
+      {isPaid && (
+        <div className="mb-5">
+          <h3 className="text-sm font-medium text-gray-700 mb-2">{t('paymentProvider')}</h3>
+          <div className="rounded-lg border border-gray-200 bg-white p-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <PaymentsIcon fontSize="small" className="text-gray-500" />
+                <span className="font-medium text-sm text-gray-900">
+                  {effectiveProvider ? PROVIDER_LABELS[effectiveProvider] : tp('noEffective')}
+                </span>
+                {readiness && (
+                  <span className={`badge ${READINESS_BADGE[readiness.status].cls}`}>
+                    {tp(READINESS_BADGE[readiness.status].key as any)}
+                  </span>
+                )}
+              </div>
+              {effectiveProvider && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {tp('guestsPayWith', { provider: PROVIDER_LABELS[effectiveProvider] })}
+                </p>
+              )}
+            </div>
+            <Link href="/account/payments" className="shrink-0 text-xs font-medium text-gray-700 hover:text-gray-900 hover:underline">
+              {t('changePaymentProvider')}
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Card at the lounger — depends on the effective provider + country (track 028) */}
+      {isPaid && site.id && site.cardPresent === 'terminal-app' && <CardTerminalsCard siteId={site.id} />}
+      {isPaid && site.cardPresent === 'tap-to-pay' && (
+        <div className="mb-5 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+          {t('tapToPayNote')}
+        </div>
+      )}
+
+      </div>
+      <div className="min-w-0">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 border-b border-gray-200 pb-2 mb-4">{t('groupOpeningBooking')}</h3>
 
       {/* Booking hours */}
       <div className="mb-5">
@@ -763,134 +884,38 @@ export default function GeneralView() {
         </p>
       </div>
 
-      <Divider sx={{ mb: 3 }} />
-
-      {/* Site location */}
-      <div className="mb-5">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">{t('location')}</h3>
-        <p className="text-xs text-gray-500 mb-3">
-          {t('locationDesc')}
-        </p>
-
-        <div className="flex items-center gap-2 px-3 py-2 rounded-sm mb-3 text-sm bg-green-50 border border-green-200 text-green-700">
-          <CheckCircleIcon fontSize="small" />
-          <span>{t('locationCoords', { lat: Number(mapCoords.lat).toFixed(5), lng: Number(mapCoords.lng).toFixed(5) })}</span>
-        </div>
-
-        <div className="h-[320px] sm:h-[400px] rounded-sm overflow-hidden border-2 border-green-300">
-          <SafeAPIProvider apiKey={apiKey}>
-            <SafeMap
-              mapId="site-map"
-              defaultZoom={9}
-              defaultCenter={{ lat: +site.locationLat!, lng: +site.locationLng! }}
-              gestureHandling="greedy"
-              disableDefaultUI
-              onClick={(e: any) => {
-                if (e.detail.latLng) {
-                  const { lat, lng } = e.detail.latLng
-                  setMapCoords({ lat, lng })
-                  immediateSave({ lat: lat.toString(), lng: lng.toString() })
-                }
-              }}
-            >
-              <SafeAdvancedMarker position={mapCoords} />
-              <CustomMapControl
-                controlPosition={ControlPosition.TOP_LEFT}
-                onPlaceSelect={setSelectedPlace}
+      {features.includes('sunbeds') && (
+          <div className="mb-5">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">{t('reservationRules')}</h3>
+            <p className="text-xs text-gray-500 mb-3">{t('reservationRulesDesc')}</p>
+            <div className={`flex items-center justify-between rounded-lg border-2 p-3 transition-all ${
+              partialGroupBooking
+                ? 'border-blue-300 bg-blue-50'
+                : 'border-gray-200 bg-gray-50'
+            }`}>
+              <div className="flex items-center gap-3">
+                <EventAvailableIcon className={partialGroupBooking ? 'text-blue-600' : 'text-gray-400'} />
+                <div>
+                  <div className="text-sm font-medium text-gray-700">{t('partialGroupBooking')}</div>
+                  <div className="text-xs text-gray-500">{t('partialGroupBookingDesc')}</div>
+                </div>
+              </div>
+              <Switch
+                checked={partialGroupBooking}
+                onChange={async () => {
+                  const next = !partialGroupBooking
+                  setPartialGroupBookingLocal(next)
+                  const result = await setPartialGroupBooking(site.id!, next)
+                  // Revert on failure — the switch must never show a policy the
+                  // site isn't actually running.
+                  if (result.status !== 'ok') setPartialGroupBookingLocal(!next)
+                  else serverRef.current = { ...serverRef.current, partial: String(next) }
+                }}
+                color="primary"
               />
-              <MapHandler place={selectedPlace} />
-            </SafeMap>
-          </SafeAPIProvider>
-        </div>
-      </div>
-
-      </div>
-      <div className="min-w-0">
-
-      <Divider sx={{ mb: 3, display: { lg: 'none' } }} />
-
-      {/* Site visibility */}
-      <div className="mb-5">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">{t('visibility')}</h3>
-        <div className={`flex items-center justify-between rounded-lg border-2 p-4 transition-all ${
-          siteStatus === 'active'
-            ? 'border-green-300 bg-green-50'
-            : 'border-gray-200 bg-gray-50'
-        }`}>
-          <div className="flex items-center gap-3">
-            {siteStatus === 'active' ? (
-              <VisibilityIcon className="text-green-600" />
-            ) : (
-              <VisibilityOffIcon className="text-gray-400" />
-            )}
-            <div>
-              <div className={`text-sm font-medium ${siteStatus === 'active' ? 'text-green-700' : 'text-gray-700'}`}>
-                {siteStatus === 'active' ? t('siteIsLive') : t('siteIsHidden')}
-              </div>
-              <div className="text-xs text-gray-500">
-                {siteStatus === 'active'
-                  ? t('siteIsLiveDesc')
-                  : t('siteIsHiddenDesc')}
-              </div>
             </div>
           </div>
-          <Switch
-            checked={siteStatus === 'active'}
-            onChange={async () => {
-              const newStatus = siteStatus === 'active' ? 'hidden' : 'active'
-              const result = await setSiteStatus(site.id!, newStatus)
-              if (result.status === 'ok') {
-                setSiteStatusLocal(newStatus)
-                serverRef.current = { ...serverRef.current, status: newStatus }
-                if (newStatus === 'active') trackOnce(`site_published:${site.id}`, 'site_published')
-              }
-            }}
-            color="success"
-          />
-        </div>
-      </div>
-
-      <Divider sx={{ mb: 3 }} />
-
-      {/* Payment provider — read-only; the choice is made per account in Account → Payments */}
-      {isPaid && (
-        <div className="mb-5">
-          <h3 className="text-sm font-medium text-gray-700 mb-2">{t('paymentProvider')}</h3>
-          <div className="rounded-lg border border-gray-200 bg-white p-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <PaymentsIcon fontSize="small" className="text-gray-500" />
-                <span className="font-medium text-sm text-gray-900">
-                  {effectiveProvider ? PROVIDER_LABELS[effectiveProvider] : tp('noEffective')}
-                </span>
-                {readiness && (
-                  <span className={`badge ${READINESS_BADGE[readiness.status].cls}`}>
-                    {tp(READINESS_BADGE[readiness.status].key as any)}
-                  </span>
-                )}
-              </div>
-              {effectiveProvider && (
-                <p className="text-xs text-gray-500 mt-1">
-                  {tp('guestsPayWith', { provider: PROVIDER_LABELS[effectiveProvider] })}
-                </p>
-              )}
-            </div>
-            <Link href="/account/payments" className="shrink-0 text-xs font-medium text-gray-700 hover:text-gray-900 hover:underline">
-              {t('changePaymentProvider')}
-            </Link>
-          </div>
-        </div>
       )}
-
-      {/* Card at the lounger — depends on the effective provider + country (track 028) */}
-      {isPaid && site.id && site.cardPresent === 'terminal-app' && <CardTerminalsCard siteId={site.id} />}
-      {isPaid && site.cardPresent === 'tap-to-pay' && (
-        <div className="mb-5 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
-          {t('tapToPayNote')}
-        </div>
-      )}
-
-      <Divider sx={{ mb: 3 }} />
 
       {/* Site features */}
       <div className="mb-5">
@@ -949,46 +974,6 @@ export default function GeneralView() {
           </div>
         </div>
       </div>
-
-      <Divider sx={{ mb: 3 }} />
-
-      {/* Reservation rules */}
-      {features.includes('sunbeds') && (
-        <>
-          <div className="mb-5">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">{t('reservationRules')}</h3>
-            <p className="text-xs text-gray-500 mb-3">{t('reservationRulesDesc')}</p>
-            <div className={`flex items-center justify-between rounded-lg border-2 p-3 transition-all ${
-              partialGroupBooking
-                ? 'border-blue-300 bg-blue-50'
-                : 'border-gray-200 bg-gray-50'
-            }`}>
-              <div className="flex items-center gap-3">
-                <EventAvailableIcon className={partialGroupBooking ? 'text-blue-600' : 'text-gray-400'} />
-                <div>
-                  <div className="text-sm font-medium text-gray-700">{t('partialGroupBooking')}</div>
-                  <div className="text-xs text-gray-500">{t('partialGroupBookingDesc')}</div>
-                </div>
-              </div>
-              <Switch
-                checked={partialGroupBooking}
-                onChange={async () => {
-                  const next = !partialGroupBooking
-                  setPartialGroupBookingLocal(next)
-                  const result = await setPartialGroupBooking(site.id!, next)
-                  // Revert on failure — the switch must never show a policy the
-                  // site isn't actually running.
-                  if (result.status !== 'ok') setPartialGroupBookingLocal(!next)
-                  else serverRef.current = { ...serverRef.current, partial: String(next) }
-                }}
-                color="primary"
-              />
-            </div>
-          </div>
-
-          <Divider sx={{ mb: 3 }} />
-        </>
-      )}
 
       {/* Layout mode */}
       <div className="mb-5">
@@ -1053,8 +1038,11 @@ export default function GeneralView() {
 
       </div>
 
-      <Divider sx={{ mb: 3 }} />
+      </div>
+      </div>
 
+      {/* Danger zone, full width, visually separated */}
+      <div className="mt-6 border-t border-gray-200 pt-6">
       {/* Danger zone */}
       <div className="mb-4">
         <h3 className="text-sm font-medium text-red-600 mb-2">{t('dangerZone')}</h3>
@@ -1078,9 +1066,8 @@ export default function GeneralView() {
           </div>
         </div>
       </div>
+      </div>
 
-      </div>
-      </div>
 
       {/* Delete confirmation dialog */}
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>

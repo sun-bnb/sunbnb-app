@@ -601,7 +601,7 @@ export default function InventoryView() {
   const showPanel = showItemPanel || showParcelPanel
 
   return (
-    <div className="flex flex-col -mt-2">
+    <div className="flex flex-col mt-3">
       {/* Summary strip */}
       <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs text-gray-500">
         <span className="font-medium text-gray-700">{totalSunbeds}</span>

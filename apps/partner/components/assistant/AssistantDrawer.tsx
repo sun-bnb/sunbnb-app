@@ -58,7 +58,7 @@ export function AssistantToggle({ siteId, className = '' }: { siteId: string; cl
       onClick={toggle}
       aria-expanded={open}
       aria-controls="assistant-drawer"
-      className={`inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[0.8rem] font-medium transition-colors ${
+      className={`inline-flex min-h-[32px] shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[0.8rem] font-medium transition-colors ${
         open
           ? 'border-gray-900 bg-gray-900 text-white'
           : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:text-gray-900'
