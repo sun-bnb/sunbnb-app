@@ -25,6 +25,7 @@ import { requireSiteOwner } from '@/lib/auth-helpers'
 import { ID } from '../request'
 import { readPayload, readPreview } from './create'
 import { HANDLERS } from './registry'
+import { invalidateSnapshot } from '../snapshot/cache'
 import { diffBasis, isEmptyDiff, ProposalError, summarizeDiff, type Diff, type HandlerCtx, type KindHandler } from './types'
 
 export type AssistantActionError =
@@ -93,6 +94,7 @@ async function resolve(actionId: unknown): Promise<Resolved | ActionResult> {
 const isResult = (r: Resolved | ActionResult): r is ActionResult => 'status' in r
 
 function refresh(action: Row) {
+  invalidateSnapshot(action.siteId) // the sql tool's data copy is stale after any write
   try {
     revalidatePath(`/sites/${action.siteId}`, 'layout')
     revalidatePath('/sites')

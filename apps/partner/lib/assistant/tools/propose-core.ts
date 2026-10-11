@@ -27,23 +27,26 @@ export function proposeTool<P>(def: {
     properties: def.properties,
     required: def.required,
     async run(input, ctx) {
-      const planned = await def.plan(input, ctx)
-      if ('errors' in planned) return { ok: false, errors: planned.errors }
-      const created = await createProposalFor(ctx, def.handler, planned.payload, planned.warnings ?? [])
-      if (!created.ok) return { ok: false, error: created.error }
-      const { card } = created
-      return {
-        ok: true,
-        actionId: card.actionId,
-        status: 'proposed',
-        summary: card.summary,
-        changes: card.preview.changes,
-        ...(card.preview.creates ? { creates: card.preview.creates } : {}),
-        ...(card.preview.deletes ? { deletes: card.preview.deletes } : {}),
-        ...(card.preview.warnings ? { warnings: card.preview.warnings } : {}),
-        instruction: INSTRUCTION,
-      }
+      return submitProposal(ctx, def.handler, await def.plan(input, ctx))
     },
   })
 }
 
+/** Store a planned proposal and shape the model-facing result (shared by proposeTool and run_js). */
+export async function submitProposal<P>(ctx: AssistantToolCtx, handler: KindHandler<P, unknown>, planned: Plan<P>) {
+  if ('errors' in planned) return { ok: false, errors: planned.errors }
+  const created = await createProposalFor(ctx, handler, planned.payload, planned.warnings ?? [])
+  if (!created.ok) return { ok: false, error: created.error }
+  const { card } = created
+  return {
+    ok: true,
+    actionId: card.actionId,
+    status: 'proposed',
+    summary: card.summary,
+    changes: card.preview.changes,
+    ...(card.preview.creates ? { creates: card.preview.creates } : {}),
+    ...(card.preview.deletes ? { deletes: card.preview.deletes } : {}),
+    ...(card.preview.warnings ? { warnings: card.preview.warnings } : {}),
+    instruction: INSTRUCTION,
+  }
+}

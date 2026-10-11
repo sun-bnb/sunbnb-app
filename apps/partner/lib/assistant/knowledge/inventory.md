@@ -46,6 +46,20 @@ and its individual sunbeds load.
   coordinates. It moves the parcel along the line between the two centres so the gap becomes what you
   asked for (2 m if you name none, 0 for "touching"), shows the result as a ghost preview and waits for
   Apply.
+- **Ask the assistant to move toward or away from the sea**: "move parcels 4 and 5 closer to the sea",
+  "5 m from the waterline". On a map site the assistant reads the real shoreline (OpenStreetMap) around
+  the venue; on a schematic site it uses the Water shapes you drew. It measures from the parcel's nearest
+  edge to the waterline, so you never need to say which way the sea is. If you give no distance it tells
+  you the current distance and proposes the front edge 5 m from the waterline (never into the water).
+  Several parcels moved together shift by one common amount, so the gaps between them stay as they are.
+  If no shoreline can be found near the venue, the assistant asks you for the direction instead.
+- **Ask the assistant spatial questions about the whole site**: "which parcel is nearest the bar", "is
+  anything on the promenade", "how far is parcel 3 from the road", "line parcel 9 up with parcel 8". The
+  assistant first takes a look at the site (your parcels, the drawn elements, the shoreline, and on a map
+  site the surrounding roads, footpaths, promenade, buildings and amenities such as lifeguard towers and
+  toilets from OpenStreetMap), then measures exactly between any two things and proposes the move as a
+  ghost preview. OpenStreetMap is a public service and may be slow or incomplete: when it cannot be read
+  the assistant says so, and what is not mapped there it cannot see.
 
 ## Rotate and spacing {#rotate-spacing}
 

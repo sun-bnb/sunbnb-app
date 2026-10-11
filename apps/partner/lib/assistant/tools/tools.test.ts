@@ -7,12 +7,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/app/auth', () => ({ auth: vi.fn().mockResolvedValue(null) }))
 vi.mock('@repo/data/flags', () => ({ getFlagStates: vi.fn() }))
 vi.mock('@/app/sites/[id]/parcels', () => ({ getParcelSummaries: vi.fn() }))
+vi.mock('@repo/data/coastline-lookup', () => ({ shoreAround: vi.fn() }))
 vi.mock('@/app/sites/[id]/item-counts', () => ({ getSiteItemCounts: vi.fn() }))
 
 import { executeToolCall } from '@repo/agent/loop'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { getMonthlySourceSummary, getRevenueByChannelByDay } from '@repo/data/analytics'
+import { shoreAround } from '@repo/data/coastline-lookup'
 import { getParcelSummaries } from '@/app/sites/[id]/parcels'
 import { getSiteItemCounts } from '@/app/sites/[id]/item-counts'
 import { getAssistantTools, toolLabel, type AssistantToolCtx } from './index'
@@ -54,12 +56,12 @@ describe('registry', () => {
       [
         'explain_feature', 'find_seats', 'get_account_profile', 'get_accounting_summary', 'get_brand', 'get_content',
         'get_parcel', 'get_revenue_trend', 'get_site_overview', 'get_working_hours', 'list_layout_elements',
-        'list_parcels', 'measure_parcels', 'list_products', 'list_rental_items',
+        'list_parcels', 'measure_parcels', 'measure_to_sea', 'describe_site_area', 'measure', 'list_products', 'list_rental_items',
         'propose_account_fields', 'propose_brand', 'propose_products', 'propose_rental_items', 'propose_site_fields',
         'propose_slug', 'propose_working_hours',
         'propose_canvas_size', 'propose_create_parcel', 'propose_edit_parcel', 'propose_layout_elements', 'propose_rotate', 'propose_spacing', 'propose_move',
         'propose_set_status', 'propose_reverse', 'propose_delete', 'request_qr_print', 'propose_place_image', 'extract_schematic_from_plan',
-        'request_photo_alignment', 'propose_layout_from_photo',
+        'request_photo_alignment', 'propose_layout_from_photo', 'sql', 'run_js', 'inspect',
       ].sort(),
     )
     for (const t of tools) {
@@ -166,6 +168,47 @@ describe('parcels', () => {
     expect(await result('measure_parcels', { from: 1, to: 99 })).toEqual({ ok: false, error: 'parcel_not_found' })
     expect((await result('measure_parcels', { from: 1, to: 1 })).ok).toBe(false)
     expect((await call('measure_parcels', { from: 1 })).accepted).toBe(false)
+  })
+
+  it('measure_to_sea (map): reads the shoreline and returns bearing, distance and a ready by_m', async () => {
+    const M = 111320
+    // parcel at lat 1 / lng 2; shore runs north about 60 m east of it, sea to the east (water on the right).
+    const lng = 2 + 60 / (M * Math.cos(Math.PI / 180))
+    vi.mocked(shoreAround).mockResolvedValue({ ways: [[{ lat: 0.99, lng }, { lat: 1.01, lng }]], water: [] } as never)
+    vi.mocked(getParcelSummaries).mockResolvedValue({ parcels: [parcel(4, { rotation: 0 }), parcel(5, { rotation: 0, locationLat: '1', locationLng: '1.9998' })], ungroupedCount: 0 })
+    const r = await result('measure_to_sea', { parcels: [4, 5], target_distance_m: 5 })
+    expect(shoreAround).toHaveBeenCalledWith(1, 2, 1500)
+    expect(r.parcels[0].seaBearingDegrees).toBe(90)
+    expect(r.parcels[0].distanceToWaterM).toBeGreaterThan(40)
+    expect(r.shared.basedOnParcel).toBe(4)
+    expect(r.shared.by_m.dx).toBeGreaterThan(30)
+    expect(r.shared.resultingDistancesM[4]).toBeCloseTo(5, 0)
+  })
+
+  it('measure_to_sea: no shore, a lookup error and an unknown parcel are ok:false (the model falls back to asking)', async () => {
+    vi.mocked(shoreAround).mockResolvedValue({ ways: [], water: [] } as never)
+    expect(await result('measure_to_sea', { parcels: [1] })).toMatchObject({ ok: false, reason: 'no_shore_within_1500m' })
+    vi.mocked(shoreAround).mockRejectedValue(new Error('no env'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await result('measure_to_sea', { parcels: [1] })).toMatchObject({ ok: false, reason: 'coastline_unavailable' })
+    expect(await result('measure_to_sea', { parcels: [99] })).toEqual({ ok: false, error: 'parcel_not_found' })
+    expect((await call('measure_to_sea', { parcels: [] })).accepted).toBe(false)
+  })
+
+  it('measure_to_sea (schematic): water elements are the sea; no water element is a reason', async () => {
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER, layoutMode: 'schematic' } as never)
+    vi.mocked(getParcelSummaries).mockResolvedValue({
+      parcels: [parcel(4, { rows: 1, seatsPerRow: 1, rotation: 0, pairGap: 0, locationLat: null, locationLng: null, schematicX: 20, schematicY: 10 })],
+      ungroupedCount: 0,
+    })
+    vi.mocked(prisma.layoutElement.findMany).mockResolvedValue([] as never)
+    expect(await result('measure_to_sea', { parcels: [4] })).toMatchObject({ ok: false, reason: 'no_water_in_the_schematic' })
+    vi.mocked(prisma.layoutElement.findMany).mockResolvedValue([{ type: 'water', x: 0, y: 30, width: 40, height: 10, rotation: 0 }] as never)
+    const r = await result('measure_to_sea', { parcels: [4], target_distance_m: 5 })
+    expect(r.parcels[0].seaBearingDegrees).toBe(180)
+    expect(r.parcels[0].by_m.dy).toBeLessThan(0)
+    expect(r.parcels[0].resultingDistanceM).toBeCloseTo(5, 0)
+    expect(prisma.layoutElement.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { siteId: SITE, type: 'water' } }))
   })
 
   it('get_parcel for a parcel number that is not on THIS site is parcel_not_found and reads no seats', async () => {

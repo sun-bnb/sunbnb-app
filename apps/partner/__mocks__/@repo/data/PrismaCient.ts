@@ -19,6 +19,7 @@ const prisma = {
     updateMany: vi.fn(),
     deleteMany: vi.fn(),
     count: vi.fn(),
+    aggregate: vi.fn(),
   },
   order: {
     findUnique: vi.fn(),
@@ -26,6 +27,8 @@ const prisma = {
     findMany: vi.fn(),
     update: vi.fn(),
     updateMany: vi.fn(),
+    count: vi.fn(),
+    aggregate: vi.fn(),
   },
   inventoryItem: {
     findUnique: vi.fn(),
@@ -49,6 +52,7 @@ const prisma = {
     create: vi.fn(),
     update: vi.fn(),
     count: vi.fn(),
+    aggregate: vi.fn(),
   },
   rentalBooking: {
     findUnique: vi.fn(),
@@ -66,6 +70,7 @@ const prisma = {
     update: vi.fn(),
     delete: vi.fn(),
     count: vi.fn(),
+    aggregate: vi.fn(),
   },
   partnerAccount: {
     findUnique: vi.fn(),
@@ -102,6 +107,7 @@ const prisma = {
     update: vi.fn(),
     delete: vi.fn(),
     count: vi.fn(),
+    aggregate: vi.fn(),
   },
   itemGroup: {
     findUnique: vi.fn(),
@@ -199,6 +205,7 @@ const prisma = {
     update: vi.fn(),
     delete: vi.fn(),
     count: vi.fn(),
+    aggregate: vi.fn(),
   },
   tableReservation: {
     findUnique: vi.fn(),

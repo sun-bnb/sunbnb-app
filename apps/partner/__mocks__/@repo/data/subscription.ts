@@ -24,3 +24,17 @@ export const getEffectiveSubscriptionForUser = vi.fn().mockResolvedValue({
   features: { OFF_PLATFORM_BILLING: false },
 })
 export const resolveEffectiveFeatures = vi.fn().mockReturnValue({ OFF_PLATFORM_BILLING: false })
+
+// Constants mirrored from the real module (read by the assistant `inspect` features aspect).
+export const SUBSCRIPTION_FEATURES = {
+  OFF_PLATFORM_BILLING: {
+    key: 'OFF_PLATFORM_BILLING',
+    label: 'Off-platform billing',
+    description: 'Allow availability-only (unpaid) sites',
+  },
+} as const
+export const TIER_FEATURE_DEFAULTS = {
+  STARTER: { OFF_PLATFORM_BILLING: false },
+  PRO: { OFF_PLATFORM_BILLING: true },
+  BUSINESS: { OFF_PLATFORM_BILLING: true },
+} as const

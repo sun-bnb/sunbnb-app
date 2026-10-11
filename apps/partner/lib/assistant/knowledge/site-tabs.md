@@ -77,3 +77,15 @@ Outside the tabs: **Orders** (`/sites/<id>/orders`) is the live order dashboard.
 (`/sites/<id>/manage`) is the on-site floor surface protected by an access key (security token) rather
 than a login: sunbed grid with walk-ins, check-in / departure, blocking, holds, comps, rentals, tills and
 day close. Staff access keys are created under Security.
+
+## Asking questions about your data {#data-questions}
+
+The assistant can answer free-form questions about the open site's own data without a dedicated
+screen: "how many active sunbeds are in parcels 3 to 7", "which parcel has the most disabled beds",
+"revenue from sunbeds by week in July", "average order value on Saturdays", "which products were
+never ordered", "how many bookings were checked in vs no-show last month". It runs a read-only query
+over a private copy of this site's data only — parcels, sunbeds, layout elements, products, rentals,
+opening hours, reservations, F&B orders and invoices. The copy is refreshed when something changed
+(and at least every 10 minutes), so a booking made seconds ago may not be counted yet. Guest names,
+emails, phone numbers, payment references and bank details are never in the copy, so the assistant
+cannot look up a guest. Changes are never made this way: they are always proposals you apply.

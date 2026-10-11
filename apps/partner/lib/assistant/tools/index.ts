@@ -4,6 +4,11 @@ import { listProducts, listRentalItems } from './catalog'
 import { explainFeatureTool } from './explain'
 import { extractSchematicFromPlan } from './extract-plan'
 import { findSeats, getParcel, listLayoutElements, listParcels, measureParcelsTool, requestQrPrint } from './inventory'
+import { inspectTool } from './inspect'
+import { measureToSeaTool } from './sea'
+import { sqlTool } from './sql'
+import { runJsTool } from './run-js'
+import { describeSiteArea, measureTool } from './spatial'
 import { proposalTools } from './propose'
 import { proposeLayoutFromPhoto, requestPhotoAlignment } from './propose-aerial'
 import { getAccountProfile, getBrand, getContent, getSiteOverview, getWorkingHours } from './site'
@@ -19,6 +24,9 @@ export function getAssistantTools(): readonly AssistantTool[] {
     listParcels,
     getParcel,
     measureParcelsTool,
+    measureToSeaTool,
+    describeSiteArea,
+    measureTool,
     findSeats,
     listLayoutElements,
     listProducts,
@@ -29,6 +37,9 @@ export function getAssistantTools(): readonly AssistantTool[] {
     getAccountProfile,
     getAccountingSummary,
     getRevenueTrend,
+    sqlTool,
+    runJsTool,
+    inspectTool,
     explainFeatureTool(),
     requestQrPrint,
     ...proposalTools,

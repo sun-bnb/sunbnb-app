@@ -1,0 +1,145 @@
+/**
+ * What a run_js script gets to read (track 030 G4) — all of it scoped to the route-bound site.
+ *
+ *  - `data`: the G1 snapshot tables (the same allowlisted, PII-free, surrogate-id copy the `sql`
+ *    tool queries), read back out of the per-site PGlite with a row cap. Only the allowlisted
+ *    columns are selected by name. Model input never reaches the real database: the table names
+ *    come from the schema allowlist, matched against the script text.
+ *  - `scene`: the G2 site scene in the local metre frame (x east, y north): parcels with corners,
+ *    anchor and row bearing, schematic elements, and — when the script mentions them — every seat
+ *    position and the shoreline.
+ *  - `frame`: the constants the in-sandbox `geo.toLocal` / `geo.fromLocal` need.
+ */
+import type { PGlite } from '@electric-sql/pglite'
+import prisma from '@repo/data/PrismaCient'
+import { formatSeatId } from '@repo/data/seat-label'
+import { M_PER_DEG, describeFrame, toLocal, type Frame, type Pt } from '../geo/frame'
+import { elementPolygon } from '../geo/features'
+import { centroid } from '../geo/shapes'
+import { SNAPSHOT_TABLES, type SnapshotTableName } from '../snapshot/schema'
+import { elementHandle } from '../tools/helpers'
+import { loadElements, seatLocal, type SiteBase } from '../tools/spatial-data'
+import { shoreScene } from '../tools/spatial'
+import type { SandboxFrame } from './run'
+
+/** Rows per snapshot table handed to a script (newest first for reservations / orders / invoices). */
+export const DATA_ROW_CAP = 5000
+/** Seat positions in `scene.seats`. */
+export const SCENE_SEAT_CAP = 5000
+/** Shoreline radius around the site origin, metres. */
+export const SCENE_SHORE_RADIUS_M = 600
+
+const word = (name: string) => new RegExp(`\\b${name}\\b`)
+
+/** Snapshot tables the script names (a dynamic `data[x]` access loads them all). */
+export function referencedTables(code: string): SnapshotTableName[] {
+  if (/\bdata\s*\[/.test(code)) return SNAPSHOT_TABLES.map((t) => t.name)
+  return SNAPSHOT_TABLES.filter((t) => word(t.name).test(code)).map((t) => t.name)
+}
+
+export const sceneWants = (code: string) => ({ seats: /\bseats\b/.test(code), shoreline: /shore/i.test(code) })
+
+const jsonSafe = (v: unknown): unknown =>
+  typeof v === 'bigint' ? Number(v) : v instanceof Date ? v.toISOString() : v instanceof Uint8Array ? null : v
+
+const quoteIdent = (s: string) => `"${s.replace(/"/g, '""')}"`
+
+/** Read the named tables from a site snapshot: plain row objects, allowlisted columns only, capped. */
+export async function readSnapshotTables(db: PGlite, tables: readonly SnapshotTableName[], cap = DATA_ROW_CAP) {
+  const data: Record<string, Record<string, unknown>[]> = {}
+  const truncated: Record<string, { loaded: number; total: number }> = {}
+  for (const name of tables) {
+    const def = SNAPSHOT_TABLES.find((t) => t.name === name)
+    if (!def) continue
+    const cols = def.columns.map((c) => quoteIdent(c.name)).join(', ')
+    const order = def.columns.some((c) => c.name === 'id') ? ' ORDER BY "id"' : ''
+    const res = await db.query<Record<string, unknown>>(`SELECT ${cols} FROM ${quoteIdent(def.name)}${order} LIMIT ${cap + 1}`)
+    const rows = res.rows.slice(0, cap).map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, jsonSafe(v)])))
+    data[name] = rows
+    if (res.rows.length > cap) {
+      const n = await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM ${quoteIdent(def.name)}`)
+      truncated[name] = { loaded: cap, total: n.rows[0]?.n ?? cap }
+    }
+  }
+  return { data, truncated }
+}
+
+export function sandboxFrame(frame: Frame): SandboxFrame {
+  return frame.mode === 'geo' ? { mode: 'geo', origin: frame.origin, perLng: frame.perLng, mPerDeg: M_PER_DEG } : { mode: 'schematic' }
+}
+
+const r3 = (v: number) => Math.round(v * 1000) / 1000 + 0
+const rp = (p: Pt): Pt => ({ x: r3(p.x), y: r3(p.y) })
+
+/** The site scene in local metres. `want` decides the two optional (heavier) parts. */
+export async function buildScriptScene(siteId: string, base: SiteBase, want: { seats: boolean; shoreline: boolean }) {
+  const notes: string[] = []
+  const parcels = base.parcels.map((p) => {
+    const anchor = toLocal(base.frame, p.shape.anchor as never)
+    return {
+      number: p.summary.group,
+      corners: p.poly.map(rp),
+      centre: rp(centroid(p.poly)),
+      anchor: anchor ? rp(anchor) : null,
+      rowBearingDegrees: r3(p.shape.rowBearingDegrees),
+      alongRowsM: r3(p.shape.sizeM.alongRows),
+      acrossRowsM: r3(p.shape.sizeM.acrossRows),
+      seatCount: p.summary.count,
+      rows: p.summary.rows,
+      seatsPerRow: p.summary.seatsPerRow,
+      horizontalGapM: p.summary.horizontalGap,
+      verticalGapM: p.summary.verticalGap,
+      rotation: p.summary.rotation,
+      category: p.summary.category,
+      price: p.summary.price,
+    }
+  })
+  if (base.parcelsWithoutGeometry.length) notes.push(`parcels without a position (not in scene.parcels): ${base.parcelsWithoutGeometry.join(', ')}`)
+
+  let elements: unknown[] = []
+  if (base.mode === 'schematic') {
+    const rows = await loadElements(siteId)
+    elements = rows.map((e) => {
+      const corners = elementPolygon(e).map((q) => ({ x: q.x, y: q.y }))
+      return { element: elementHandle(e.id), type: e.type, label: e.label, corners: corners.map(rp), centre: rp(centroid(corners)), width: e.width, height: e.height, rotation: e.rotation }
+    })
+  }
+
+  let seats: unknown[] | undefined
+  if (want.seats) {
+    const rows = await prisma.inventoryItem.findMany({
+      where: { siteId, status: { not: 'pool' } },
+      select: { number: true, seatLabel: true, group: true, status: true, rotation: true, locationLat: true, locationLng: true, schematicX: true, schematicY: true },
+      orderBy: { number: 'asc' },
+      take: SCENE_SEAT_CAP + 1,
+    })
+    if (rows.length > SCENE_SEAT_CAP) notes.push(`scene.seats holds the first ${SCENE_SEAT_CAP} seats only`)
+    seats = rows.slice(0, SCENE_SEAT_CAP).flatMap((s) => {
+      const at = seatLocal(base.frame, s)
+      if (!at) return []
+      return [{ id: s.seatLabel ? formatSeatId({ seatLabel: s.seatLabel, number: s.number }) : `#${s.number}`, parcel: s.group, at: rp(at), rotation: s.rotation, status: s.status }]
+    })
+  }
+
+  let shoreline: unknown = undefined
+  if (want.shoreline) {
+    if (base.mode === 'geo' && base.origin) {
+      const shore = await shoreScene(base.origin, base.frame, SCENE_SHORE_RADIUS_M, notes)
+      shoreline = shore
+        ? { lines: shore.lines.map((l) => l.map(rp)), water: shore.water.map((w) => w.map(rp)), seaBearingDegrees: shore.seaBearingDegrees }
+        : null
+    } else {
+      shoreline = null
+      notes.push('schematic site: no shoreline; water is an element (type "water") in scene.elements')
+    }
+  }
+
+  return {
+    frame: describeFrame(base.frame),
+    parcels,
+    elements,
+    ...(seats ? { seats } : {}),
+    ...(shoreline !== undefined ? { shoreline } : {}),
+    notes,
+  }
+}

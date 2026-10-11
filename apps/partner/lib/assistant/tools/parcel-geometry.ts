@@ -11,13 +11,11 @@
 import { parcelFootprint } from '@repo/schematic'
 import type { ParcelSummary } from '@/app/sites/[id]/parcels'
 
-export type LayoutMode = 'geo' | 'schematic'
-export interface Pt { x: number; y: number }
+import { geoFrame, M_PER_DEG, norm360, r1, r2, r6, schematicFrame, toLocal, type Frame, type LayoutMode, type Pt } from '../geo/frame'
+import { moveToGap, polygonFeature, relate } from '../geo/features'
 
-const M_PER_DEG = 111320
-const r1 = (v: number) => Math.round(v * 10) / 10
-const r6 = (v: number) => Math.round(v * 1e6) / 1e6
-const r2 = (v: number) => Math.round(v * 100) / 100
+export type { LayoutMode, Pt }
+export { polygonGap } from '../geo/shapes'
 
 /** A parcel in local metres (east/north-up), plus the facts the model is shown. */
 export interface ParcelShape {
@@ -36,8 +34,6 @@ type GeoSource = Pick<
   ParcelSummary,
   'rows' | 'seatsPerRow' | 'horizontalGap' | 'verticalGap' | 'pairGap' | 'rotation' | 'locationLat' | 'locationLng' | 'schematicX' | 'schematicY'
 >
-
-const norm360 = (d: number) => ((d % 360) + 360) % 360
 
 /** Parcel shape, or null when the parcel has no ItemGroup geometry / anchor (legacy parcels). */
 export function parcelShape(p: GeoSource, mode: LayoutMode): ParcelShape | null {
@@ -98,46 +94,13 @@ export function positionFacts(p: GeoSource, mode: LayoutMode, compact = false) {
   return { anchor: roundSite(s.anchor), ...base, corners: s.localCorners.map((c) => roundSite(toSite(s.anchor, c))) }
 }
 
+/** The parcel's footprint corners in a shared local frame (x east, y north), `parcelShape` order (0-1 = first row, 2-3 = last row). */
+export function parcelPolygon(s: ParcelShape, frame: Frame): Pt[] | null {
+  const a = toLocal(frame, s.anchor)
+  return a ? s.localCorners.map((c) => ({ x: a.x + c.x, y: a.y + c.y })) : null
+}
+
 // ─── two-parcel measurement ─────────────────────────────────────────────────
-
-const sub = (a: Pt, b: Pt): Pt => ({ x: a.x - b.x, y: a.y - b.y })
-const dot = (a: Pt, b: Pt) => a.x * b.x + a.y * b.y
-
-function distPointSegment(p: Pt, a: Pt, b: Pt): number {
-  const ab = sub(b, a)
-  const len2 = dot(ab, ab)
-  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, dot(sub(p, a), ab) / len2))
-  return Math.hypot(p.x - (a.x + ab.x * t), p.y - (a.y + ab.y * t))
-}
-
-/**
- * Edge-to-edge gap between two convex polygons: the smallest distance between their outlines when apart,
- * and the NEGATIVE smallest penetration depth when they overlap (0 when exactly touching).
- */
-export function polygonGap(a: Pt[], b: Pt[]): number {
-  // Separating-axis test over both polygons' edge normals: the largest separation along any axis.
-  let best = -Infinity
-  for (const poly of [a, b]) {
-    for (let i = 0; i < poly.length; i++) {
-      const e = sub(poly[(i + 1) % poly.length]!, poly[i]!)
-      const len = Math.hypot(e.x, e.y)
-      if (len === 0) continue
-      const n = { x: e.y / len, y: -e.x / len }
-      const pa = a.map((p) => dot(p, n))
-      const pb = b.map((p) => dot(p, n))
-      best = Math.max(best, Math.max(Math.min(...pa) - Math.max(...pb), Math.min(...pb) - Math.max(...pa)))
-    }
-  }
-  if (best <= 0) return best === 0 ? 0 : best
-  // Apart: the true distance is vertex-to-edge somewhere (the axis value only under-reads corner-to-corner).
-  let min = Infinity
-  for (const [p, q] of [[a, b], [b, a]] as const) {
-    for (const v of p) for (let i = 0; i < q.length; i++) min = Math.min(min, distPointSegment(v, q[i]!, q[(i + 1) % q.length]!))
-  }
-  return min
-}
-
-const shift = (poly: Pt[], d: Pt): Pt[] => poly.map((p) => ({ x: p.x + d.x, y: p.y + d.y }))
 
 export type Measurement =
   | { ok: false; error: string }
@@ -157,51 +120,37 @@ export type Measurement =
       resultingGapM: number
     }
 
+/** Thin wrapper over the generic `relate` / `moveToGap` for two parcels (the `measure_parcels` tool). */
 export function measureParcels(from: GeoSource, to: GeoSource, mode: LayoutMode, targetGapM = 2): Measurement {
   const a = parcelShape(from, mode)
   const b = parcelShape(to, mode)
   if (!a || !b) return { ok: false, error: 'parcel_has_no_geometry' }
 
-  // Put both in one metric frame, origin = a's anchor.
-  let bOffset: Pt
-  if ('lat' in a.anchor && 'lat' in b.anchor) {
-    const midLat = (a.anchor.lat + b.anchor.lat) / 2
-    bOffset = {
-      x: (b.anchor.lng - a.anchor.lng) * M_PER_DEG * Math.cos((midLat * Math.PI) / 180),
-      y: (b.anchor.lat - a.anchor.lat) * M_PER_DEG,
-    }
-  } else if ('x' in a.anchor && 'x' in b.anchor) {
-    bOffset = { x: b.anchor.x - a.anchor.x, y: -(b.anchor.y - a.anchor.y) }
-  } else return { ok: false, error: 'mixed_layout_modes' }
+  // One metric frame, origin = a's anchor.
+  let frame: Frame
+  if (mode === 'geo' && 'lat' in a.anchor) frame = geoFrame(a.anchor)
+  else if (mode === 'schematic' && 'x' in a.anchor) frame = schematicFrame()
+  else return { ok: false, error: 'mixed_layout_modes' }
+  const polyA = parcelPolygon(a, frame)
+  const polyB = parcelPolygon(b, frame)
+  if (!polyA || !polyB) return { ok: false, error: 'mixed_layout_modes' }
 
-  const polyA = a.localCorners
-  const polyB = shift(b.localCorners, bOffset)
-  const cA = a.localCentre
-  const cB = { x: b.localCentre.x + bOffset.x, y: b.localCentre.y + bOffset.y }
-  const delta = sub(cB, cA)
-  const dist = Math.hypot(delta.x, delta.y)
-  const gap = polygonGap(polyA, polyB)
-  if (dist < 1e-6) return { ok: false, error: 'parcels_share_the_same_centre' }
-  const u = { x: delta.x / dist, y: delta.y / dist }
-
-  // Move along the centre line by s: start from the gap difference, then correct for the polygons'
-  // shape (offset / rotated parcels make the edge gap change at a different rate than the centres).
-  let s = gap - targetGapM
-  for (let i = 0; i < 12; i++) {
-    const g = polygonGap(shift(polyA, { x: u.x * s, y: u.y * s }), polyB)
-    if (Math.abs(g - targetGapM) < 0.005) break
-    s += g - targetGapM
-  }
-  const resulting = polygonGap(shift(polyA, { x: u.x * s, y: u.y * s }), polyB)
+  const fa = polygonFeature(polyA)
+  const fb = polygonFeature(polyB)
+  const rel = relate(fa, fb)
+  if (!rel.ok || rel.relation.degenerate) return { ok: false, error: 'parcels_share_the_same_centre' }
+  const r = rel.relation
+  const move = moveToGap(fa, fb, r.direction, targetGapM)
+  if (!move) return { ok: false, error: 'parcel_has_no_geometry' }
   return {
     ok: true,
-    centreDistanceM: r1(dist),
-    centreBearingDegrees: Math.round(norm360((Math.atan2(delta.x, delta.y) * 180) / Math.PI) * 10) / 10,
-    edgeGapM: r1(gap),
-    overlapping: gap < 0,
-    direction: { dx: r2(u.x), dy: r2(u.y) },
+    centreDistanceM: r1(r.centreDistanceM),
+    centreBearingDegrees: r1(r.centreBearingDegrees),
+    edgeGapM: r1(r.edgeGapM),
+    overlapping: r.overlapping,
+    direction: { dx: r2(r.direction.x), dy: r2(r.direction.y) },
     targetGapM,
-    by_m: { dx: r2(u.x * s), dy: r2(u.y * s) },
-    resultingGapM: r1(resulting),
+    by_m: { dx: r2(move.by.x), dy: r2(move.by.y) },
+    resultingGapM: r1(move.resultingGapM),
   }
 }
