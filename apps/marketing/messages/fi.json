@@ -345,7 +345,7 @@
   "Start": {
     "title": "Näin alat",
     "s1Title": "Aseta aurinkotuolisi",
-    "s1": "Piirrä rivisi rantasi kartalle ja tulosta QR-kortti jokaiseen tuoliin.",
+    "s1": "Piirrä rivisi rantasi kartalle ja tulosta QR-kortti jokaiseen tuoliin. Tai anna sisäänrakennetulle tekoälyavustajalle piirretty pohja tai dronekuva, niin se sijoittaa tuolit puolestasi.",
     "s2Title": "Aseta hinnat ja yhdistä Mollie",
     "s2": "Päivähintasi koko rannalle, riveittäin tai tuoleittain. Maksut menevät omalle Mollie-tilillesi.",
     "s3Title": "Jaa varaussivusi",
@@ -357,6 +357,8 @@
     "noPhoneA": "Henkilökuntasi lisää paikan päältä tulevat varaukset ja käteismyynnit vastaanotossa, samaan ruudukkoon kuin verkkovaraukset.",
     "hardwareQ": "Pitääkö minun ostaa laitteita?",
     "hardwareA": "Ei. Sunbnb toimii selaimessa puhelimilla, tableteilla ja kannettavilla, jotka sinulla jo on, eikä asiakkaiden tarvitse ladata sovellusta.",
+    "assistantQ": "Saanko apua käyttöönottoon?",
+    "assistantA": "Kyllä. Yritysportaalissa on sisäänrakennettu tekoälyavustaja, jonka kanssa voit puhua suomeksi, englanniksi tai espanjaksi. Se sijoittaa aurinkotuolisi – myös piirretystä pohjasta tai dronekuvasta – asettaa hinnat, aukioloajat ja tuotteet, täyttää tietosi yrityksesi asiakirjoista ja vastaa kysymyksiin omista varauksistasi ja tuloistasi. Muutokset tulevat voimaan heti ja ne voi perua, ja ennen poistamista se kysyy aina. Se näkee vain oman yrityksesi tiedot.",
     "paidQ": "Miten saan rahani?",
     "paidA": "Oman Mollie-tilisi kautta. Mollie maksaa sinulle aikataulunsa mukaan Sunbnb:n provisio vähennettynä; Sunbnb ei koskaan pidä rahojasi.",
     "costQ": "Mitä se maksaa?",

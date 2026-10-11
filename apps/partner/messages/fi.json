@@ -1619,7 +1619,7 @@
       "setup": {
         "time": "Ennen kautta",
         "title": "Piirrä rantasi",
-        "body": "Sijoita aurinkotuolit satelliittikartalle tai piirretylle pohjalle rivien, välien ja kierron kanssa. Aseta päivähinta koko paikalle, osiolle tai yksittäiselle eturivin tuolille, ja tulosta jokaiselle tuolille QR-kortti."
+        "body": "Sijoita aurinkotuolit satelliittikartalle tai piirretylle pohjalle rivien, välien ja kierron kanssa. Aseta päivähinta koko paikalle, osiolle tai yksittäiselle eturivin tuolille, ja tulosta jokaiselle tuolille QR-kortti. Tai anna sisäänrakennetulle tekoälyavustajalle piirretty pohja tai dronekuva, niin se sijoittaa tuolit puolestasi."
       },
       "book": {
         "time": "Milloin vain",
@@ -1649,6 +1649,10 @@
     },
     "more": {
       "title": "Mukana myös",
+      "assistant": {
+        "title": "Tekoälyavustaja",
+        "body": "Kysy suomeksi, englanniksi tai espanjaksi. Se päivittää hinnat, aukioloajat, tuotteet ja aurinkotuolien sijoittelun niin, että muutoksen voi perua, kysyy ennen kuin poistaa mitään, täyttää tietosi yrityksesi asiakirjoista ja vastaa kysymyksiin varauksistasi ja tuloistasi."
+      },
       "rentals": {
         "title": "Välinevuokraus",
         "body": "Surffilaudat, SUP-laudat, kajakit, polkuveneet ja muut, tunneittain tai päivittäin, varastorajoilla."
@@ -1782,7 +1786,16 @@
     "ch5TransactionHistory": "Tapahtumahistoria",
     "ch5IncomeDashboard": "Tulopaneeli",
     "ch5CustomerReceipts": "Asiakaskuitit",
-    "ch5AccountingDocuments": "Kirjanpitodokumentit"
+    "ch5AccountingDocuments": "Kirjanpitodokumentit",
+    "chapter6Title": "Käyttöönotto tekoälyavustajalla",
+    "ch6Heading": "Kerro vain, mitä tarvitset",
+    "ch6Layout": "Sijoittaa aurinkotuolisi",
+    "ch6PlanPhoto": "Piirretystä pohjasta tai dronekuvasta",
+    "ch6Distances": "Mittaa etäisyydet mereen",
+    "ch6Documents": "Täyttää tietosi asiakirjoista",
+    "ch6Prices": "Päivittää hinnat ja aukioloajat",
+    "ch6Undo": "Muutokset voi perua",
+    "ch6Questions": "Kysy varauksistasi ja tuloistasi..."
   },
   "Staff": {
     "title": "Henkilöstöluettelo",

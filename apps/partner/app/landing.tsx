@@ -116,7 +116,7 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
     { time: t('day.close.time'), title: t('day.close.title'), body: t('day.close.body') },
   ]
 
-  const more = (['rentals', 'tables', 'reports', 'staff', 'refunds', 'languages'] as const).map((k) => ({
+  const more = (['assistant', 'rentals', 'tables', 'reports', 'staff', 'refunds', 'languages'] as const).map((k) => ({
     key: k,
     title: t(`more.${k}.title`),
     body: t(`more.${k}.body`),

@@ -39,6 +39,7 @@ export default async function LandingPage({
   const faq = [
     ['noPhone', {}],
     ['hardware', {}],
+    ['assistant', {}],
     ['paid', {}],
     ['cost', { pct: starter.commissionPercent, pro: PRICING_TIERS.PRO.commissionPercent, business: PRICING_TIERS.BUSINESS.commissionPercent }],
     ['languages', {}],

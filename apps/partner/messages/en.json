@@ -1619,7 +1619,7 @@
       "setup": {
         "time": "Before the season",
         "title": "Draw your beach",
-        "body": "Place your sunbeds on a satellite map or a drawn plan, with rows, spacing and rotation. Set a day price for the whole venue, a section or a single front-row sunbed, and print a QR card for every sunbed."
+        "body": "Place your sunbeds on a satellite map or a drawn plan, with rows, spacing and rotation. Set a day price for the whole venue, a section or a single front-row sunbed, and print a QR card for every sunbed. Or give the built-in AI assistant a drawn plan or a drone photo and it lays them out for you."
       },
       "book": {
         "time": "Any time",
@@ -1649,6 +1649,10 @@
     },
     "more": {
       "title": "Also included",
+      "assistant": {
+        "title": "AI assistant",
+        "body": "Ask in English, Spanish or Finnish. It updates prices, opening hours, products and your sunbed layout with an Undo button, asks before deleting anything, fills in your details from company documents and answers questions about your bookings and revenue."
+      },
       "rentals": {
         "title": "Equipment rentals",
         "body": "Surfboards, paddleboards, kayaks, pedal boats and more, by the hour or by the day, with stock limits."
@@ -1782,7 +1786,16 @@
     "ch5TransactionHistory": "Transaction history",
     "ch5IncomeDashboard": "Income dashboard",
     "ch5CustomerReceipts": "Customer receipts",
-    "ch5AccountingDocuments": "Accounting documents"
+    "ch5AccountingDocuments": "Accounting documents",
+    "chapter6Title": "Set up with an AI assistant",
+    "ch6Heading": "Just tell it what you need",
+    "ch6Layout": "Lays out your sunbeds",
+    "ch6PlanPhoto": "From a drawn plan or a drone photo",
+    "ch6Distances": "Measures distances to the sea",
+    "ch6Documents": "Fills in your details from documents",
+    "ch6Prices": "Updates prices and opening hours",
+    "ch6Undo": "Changes you can undo",
+    "ch6Questions": "Ask about your bookings and revenue..."
   },
   "Staff": {
     "title": "Staff roster",

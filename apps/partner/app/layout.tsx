@@ -35,14 +35,14 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: 'Sunbnb - Partner portal',
-  description: 'Your partner in sunbed management',
+  description: 'Your partner in sunbed management, with a built-in AI assistant',
   icons: {
     icon: '/logo.ico',
     apple: '/logo-lila.png'
   },
   openGraph: {
     title: 'Sunbnb - Partner portal',
-    description: 'Your partner in sunbed management',
+    description: 'Your partner in sunbed management, with a built-in AI assistant',
     url: 'https://sunbnb.app',
     siteName: 'Sunbnb',
     images: [
@@ -57,7 +57,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Sunbnb - Partner portal',
-    description: 'Your partner in sunbed management',
+    description: 'Your partner in sunbed management, with a built-in AI assistant',
     images: ['https://sunbnb.app/sunbnb-thumbnail.png'],
   },
 }

@@ -21,6 +21,7 @@ import ChapterTwo from './ChapterTwo'
 import ChapterThree from './ChapterThree'
 import ChapterFour from './ChapterFour'
 import ChapterFive from './ChapterFive'
+import ChapterSix from './ChapterSix'
 
 export default function InfoPage() {
 
@@ -69,6 +70,10 @@ export default function InfoPage() {
     {
       title: t('chapter5Title'),
       content: selectedIndex === 4 ? <ChapterFive /> : null
+    },
+    {
+      title: t('chapter6Title'),
+      content: selectedIndex === 5 ? <ChapterSix /> : null
     },
   ]
 

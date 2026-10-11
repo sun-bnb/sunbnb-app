@@ -345,7 +345,7 @@
   "Start": {
     "title": "Cómo se empieza",
     "s1Title": "Coloca tus hamacas",
-    "s1": "Dibuja tus filas sobre el mapa de tu playa e imprime una tarjeta QR para cada hamaca.",
+    "s1": "Dibuja tus filas sobre el mapa de tu playa e imprime una tarjeta QR para cada hamaca. O dale al asistente de IA integrado un plano dibujado o una foto de dron y él las coloca por ti.",
     "s2Title": "Pon precios y conecta Mollie",
     "s2": "Tu precio por día, por fila o por hamaca. Los pagos van a tu propia cuenta de Mollie.",
     "s3Title": "Comparte tu página de reservas",
@@ -357,6 +357,8 @@
     "noPhoneA": "Tu personal añade reservas sin cita y ventas en efectivo en recepción, en la misma cuadrícula que las reservas online.",
     "hardwareQ": "¿Necesito comprar algún equipo?",
     "hardwareA": "No. Sunbnb funciona en el navegador de los móviles, tablets y portátiles que ya tienes, y tus clientes no tienen que descargar ninguna app.",
+    "assistantQ": "¿Hay ayuda para configurarlo?",
+    "assistantA": "Sí. El portal del negocio incluye un asistente de IA con el que hablas en español, inglés o finés. Coloca tus hamacas, también a partir de un plano dibujado o una foto de dron, fija precios, horarios y productos, rellena tus datos a partir de los documentos de tu empresa y responde a preguntas sobre tus propias reservas e ingresos. Los cambios se aplican al momento y se pueden deshacer, y pregunta antes de borrar nada. Solo ve los datos de tu propio negocio.",
     "paidQ": "¿Cómo cobro?",
     "paidA": "A través de tu propia cuenta de Mollie. Mollie te paga según su calendario con la comisión de Sunbnb descontada; Sunbnb nunca toca tu dinero.",
     "costQ": "¿Cuánto cuesta?",

@@ -142,6 +142,22 @@ export const KNOWLEDGE: KnowledgeEntry[] = [
     sources: ['apps/partner/app/sites/create', 'apps/partner/app/sites/[id]/inventory', 'apps/partner/app/sites/readiness-checklist.tsx'],
   },
   {
+    id: 'assistant',
+    topic: 'AI assistant in the venue portal',
+    status: 'shipped',
+    say: 'The venue portal has a built-in AI assistant in a side panel on every site page. The venue talks to it in its own words, in English, Spanish or Finnish, and it sets up and edits the site: prices, opening hours, brand, products, rentals, account details and above all the sunbed layout — creating, moving, rotating and spacing sunbeds, renumbering them, setting their status, adding elements to the plan, and measuring distances to the sea and between sunbeds. Changes apply straight away and can be undone for 24 hours; before deleting anything it asks first. The venue can upload company documents (PDF, photos or Word files) and it fills in the details; upload photos to use as the cover, product or rental images; turn a drawn plan into a layout; or line up a drone photo on the map and have it lay out the sunbeds from it. It also answers questions about the venue\'s own data, such as bookings or revenue per sunbed. It only ever sees the venue\'s own data. It is being switched on for venue accounts gradually, so the team can confirm when it is available for a specific venue.',
+    neverClaim: [
+      'it is fully autonomous or runs the venue on its own',
+      'any accuracy figure for layouts made from a plan or a drone photo',
+      'that it is free forever, or any price for it',
+      'it sees other venues\' data or answers general questions outside the venue',
+      'it sets up payments, bank details (IBAN) or identity verification from documents',
+      'it is switched on for every account today',
+    ],
+    figures: [24],
+    sources: ['apps/partner/CLAUDE.md § AI assistant (track 030)', '.claude/tracks/030-partner-ai-assistant.md', 'apps/partner/lib/assistant/proposals/registry.ts (proposal kinds)', 'apps/partner/lib/assistant/config.ts + account flag `assistant` (rollout gate)', 'apps/partner/lib/assistant/uploads.ts (never written from a document: IBAN, payment provider, KYC, personal IDs)'],
+  },
+  {
     id: 'devices',
     topic: 'Devices and hardware',
     status: 'shipped',

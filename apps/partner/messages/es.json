@@ -1619,7 +1619,7 @@
       "setup": {
         "time": "Antes de la temporada",
         "title": "Dibuja tu playa",
-        "body": "Coloca tus hamacas sobre un mapa satélite o un plano dibujado, con filas, separación y rotación. Fija un precio por día para todo el negocio, una zona o una sola hamaca de primera línea, e imprime una tarjeta QR para cada hamaca."
+        "body": "Coloca tus hamacas sobre un mapa satélite o un plano dibujado, con filas, separación y rotación. Fija un precio por día para todo el negocio, una zona o una sola hamaca de primera línea, e imprime una tarjeta QR para cada hamaca. O dale al asistente de IA integrado un plano dibujado o una foto de dron y él las coloca por ti."
       },
       "book": {
         "time": "En cualquier momento",
@@ -1649,6 +1649,10 @@
     },
     "more": {
       "title": "También incluido",
+      "assistant": {
+        "title": "Asistente de IA",
+        "body": "Pídeselo en español, inglés o finés. Actualiza precios, horarios, productos y la distribución de tus hamacas con un botón de deshacer, pregunta antes de borrar nada, rellena tus datos a partir de los documentos de tu empresa y responde a preguntas sobre tus reservas e ingresos."
+      },
       "rentals": {
         "title": "Alquiler de material",
         "body": "Tablas de surf, paddle surf, kayaks, patines a pedales y más, por horas o por días, con control de stock."
@@ -1782,7 +1786,16 @@
     "ch5TransactionHistory": "Historial de transacciones",
     "ch5IncomeDashboard": "Panel de ingresos",
     "ch5CustomerReceipts": "Recibos para clientes",
-    "ch5AccountingDocuments": "Documentos contables"
+    "ch5AccountingDocuments": "Documentos contables",
+    "chapter6Title": "Configura con un asistente de IA",
+    "ch6Heading": "Dile lo que necesitas",
+    "ch6Layout": "Coloca tus hamacas",
+    "ch6PlanPhoto": "Desde un plano dibujado o una foto de dron",
+    "ch6Distances": "Mide distancias hasta el mar",
+    "ch6Documents": "Rellena tus datos desde documentos",
+    "ch6Prices": "Actualiza precios y horarios",
+    "ch6Undo": "Cambios que puedes deshacer",
+    "ch6Questions": "Pregunta por tus reservas e ingresos..."
   },
   "Staff": {
     "title": "Plantilla",
