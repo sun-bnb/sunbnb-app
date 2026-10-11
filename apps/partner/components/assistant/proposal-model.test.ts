@@ -3,6 +3,8 @@ import {
   UNDO_WINDOW_MS,
   canApply,
   canUndo,
+  compactPreview,
+  needsReview,
   formatValue,
   parsePreview,
   parseImagePreview,
@@ -182,5 +184,34 @@ describe('describeCreate', () => {
   it('does not mistake a partial signature for a parcel or element', () => {
     expect(describeCreate({ rows: 3 }).kind).toBe('generic')
     expect(describeCreate({ type: 'water', x: 0 }).kind).toBe('generic')
+  })
+})
+
+describe('done card (act-immediately)', () => {
+  const change = (i: number) => ({ target: `Seat ${i}`, field: 'position', label: 'Position', before: i, after: i + 1 })
+  const base = { changes: [], creates: [], deletes: [], warnings: ['QR cards for 8 seats need reprinting'] }
+
+  it('compactPreview lists at most 5 rows (changes first) and counts the rest; warnings stay', () => {
+    const p = { ...base, changes: Array.from({ length: 3 }, (_, i) => change(i)), creates: Array.from({ length: 4 }, (_, i) => ({ target: `P${i}`, fields: {} })) }
+    const { preview, hidden } = compactPreview(p)
+    expect(preview.changes).toHaveLength(3)
+    expect(preview.creates).toHaveLength(2)
+    expect(hidden).toBe(2)
+    expect(preview.warnings).toEqual(base.warnings)
+  })
+  it('a short list is untouched', () => {
+    const p = { ...base, changes: [change(1)] }
+    expect(compactPreview(p)).toEqual({ preview: p, hidden: 0 })
+  })
+  it('only a pending (delete) proposal needs review; an applied card offers Undo within 24 h and nothing else', () => {
+    expect(needsReview('proposed')).toBe(true)
+    expect(needsReview('applied')).toBe(false)
+    expect(canUndo('applied', base, Date.now() - 1000)).toBe(true)
+    expect(canUndo('applied', base, Date.now() - 25 * 3600_000)).toBe(false)
+  })
+  it('a pending delete still demands the typed word before Apply', () => {
+    const del = { ...base, deletes: [{ target: 'Parcel 3', label: 'removed' }] }
+    expect(canApply(del, '')).toBe(false)
+    expect(canApply(del, 'delete')).toBe(true)
   })
 })

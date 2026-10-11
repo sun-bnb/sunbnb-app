@@ -31,7 +31,7 @@ vi.mock('@/lib/account-fields', async (orig) => ({ ...(await orig<typeof import(
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
-import { appendMessages, getProposalForAccount, markApplied, markFailed, markRejected, markUndone } from '@repo/data/assistant'
+import { appendMessages, createProposal, getProposalForAccount, markApplied, markFailed, markRejected, markUndone } from '@repo/data/assistant'
 import * as site from '@/app/sites/[id]/site-actions'
 import * as content from '@/app/sites/[id]/content-actions'
 import * as hours from '@/app/sites/[id]/working-hours-actions'
@@ -39,6 +39,7 @@ import * as products from '@/app/sites/[id]/products/actions'
 import * as rentals from '@/app/sites/[id]/rentals/actions'
 import * as accountFields from '@/lib/account-fields'
 import { applyProposal, rejectProposal, undoProposal } from './lifecycle'
+import { createAndApply, MAX_ACTIONS_PER_TURN } from './act'
 import { storedPreview } from './create'
 import { HANDLERS } from './registry'
 import { summarizeDiff } from './types'
@@ -546,5 +547,97 @@ describe('undoProposal', () => {
     row = r
     expect(await undoProposal(ACTION)).toMatchObject({ status: 'ok' })
     expect(accountFields.restoreAccountFields).toHaveBeenCalledWith(OWNER, { values: { city: 'Malaga' } })
+  })
+})
+
+// ─── act immediately (founder, 2026-10-11): create + apply in ONE call, same lifecycle ──────────
+describe('createAndApply: the assistant acts immediately through the same apply path', () => {
+  const emit = vi.fn()
+  const actCtx = (): Parameters<typeof createAndApply>[0] => ({ session: { user: { id: OWNER } }, accountId: OWNER, siteId: SITE, conversationId: CONV, emit })
+
+  beforeEach(() => {
+    emit.mockClear()
+    // A tiny in-memory AssistantAction table behind the data-layer mocks.
+    vi.mocked(createProposal).mockImplementation((async (arg: Row) => {
+      row = {
+        id: ACTION, conversationId: arg.conversationId, accountId: arg.accountId, siteId: arg.siteId, kind: arg.kind,
+        payload: arg.payload, preview: arg.preview, snapshot: null, status: 'proposed', expiresAt: new Date(Date.now() + HOUR), appliedAt: null,
+      }
+      return { id: ACTION }
+    }) as never)
+    vi.mocked(markApplied).mockImplementation((async (_id: string, _acct: string, snapshot: unknown) => {
+      row = { ...row!, status: 'applied', snapshot, appliedAt: new Date() }
+      return true
+    }) as never)
+    // saveGeneral really "writes" the price so the staleness check at UNDO sees the applied state.
+    vi.mocked(site.saveGeneral).mockImplementation((async (d: Row) => {
+      state.site = siteRow({ price: Number(d.price) })
+      return OK
+    }) as never)
+  })
+
+  it('a non-delete change is written, recorded as applied and emitted as an applied card, with no transcript note mid-turn', async () => {
+    const ctx = actCtx()
+    const out = await createAndApply(ctx, HANDLERS.site_fields!, { fields: { price: 9.5 } })
+
+    expect(out).toMatchObject({ ok: true, applied: true })
+    expect(site.saveGeneral).toHaveBeenCalledTimes(1)
+    expect(markApplied).toHaveBeenCalledTimes(1)
+    expect(row!.status).toBe('applied')
+    expect(appendMessages).not.toHaveBeenCalled() // the tool result tells the model; a note would land before the turn's own messages
+    expect(emit).toHaveBeenCalledTimes(1)
+    expect(emit.mock.calls[0]![0]).toBe('proposal')
+    expect(emit.mock.calls[0]![1]).toMatchObject({ actionId: ACTION, kind: 'site_fields', status: 'applied', appliedAt: expect.any(Number) })
+    expect(ctx.applied).toBe(1)
+  })
+
+  it('UNDO works for an auto-applied action (snapshot recorded by the same apply path)', async () => {
+    await createAndApply(actCtx(), HANDLERS.site_fields!, { fields: { price: 9.5 } })
+    vi.mocked(site.saveGeneral).mockClear()
+
+    const undone = await undoProposal(ACTION)
+
+    expect(undone).toMatchObject({ status: 'ok' })
+    expect(site.saveGeneral).toHaveBeenCalledWith(expect.objectContaining({ id: SITE, price: '9' }))
+    expect(markUndone).toHaveBeenCalledWith(ACTION, OWNER)
+  })
+
+  it('a change that DELETES is not applied: it stays proposed (typed confirmation) and is emitted without a status', async () => {
+    state.products = [{ id: 'p1', name: 'Mojito', totalPrice: 8, vat: 10, active: true, soldOut: false, imageUrl: null, category: 'drinks' }]
+    const ctx = actCtx()
+    const out = await createAndApply(ctx, HANDLERS.products!, { upserts: [], deletes: ['Mojito'] })
+
+    expect(out).toMatchObject({ ok: true, applied: false })
+    expect(products.deleteProduct).not.toHaveBeenCalled()
+    expect(markApplied).not.toHaveBeenCalled()
+    expect(row!.status).toBe('proposed')
+    expect(emit.mock.calls[0]![1]).not.toHaveProperty('status')
+    expect(ctx.applied ?? 0).toBe(0)
+  })
+
+  it('re-authorises like the button: another account\'s session cannot have the change applied (not_found, nothing written)', async () => {
+    login('someone-else')
+    const out = await createAndApply(actCtx(), HANDLERS.site_fields!, { fields: { price: 9.5 } })
+    expect(out).toEqual({ ok: false, error: 'not_found' })
+    expect(site.saveGeneral).not.toHaveBeenCalled()
+    expect(emit).not.toHaveBeenCalled()
+  })
+
+  it(`stops after ${MAX_ACTIONS_PER_TURN} applied changes in a turn: the next is refused before anything is stored`, async () => {
+    const ctx = actCtx()
+    ctx.applied = MAX_ACTIONS_PER_TURN
+    const out = await createAndApply(ctx, HANDLERS.site_fields!, { fields: { price: 9.5 } })
+    expect(out).toMatchObject({ ok: false, error: expect.stringMatching(/limit/i) })
+    expect(createProposal).not.toHaveBeenCalled()
+    expect(site.saveGeneral).not.toHaveBeenCalled()
+  })
+
+  it('an execute failure rolls back, returns the error and emits no card', async () => {
+    vi.mocked(site.saveGeneral).mockResolvedValue({ status: 'error', errors: ['boom'] } as never)
+    const out = await createAndApply(actCtx(), HANDLERS.site_fields!, { fields: { price: 9.5 } })
+    expect(out).toMatchObject({ ok: false, error: expect.stringContaining('apply_failed') })
+    expect(markFailed).toHaveBeenCalled()
+    expect(markApplied).not.toHaveBeenCalled()
+    expect(emit).not.toHaveBeenCalled()
   })
 })

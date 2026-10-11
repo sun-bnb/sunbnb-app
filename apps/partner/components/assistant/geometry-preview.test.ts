@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  buildGhostModel, computeBounds, parseGeometry, seatCornersGeo, summaryParts, toPt, MAX_GHOST_SEATS,
+  buildGhostModel, computeBounds, hasRemovals, parseGeometry, seatCornersGeo, summaryParts, toPt, MAX_GHOST_SEATS,
 } from './geometry-preview'
 
 const geoPreview = {
@@ -109,5 +109,55 @@ describe('seatCornersGeo', () => {
 describe('summaryParts', () => {
   it('omits zero counts', () => {
     expect(summaryParts({ added: 2, moved: 0, removed: 1 })).toEqual([{ key: 'added', n: 2 }, { key: 'removed', n: 1 }])
+  })
+})
+
+describe('a MOVED PARCEL ghost (live bug: each sunbed drawn as a long streak old -> new)', () => {
+  // A 6 x 8 parcel (48 seats, 1 m apart) shifted 12 m east: every seat moves by the same vector.
+  const M_PER_DEG = 111320
+  const seat = (i: number, dLng = 0) => ({ lat: 35 + Math.floor(i / 8) * (3 / M_PER_DEG), lng: 24 + (i % 8) * (1.2 / (M_PER_DEG * Math.cos((35 * Math.PI) / 180))) + dLng, rotation: 0 })
+  const dLng = 12 / (M_PER_DEG * Math.cos((35 * Math.PI) / 180))
+  const moved = Array.from({ length: 48 }, (_, i) => ({ id: `s${i}`, label: `1-${i}`, before: seat(i), after: seat(i, dLng) }))
+  const model = buildGhostModel(parseGeometry({ geometry: { mode: 'geo', moved } })!)
+
+  it('draws every sunbed as a box AT THE NEW position (rotation kept), never between old and new', () => {
+    const boxes = model.seats.filter((s) => s.kind === 'moved')
+    expect(boxes).toHaveLength(48)
+    boxes.forEach((b, i) => {
+      expect(b.at).toEqual({ x: moved[i]!.after.lng, y: moved[i]!.after.lat })
+      // The corners are one sunbed (0.84 x 2.1 m) around the NEW centre: a streak would span the 12 m move.
+      const corners = seatCornersGeo(b.at, b.rotation)
+      const widthM = (Math.max(...corners.map((c) => c.lng)) - Math.min(...corners.map((c) => c.lng))) * M_PER_DEG * Math.cos((35 * Math.PI) / 180)
+      expect(widthM).toBeLessThan(2.2)
+    })
+  })
+
+  it('the old position is a separate faint box per seat, not a line', () => {
+    const from = model.seats.filter((s) => s.kind === 'moved-from')
+    expect(from).toHaveLength(48)
+    expect(from[0]!.at).toEqual({ x: moved[0]!.before.lng, y: moved[0]!.before.lat })
+  })
+
+  it('a moved group gets ONE arrow between the group centres, not one streak per sunbed', () => {
+    expect(model.links).toHaveLength(1)
+    const [l] = model.links
+    expect(l!.to.x - l!.from.x).toBeCloseTo(dLng, 9)
+    expect(l!.to.y - l!.from.y).toBeCloseTo(0, 9)
+  })
+
+  it('a lone moved seat keeps its own arrow', () => {
+    const one = buildGhostModel(parseGeometry({ geometry: { mode: 'geo', moved: [moved[0]!] } })!)
+    expect(one.links).toHaveLength(1)
+    expect(one.links[0]!.key).toBe('l:s0')
+  })
+})
+
+describe('hasRemovals: the only preview still ghosted', () => {
+  it('is true for removed seats or removed elements, false for add / move', () => {
+    const g = (o: object) => parseGeometry({ geometry: { mode: 'geo', ...o } })!
+    expect(hasRemovals(g({ removed: [{ id: 'a', label: 'x' }] }))).toBe(true)
+    expect(hasRemovals(g({ elements: { removed: [{ id: 'e', label: 'Bar' }] } }))).toBe(true)
+    expect(hasRemovals(g({ added: [{ tempId: 't', at: { lat: 1, lng: 1 } }] }))).toBe(false)
+    expect(hasRemovals(g({ moved: [{ id: 'a', label: 'x', before: { lat: 1, lng: 1 }, after: { lat: 1, lng: 2 } }] }))).toBe(false)
   })
 })

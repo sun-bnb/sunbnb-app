@@ -18,6 +18,8 @@ import {
   type HistoryMessage,
 } from './stream-reducer'
 import { openAlign } from './photo-align-store'
+import { dispatchAssistantApplied } from './proposal-events'
+import { imageTargetOf } from '@/lib/resync'
 import { buildContextPayload, type AssistantPageContext } from './context-payload'
 
 const ENDPOINT = '/api/assistant'
@@ -102,6 +104,10 @@ export function probe(siteId: string): Promise<void> {
 /** Feeds the reducer; `align_photo` additionally opens the map alignment mode (and starts extraction). */
 function handleEvent(siteId: string, event: AssistantEvent): void {
   dispatch(siteId, { type: 'event', event })
+  if (event.type === 'proposal' && event.status === 'applied') {
+    // The assistant already wrote it: resync the tabs / map exactly like a manual Apply, and refresh the server tree.
+    dispatchAssistantApplied({ kind: event.kind, actionId: event.actionId, target: imageTargetOf(event.preview), auto: true })
+  }
   if (event.type === 'align_photo') {
     openAlign(siteId, { uploadId: event.uploadId, seed: event.seed, image: event.image })
   }

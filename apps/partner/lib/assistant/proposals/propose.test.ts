@@ -7,6 +7,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/app/auth', () => ({ auth: vi.fn().mockResolvedValue(null) }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@repo/data/assistant', () => ({ createProposal: vi.fn() }))
+// Applying is the lifecycle's job (covered in lifecycle.test.ts); here the tool's PLANNING is under test.
+vi.mock('./lifecycle', () => ({ applyProposal: vi.fn() }))
 vi.mock('@/app/sites/[id]/site-actions', () => ({
   saveGeneral: vi.fn(), setSiteStatus: vi.fn(), setPartialGroupBooking: vi.fn(), saveBrand: vi.fn(), saveSlug: vi.fn(),
   checkSlug: vi.fn(),
@@ -21,6 +23,7 @@ import { executeToolCall } from '@repo/agent/loop'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { createProposal } from '@repo/data/assistant'
+import { applyProposal } from './lifecycle'
 import * as siteActions from '@/app/sites/[id]/site-actions'
 import * as contentActions from '@/app/sites/[id]/content-actions'
 import * as hoursActions from '@/app/sites/[id]/working-hours-actions'
@@ -76,6 +79,8 @@ beforeEach(() => {
   vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as never)
   vi.mocked(prisma.site.findUnique).mockResolvedValue(siteRow() as never)
   vi.mocked(createProposal).mockResolvedValue({ id: 'act-1' } as never)
+  vi.mocked(applyProposal).mockResolvedValue({ status: 'ok', summary: 'applied' })
+  ctx.applied = 0
   vi.mocked(siteActions.checkSlug).mockResolvedValue({ available: true })
   vi.mocked(prisma.product.findMany).mockResolvedValue([])
   vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([])
@@ -96,14 +101,19 @@ describe('every proposal tool', () => {
     propose_account_fields: { city: 'Marbella' },
   }
 
-  it.each(NAMES)('%s only stores a proposal: nothing is written, and the model is told to wait for Apply', async (name) => {
+  it.each(NAMES)('%s stores the action and APPLIES it in the same call through the lifecycle, telling the model it was applied', async (name) => {
     vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue({ city: 'Malaga', company: 'X', businessId: null, country: 'ES' } as never)
     vi.mocked(prisma.siteBrand.findUnique).mockResolvedValue({ brandName: 'B', tagline: null, bgColor: null, fgColor: null } as never)
     const res = await ok(name, MINIMAL[name]!)
+    // The tool itself never writes site data: the single write path is applyProposal (mocked here).
     expectNothingWritten()
-    expect(res).toMatchObject({ ok: true, actionId: 'act-1', status: 'proposed' })
-    expect(res.instruction).toMatch(/click Apply/)
-    expect(res.instruction).toMatch(/never say it was applied/)
+    expect(res).toMatchObject({ ok: true, actionId: 'act-1', status: 'applied' })
+    expect(res.summary).toEqual(expect.any(String))
+    expect(res.instruction).toMatch(/APPLIED/)
+    expect(res.instruction).toMatch(/Undo/)
+    expect(res.instruction).not.toMatch(/click Apply|never say it was applied/)
+    expect(applyProposal).toHaveBeenCalledTimes(1)
+    expect(applyProposal).toHaveBeenCalledWith('act-1', { note: false })
     expect(createProposal).toHaveBeenCalledTimes(1)
     expect(createProposal).toHaveBeenCalledWith(expect.objectContaining({
       conversationId: CONV, accountId: OWNER, siteId: SITE, actorUserId: OWNER,
@@ -123,17 +133,59 @@ describe('every proposal tool', () => {
     expect(createProposal).not.toHaveBeenCalled()
   })
 
-  it('emits the contract `proposal` event: {actionId, kind, summary, preview{changes[]}}', async () => {
+  it('emits ONE `proposal` event, already status applied (+ appliedAt), only after the apply succeeded', async () => {
+    let appliedBeforeEmit = false
+    vi.mocked(applyProposal).mockImplementation(async () => {
+      appliedBeforeEmit = emit.mock.calls.length === 0
+      return { status: 'ok', summary: 'Changed site price per sunbed (incl. vat) 9 → 9.5' }
+    })
     await ok('propose_site_fields', { price: 9.5 })
+    expect(appliedBeforeEmit).toBe(true) // the card is never shown as pending, then flipped
     expect(emit).toHaveBeenCalledTimes(1)
     const [event, data] = emit.mock.calls[0]!
     expect(event).toBe('proposal')
-    expect(data).toEqual({
+    expect(data).toMatchObject({
       actionId: 'act-1',
       kind: 'site_fields',
       summary: 'Changed site price per sunbed (incl. vat) 9 → 9.5',
+      status: 'applied',
       preview: { changes: [{ target: 'Site', field: 'price', label: 'Price per sunbed (incl. VAT)', before: 9, after: 9.5 }] },
     })
+    expect((data as Result).appliedAt).toEqual(expect.any(Number))
+  })
+
+  it('an apply failure (stale, apply_failed ...) is returned as an error and emits NO card', async () => {
+    vi.mocked(applyProposal).mockResolvedValue({ status: 'error', errors: ['apply_failed', 'boom'] })
+    const ex = await propose('propose_site_fields', { price: 9.5 })
+    expect(ex.result).toMatchObject({ ok: false, error: 'apply_failed: boom' })
+    expect(emit).not.toHaveBeenCalled()
+  })
+
+  it('a change that DELETES stays a pending proposal: not applied, card emitted as proposed, typed confirmation instruction', async () => {
+    vi.mocked(prisma.product.findMany).mockResolvedValue([{ id: 'p1', name: 'Mojito', totalPrice: 8, vat: 10, active: true, soldOut: false, imageUrl: null }] as never)
+    const res = await ok('propose_products', { delete: ['Mojito'] })
+    expect(res.status).toBe('proposed')
+    expect(res.deletes).toHaveLength(1)
+    expect(res.instruction).toMatch(/DELETE/)
+    expect(res.instruction).toMatch(/NOT applied/)
+    expect(applyProposal).not.toHaveBeenCalled()
+    expect(createProposal).toHaveBeenCalledTimes(1)
+    const [event, data] = emit.mock.calls[0]!
+    expect(event).toBe('proposal')
+    expect((data as Result).status).toBeUndefined() // no status => the client renders Apply / Reject with the typed confirm
+    expect(ctx.applied).toBe(0) // a pending delete does not use the turn budget
+  })
+
+  it('at most 5 changes are applied per turn: the 6th is refused, nothing stored or applied for it', async () => {
+    for (let i = 0; i < 5; i++) await ok('propose_site_fields', { price: 10 + i })
+    expect(ctx.applied).toBe(5)
+    vi.mocked(createProposal).mockClear()
+    vi.mocked(applyProposal).mockClear()
+    const ex = await propose('propose_site_fields', { price: 99 })
+    expect((ex.result as Result).ok).toBe(false)
+    expect((ex.result as Result).error).toMatch(/limit/i)
+    expect(createProposal).not.toHaveBeenCalled()
+    expect(applyProposal).not.toHaveBeenCalled()
   })
 
   it('expires the proposal in the future (default TTL) and stores payload + preview', async () => {

@@ -12,6 +12,8 @@ export interface ProposeCtx {
   siteId: string
   conversationId?: string
   emit?: (event: string, data: unknown) => void
+  /** Actions applied so far this turn (mutated by `createAndApply`; capped at MAX_ACTIONS_PER_TURN). */
+  applied?: number
 }
 
 export interface ProposalCard {
@@ -47,6 +49,7 @@ export async function createProposalFor<P>(
   handler: KindHandler<P, unknown>,
   payload: P,
   extraWarnings: string[] = [],
+  opts: { emit?: boolean } = {},
 ): Promise<{ ok: true; card: ProposalCard } | { ok: false; error: string }> {
   if (!ctx.conversationId) return { ok: false, error: 'no_conversation' }
 
@@ -75,6 +78,6 @@ export async function createProposalFor<P>(
   if (!row) return { ok: false, error: 'conversation_not_found' }
 
   const card: ProposalCard = { actionId: row.id, kind: handler.kind, summary, preview: diff }
-  ctx.emit?.('proposal', card)
+  if (opts.emit !== false) ctx.emit?.('proposal', card)
   return { ok: true, card }
 }

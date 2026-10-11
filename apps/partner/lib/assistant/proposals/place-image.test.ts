@@ -10,12 +10,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/app/auth', () => ({ auth: vi.fn().mockResolvedValue(null) }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@repo/data/assistant', () => ({ createProposal: vi.fn(), getUploadForAccount: vi.fn() }))
+// Applying is the lifecycle's job (covered in lifecycle.test.ts); here the tool's PLANNING is under test.
+vi.mock('./lifecycle', () => ({ applyProposal: vi.fn() }))
 vi.mock('@vercel/blob', () => ({ put: vi.fn(), del: vi.fn(), get: vi.fn() }))
 vi.mock('../uploads', async (orig) => ({ ...(await orig<typeof import('../uploads')>()), readUploadBlob: vi.fn() }))
 vi.mock('../image-process', async (orig) => ({ ...(await orig<typeof import('../image-process')>()), processPlacedImage: vi.fn() }))
 
 import { executeToolCall } from '@repo/agent/loop'
 import { createProposal, getUploadForAccount } from '@repo/data/assistant'
+import { applyProposal } from './lifecycle'
 import prisma from '@repo/data/PrismaCient'
 import { put, del } from '@vercel/blob'
 import { auth } from '@/app/auth'
@@ -63,6 +66,8 @@ beforeEach(() => {
   vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([])
   vi.mocked(prisma.siteBrand.findUnique).mockResolvedValue(null)
   vi.mocked(createProposal).mockResolvedValue({ id: 'act-1' } as never)
+  vi.mocked(applyProposal).mockResolvedValue({ status: 'ok', summary: 'applied' })
+  ctx.applied = 0
   vi.mocked(getUploadForAccount).mockResolvedValue(upload() as never)
   vi.mocked(readUploadBlob).mockResolvedValue(Buffer.from('raw'))
   vi.mocked(processPlacedImage).mockResolvedValue({ data: Buffer.from('clean'), contentType: 'image/jpeg', width: 1600, height: 900 })

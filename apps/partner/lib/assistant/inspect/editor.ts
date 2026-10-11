@@ -210,7 +210,7 @@ export function describeEditor(tools: readonly AssistantTool[], layoutMode: Mode
     const meta = OP_META[t.name]
     return {
       tool: t.name,
-      kind: t.name.startsWith('propose_') ? 'proposal (user presses Apply)' : 'assistant action (changes nothing)',
+      kind: t.name.startsWith('propose_') ? 'change (applied at once, with Undo; a delete waits for the typed confirmation)' : 'assistant action (changes nothing)',
       documented: !!meta,
       does: t.description,
       params: paramsOf(t),
@@ -232,7 +232,7 @@ export function describeEditor(tools: readonly AssistantTool[], layoutMode: Mode
   return {
     ok: true,
     layoutMode,
-    howItWorks: 'Every change is a PROPOSAL the user reviews (card + ghost preview on the map/canvas) and applies; Undo within 24 h unless noted. Pass topic = an operation name for its full parameters, or an area name.',
+    howItWorks: 'Every change is APPLIED at once and shows as a done card with Undo (24 h unless noted); only deletes (not undoable) wait for the user to type DELETE on the card, with a ghost preview of what would go. Pass topic = an operation name for its full parameters, or an area name.',
     operations: ops.map((t) => {
       const meta = OP_META[t.name]
       return {

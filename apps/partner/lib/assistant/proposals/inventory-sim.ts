@@ -151,6 +151,9 @@ export interface SimResult {
   removedCount: number
 }
 
+/** A move shorter than this is not applied (invisible on the map). */
+export const MIN_MOVE_M = 0.5
+
 export class InventorySim {
   private parcels = new Map<number, SimParcel>()
   private initial = new Map<string, SimSeat>()
@@ -161,6 +164,7 @@ export class InventorySim {
   private deletes: Remove[] = []
   private warnings: string[] = []
   private removed: SimSeat[] = []
+  private moveMetres: number[] = []
   private qr = new Set<string>()
   private touchedParcels = new Set<number>()
   private newKey = 0
@@ -347,6 +351,7 @@ export class InventorySim {
   // ─── ops ──────────────────────────────────────────────────────────────────
 
   async run(ops: InvOp[]) {
+    this.moveMetres = []
     for (const op of ops) {
       switch (op.op) {
         case 'create_parcel': await this.createParcel(op); break
@@ -359,6 +364,17 @@ export class InventorySim {
         case 'delete': await this.remove(op); break
       }
     }
+    // The assistant acts immediately (no review step), so a move that is invisible is refused rather than applied.
+    // Only a batch made of nothing but moves is judged: a tiny nudge inside a bigger layout script is legitimate.
+    if (ops.length > 0 && ops.every((o) => o.op === 'move') && this.moveMetres.length > 0 && Math.max(...this.moveMetres) < MIN_MOVE_M) {
+      throw new ProposalError(`That move is only ${(Math.round(Math.max(...this.moveMetres) * 100) / 100).toString()} m, under ${MIN_MOVE_M} m: not worth doing. Nothing was changed; tell the user how things currently stand instead.`)
+    }
+  }
+
+  /** Metres moved for a (dy, dx) delta at latitude/row `atY` in this site's coordinate system. */
+  private deltaMetres(atY: number, dy: number, dx: number): number {
+    if (this.mode === 'schematic') return Math.hypot(dx, dy)
+    return Math.hypot(dy * 111320, dx * 111320 * Math.cos((atY * Math.PI) / 180))
   }
 
   private async createParcel(op: Extract<InvOp, { op: 'create_parcel' }>) {
@@ -663,6 +679,7 @@ export class InventorySim {
       if (op.to) { dy = op.to.y - before.y; dx = op.to.x - before.x }
       else { const d = metresToDelta(this.mode, before.y, op.by!.dx, op.by!.dy); dy = d.dy; dx = d.dx }
       if (!Number.isFinite(dy) || !Number.isFinite(dx)) throw new ProposalError('Invalid move target')
+      this.moveMetres.push(this.deltaMetres(before.y, dy, dx))
       for (const s of active(p)) { s.y += dy; s.x += dx }
       p.ig.y += dy
       p.ig.x += dx
@@ -679,6 +696,7 @@ export class InventorySim {
     if (op.to) { dy = op.to.y - c.y; dx = op.to.x - c.x }
     else { const d = metresToDelta(this.mode, c.y, op.by!.dx, op.by!.dy); dy = d.dy; dx = d.dx }
     if (!Number.isFinite(dy) || !Number.isFinite(dx)) throw new ProposalError('Invalid move target')
+    this.moveMetres.push(this.deltaMetres(c.y, dy, dx))
     const before = seats.map((s) => this.pos(s.y, s.x))
     const groups = new Set(resolved.seats.map((s) => s.group))
     const igKeys = new Set(resolved.seats.map((s) => s.igKey).filter(Boolean))

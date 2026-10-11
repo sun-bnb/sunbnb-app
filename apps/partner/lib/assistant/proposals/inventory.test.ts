@@ -9,6 +9,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/app/auth', () => ({ auth: vi.fn().mockResolvedValue(null) }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@repo/data/assistant', () => ({ createProposal: vi.fn() }))
+// Applying is the lifecycle's job (covered in lifecycle.test.ts); here the tool's PLANNING is under test.
+vi.mock('./lifecycle', () => ({ applyProposal: vi.fn() }))
 vi.mock('@/app/sites/[id]/inventory/actions', () => ({
   syncChairsWithLayout: vi.fn(), moveParcel: vi.fn(), moveItems: vi.fn(), rotateSelection: vi.fn(), adjustItemSpacing: vi.fn(),
   reverseParcelNumbering: vi.fn(), reverseParcelOrientation: vi.fn(),
@@ -22,6 +24,7 @@ import { executeToolCall } from '@repo/agent/loop'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { createProposal } from '@repo/data/assistant'
+import { applyProposal } from './lifecycle'
 import { devicesBlockingSeatRemoval } from '@repo/data/unit'
 import { recomputeSeatLabels } from '@repo/data/seat-label-db'
 import * as actions from '@/app/sites/[id]/inventory/actions'
@@ -104,6 +107,8 @@ beforeEach(() => {
   seats = []; igs = []; units = []; layoutMode = 'geo'; booked = 0
   vi.mocked(auth).mockResolvedValue({ user: { id: OWNER } } as never)
   vi.mocked(createProposal).mockResolvedValue({ id: 'act-1' } as never)
+  vi.mocked(applyProposal).mockResolvedValue({ status: 'ok', summary: 'applied' })
+  ctx.applied = 0
   vi.mocked(devicesBlockingSeatRemoval).mockResolvedValue([])
   wireDb()
 })
@@ -300,6 +305,39 @@ describe('preview geometry is computed by the same functions apply uses', () => 
     expect(storedGeometry().moved).toHaveLength(8)
     expect(storedGeometry().moved[0].after.lat - storedGeometry().moved[0].before.lat).toBeCloseTo(dLat, 9)
     expect(res.changes[0]).toMatchObject({ target: 'Parcel 1', field: 'position' })
+  })
+
+  it.each([
+    ['0.3 m east', { dx: 0.3, dy: 0 }],
+    ['0.2 m diagonal (0.28 m)', { dx: 0.2, dy: 0.2 }],
+    ['zero', { dx: 0, dy: 0 }],
+  ])('NEGLIGIBLE move (%s, under 0.5 m) is refused: nothing stored or applied, the error says to report the current state', async (_n, by) => {
+    addParcel(1)
+    const res = await refused('propose_move', { target: { parcel: 1 }, by_m: by })
+    expect(msg(res)).toMatch(/under 0\.5 m|Nothing would change/)
+    expect(msg(res)).toMatch(/current|Nothing/)
+    expect(applyProposal).not.toHaveBeenCalled()
+  })
+
+  it('a move of 0.6 m is real and goes through', async () => {
+    addParcel(1)
+    await ok('propose_move', { target: { parcel: 1 }, by_m: { dx: 0.6, dy: 0 } })
+    expect(applyProposal).toHaveBeenCalledTimes(1)
+  })
+
+  it('negligible is measured in METRES on a map site too (a 0.3 m move expressed as degrees), via an absolute `to`', async () => {
+    addParcel(1)
+    const lat = 36.7213 + 0.3 / 111320
+    await refused('propose_move', { target: { parcel: 1 }, to: { lat, lng: -4.4214 } })
+  })
+
+  it('a tiny nudge inside a LARGER layout script is not refused: only an all-negligible batch of moves is', async () => {
+    addParcel(1)
+    addParcel(2, { lat: 36.7313 })
+    const tiny = { op: 'move' as const, target: { parcel: 1 }, by: { dx: 0.1, dy: 0 } }
+    const big = { op: 'move' as const, target: { parcel: 2 }, by: { dx: 0, dy: 5 } }
+    await expect(simulate(SITE, [tiny, big])).resolves.toBeTruthy()
+    await expect(simulate(SITE, [tiny, { ...tiny, target: { parcel: 2 } }])).rejects.toThrow(/under 0\.5 m/)
   })
 
   it('move needs exactly one of to / by_m, and `to` follows the layout mode', async () => {
@@ -537,6 +575,7 @@ describe('execute = the planned calls through the existing actions, in order', (
   it('rotate parcel, edit, move, status, reverse and spacing map to their actions with site-scoped args', async () => {
     addParcel(1)
     const run = async (name: string, input: Record<string, unknown>) => {
+      ctx.applied = 0 // this test chains more than one turn's worth of changes
       await ok(name, input)
       const done: string[] = []
       await inventoryHandler.execute(hctx, payloadOf(), done)

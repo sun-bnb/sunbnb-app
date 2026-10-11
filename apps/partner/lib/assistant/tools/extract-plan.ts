@@ -26,7 +26,8 @@ import {
   PLAN_SCHEMA, convertPlan, resolveScale, validatePlanExtraction,
   type ConvertedPlan, type KnownDimension, type PlanExtraction,
 } from '../plan-extraction'
-import { createProposalFor, type ProposalCard } from '../proposals/create'
+import type { ProposalCard } from '../proposals/create'
+import { createAndApply } from '../proposals/act'
 import { layoutCanvasHandler, layoutElementsHandler, DEFAULT_CANVAS } from '../proposals/handlers/layout'
 import { inventoryHandler, planInventory } from '../proposals/handlers/inventory'
 import { MAX_TOUCHED } from '../proposals/inventory-sim'
@@ -36,7 +37,7 @@ import type { Diff, KindHandler } from '../proposals/types'
 import { ID } from '../request'
 import { readUploadBlob } from '../uploads'
 import { defineTool, type AssistantTool, type AssistantToolCtx } from './helpers'
-import { INSTRUCTION } from './propose-core'
+import { APPLIED_INSTRUCTION } from './propose-core'
 
 const NOT_SCHEMATIC =
   'Reading a plan only works on sites that use the schematic layout (General tab, Layout mode). This site uses the Google Maps layout: sunbeds are placed on the map instead. Do not offer plan extraction here.'
@@ -110,7 +111,7 @@ export function withSummary<P>(handler: KindHandler<P, unknown>, summary: string
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
-interface Built { card?: ProposalCard; error?: string; kind: string }
+interface Built { card?: ProposalCard; applied?: boolean; error?: string; kind: string }
 
 async function buildProposals(
   ctx: AssistantToolCtx,
@@ -124,21 +125,21 @@ async function buildProposals(
   const warnings = [...plan.warnings]
   if (plan.lowConfidence.length) warnings.push(`Please check these, they were hard to read: ${plan.lowConfidence.join(', ')}`)
   if (site.existing.elements + site.existing.items > 0) {
-    warnings.push(`This site already has ${plural(site.existing.elements, 'element')} and ${plural(site.existing.items, 'sunbed')}: these proposals ADD to them and may overlap`)
+    warnings.push(`This site already has ${plural(site.existing.elements, 'element')} and ${plural(site.existing.items, 'sunbed')}: these changes ADD to them and may overlap`)
   }
   const low = plan.lowConfidence.length ? `, ${plan.lowConfidence.length} to check` : ''
   let warned = false
   const takeWarnings = () => { if (warned) return []; warned = true; return warnings }
 
   const run = async <P>(kind: string, handler: KindHandler<P, unknown>, payload: P, extra: string[]) => {
-    const res = await createProposalFor(ctx, handler, payload, extra)
-    built.push(res.ok ? { kind, card: res.card } : { kind, error: res.error })
+    const res = await createAndApply(ctx, handler, payload, extra)
+    built.push(res.ok ? { kind, card: res.card, applied: res.applied } : { kind, error: res.error })
   }
 
   const dw = Math.abs(plan.canvas.width - site.width)
   const dh = Math.abs(plan.canvas.height - site.height)
   if (dw > 0.05 || dh > 0.05) {
-    await run('layout_canvas', layoutCanvasHandler, { width: plan.canvas.width, height: plan.canvas.height }, [`Sized from the plan using ${plan.scale.description}. Apply this first so the elements fit`])
+    await run('layout_canvas', layoutCanvasHandler, { width: plan.canvas.width, height: plan.canvas.height }, [`Sized from the plan using ${plan.scale.description}`])
   }
   if (plan.elements.length) {
     const add = plan.elements.map(({ confidence: _c, ...e }) => e)
@@ -181,7 +182,7 @@ export function createExtractPlanTool(deps: ExtractDeps = defaultExtractDeps): A
     name: 'extract_schematic_from_plan',
     label: 'Reading the plan',
     description:
-      'Read a DRAWN or PRINTED plan the user attached (photo, scan or screenshot, JPEG/PNG/WebP image, schematic sites only) and PROPOSE the layout it shows: canvas size, water / sand / deck / pool / bar elements and the sunbed parcels, as separate reviewable proposals (cards with a ghost preview). Pass the attachment\'s uploadId from the page context. The plan needs a SCALE: if the user told you a real dimension (e.g. "the whole area is 60 m wide") pass knownDimension; if the drawing itself shows a scale bar or stated size it is read automatically; if neither is known the tool returns a question you must put to the user instead of guessing, then call it again with the answer. Each call is one of the account\'s 10 daily extraction jobs, so ask for the scale BEFORE calling when the user has not given one and the plan is unlikely to print one. underlay=true also proposes the plan picture as the schematic underlay to trace over. PROPOSES only; never changes anything itself.',
+      'Read a DRAWN or PRINTED plan the user attached (photo, scan or screenshot, JPEG/PNG/WebP image, schematic sites only) and APPLY the layout it shows: canvas size, water / sand / deck / pool / bar elements and the sunbed parcels, as separate undoable changes (one card each). Pass the attachment\'s uploadId from the page context. The plan needs a SCALE: if the user told you a real dimension (e.g. "the whole area is 60 m wide") pass knownDimension; if the drawing itself shows a scale bar or stated size it is read automatically; if neither is known the tool returns a question you must put to the user instead of guessing, then call it again with the answer. Each call is one of the account\'s 10 daily extraction jobs, so ask for the scale BEFORE calling when the user has not given one and the plan is unlikely to print one. underlay=true also sets the plan picture as the schematic underlay to trace over. Applies immediately (each change can be undone for 24 h); it ADDS to what the site already has.',
     properties: {
       uploadId: { type: 'string', maxLength: 64, description: 'The attached plan\'s uploadId (page context attachments)' },
       knownDimension: {
@@ -272,11 +273,11 @@ export function createExtractPlanTool(deps: ExtractDeps = defaultExtractDeps): A
         uploadId,
         input.underlay === true,
       )
-      const proposals = built.filter((b) => b.card).map((b) => ({ actionId: b.card!.actionId, kind: b.kind, summary: b.card!.summary }))
+      const proposals = built.filter((b) => b.card).map((b) => ({ actionId: b.card!.actionId, kind: b.kind, summary: b.card!.summary, status: b.applied ? 'applied' : 'proposed' }))
       if (proposals.length === 0) return { ok: false, errors: built.map((b) => `${b.kind}: ${b.error}`) }
       return {
         ok: true,
-        status: 'proposed',
+        status: proposals.every((p) => p.status === 'applied') ? 'applied' : 'partly_applied',
         scale: scale.description,
         canvas: plan.canvas,
         proposals,
@@ -285,7 +286,7 @@ export function createExtractPlanTool(deps: ExtractDeps = defaultExtractDeps): A
         warnings: plan.warnings,
         lowConfidence: plan.lowConfidence,
         planNotes: extraction.notes,
-        instruction: `${INSTRUCTION} There are ${proposals.length} separate cards: tell the user to apply them in order (canvas size first if present, then elements, then sunbeds). Mention the scale used (${scale.description}), list the low-confidence items and warnings, and say each card can be undone within 24 hours.`,
+        instruction: `${APPLIED_INSTRUCTION} ${proposals.length} separate cards were applied in order (canvas size, elements, sunbeds, underlay). Mention the scale used (${scale.description}), list the low-confidence items and warnings, and say each card can be undone within 24 hours. Any card with a failure is listed under failed: say so.`,
       }
     },
   })

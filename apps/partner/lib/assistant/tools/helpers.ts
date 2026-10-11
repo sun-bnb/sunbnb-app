@@ -24,6 +24,8 @@ export interface AssistantToolCtx {
   recordUsage?: (usage: { inputTokens: number; outputTokens: number }) => void
   /** The sanitised page context the client sent this turn (selection, viewport). Ids are UNVERIFIED until resolved in-site. */
   pageContext?: ClientContext
+  /** Actions applied so far this turn (the act-immediately cap, `MAX_ACTIONS_PER_TURN`). Mutated by `createAndApply`. */
+  applied?: number
 }
 
 export interface AssistantTool extends AgentTool<AssistantToolCtx> {

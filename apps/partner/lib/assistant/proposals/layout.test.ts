@@ -8,6 +8,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/app/auth', () => ({ auth: vi.fn().mockResolvedValue(null) }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@repo/data/assistant', () => ({ createProposal: vi.fn() }))
+// Applying is the lifecycle's job (covered in lifecycle.test.ts); here the tool's PLANNING is under test.
+vi.mock('./lifecycle', () => ({ applyProposal: vi.fn() }))
 vi.mock('@/app/sites/[id]/schematic/actions', () => ({ createLayoutElement: vi.fn(), updateLayoutElement: vi.fn(), deleteLayoutElement: vi.fn() }))
 vi.mock('@/app/sites/[id]/site-actions', () => ({ saveLayoutDimensions: vi.fn() }))
 
@@ -15,6 +17,7 @@ import { executeToolCall } from '@repo/agent/loop'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { createProposal } from '@repo/data/assistant'
+import { applyProposal } from './lifecycle'
 import * as schematic from '@/app/sites/[id]/schematic/actions'
 import * as siteActions from '@/app/sites/[id]/site-actions'
 import { getAssistantTools, type AssistantToolCtx } from '../tools'
@@ -45,6 +48,8 @@ beforeEach(() => {
   vi.mocked(auth).mockResolvedValue({ user: { id: OWNER } } as never)
   vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as never)
   vi.mocked(createProposal).mockResolvedValue({ id: 'act-1' } as never)
+  vi.mocked(applyProposal).mockResolvedValue({ status: 'ok', summary: 'applied' })
+  ctx.applied = 0
   site = siteRow({ layoutMode: 'schematic', layoutWidth: 50, layoutHeight: 35 })
   table = [el('cl0000aaaaaa'), el('cl0000bbbbbb', { type: 'sand', shape: 'rect', x: 0, y: 0, width: 20, height: 10, label: null })]
   seats = []
@@ -108,7 +113,7 @@ describe('propose_layout_elements: scoping and validation', () => {
 
   it('stores ids (never handles) resolved in-site, fills preset defaults, and rejects an unknown type / bad numbers', async () => {
     const res = await call('propose_layout_elements', { add: [{ type: 'pool', x: 10, y: 4 }], update: [{ element: 'aaaaaa', x: 9 }] })
-    expect(res).toMatchObject({ ok: true, status: 'proposed' })
+    expect(res).toMatchObject({ ok: true, status: 'applied' })
     const p = storedPayload()
     expect(p.add![0]).toMatchObject({ type: 'pool', shape: 'ellipse', width: 12, height: 6, rotation: 0 })
     expect(p.update![0]).toEqual({ id: 'cl0000aaaaaa', patch: { x: 9 } })

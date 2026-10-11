@@ -101,6 +101,24 @@ export function formatValue(v: PreviewScalar | undefined, expanded = false, max 
 
 export const hasDeletes = (p: ProposalPreview) => p.deletes.length > 0
 
+/** Rows an applied (done) card lists before collapsing the rest into "+N more". */
+export const APPLIED_MAX_ROWS = 5
+
+/**
+ * The short change list of a done card: changes first, then creates, at most `max` rows in total,
+ * plus how many were left out. A done card is a receipt, not a review, so a 300-seat parcel does not
+ * become a 300-row list.
+ */
+export function compactPreview(p: ProposalPreview, max: number = APPLIED_MAX_ROWS): { preview: ProposalPreview; hidden: number } {
+  const changes = p.changes.slice(0, max)
+  const creates = p.creates.slice(0, Math.max(0, max - changes.length))
+  const hidden = p.changes.length + p.creates.length - changes.length - creates.length
+  return { preview: { ...p, changes, creates }, hidden }
+}
+
+/** Only a still-pending proposal has Apply / Reject buttons: since act-immediately that means a delete. */
+export const needsReview = (status: ProposalStatus): boolean => status === 'proposed'
+
 /** Apply is blocked until the exact word is typed when the proposal deletes anything. */
 export function canApply(preview: ProposalPreview, typed: string): boolean {
   return !hasDeletes(preview) || typed.trim().toUpperCase() === DELETE_CONFIRM_WORD

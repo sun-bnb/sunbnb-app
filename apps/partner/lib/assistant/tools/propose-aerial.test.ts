@@ -20,7 +20,7 @@ vi.mock('@/app/sites/[id]/inventory-actions', () => ({ deleteInventoryItems: vi.
 vi.mock('@/app/sites/[id]/schematic/actions', () => ({ createLayoutElement: vi.fn(), updateLayoutElement: vi.fn(), deleteLayoutElement: vi.fn() }))
 vi.mock('@/app/sites/[id]/site-actions', () => ({ saveLayoutDimensions: vi.fn() }))
 vi.mock('@repo/data/assistant', () => ({ getUploadForAccount: vi.fn(), createProposal: vi.fn() }))
-vi.mock('../proposals/create', () => ({ createProposalFor: vi.fn() }))
+vi.mock('../proposals/act', () => ({ createAndApply: vi.fn() }))
 vi.mock('../proposals/handlers/inventory', async (orig) => ({ ...(await orig<typeof import('../proposals/handlers/inventory')>()), planInventory: vi.fn() }))
 
 import { executeToolCall } from '@repo/agent/loop'
@@ -28,7 +28,7 @@ import type { AerialDescriptorV1, AerialParcelV1 } from '@repo/agent/vision/aeri
 import { auth } from '@/app/auth'
 import { getUploadForAccount } from '@repo/data/assistant'
 import prisma from '@repo/data/PrismaCient'
-import { createProposalFor } from '../proposals/create'
+import { createAndApply } from '../proposals/act'
 import { planInventory } from '../proposals/handlers/inventory'
 import type { InvOp } from '../proposals/inventory-sim'
 import type { AssistantToolCtx } from './helpers'
@@ -81,7 +81,7 @@ beforeEach(() => {
   vi.mocked(prisma.inventoryItem.aggregate).mockResolvedValue({ _max: { group: 4 } } as never)
   vi.mocked(planInventory).mockImplementation(async (_s, ops) => ({ payload: { ops } }))
   let n = 0
-  vi.mocked(createProposalFor).mockImplementation(async () => ({ ok: true, card: { actionId: `a${++n}`, kind: 'inventory_batch', summary: 's', preview: { changes: [] } } }))
+  vi.mocked(createAndApply).mockImplementation(async () => ({ ok: true, applied: true, appliedAt: 1, card: { actionId: `a${++n}`, kind: 'inventory_batch', summary: 's', preview: { changes: [] } } }))
 })
 
 describe('request_photo_alignment', () => {
@@ -128,7 +128,7 @@ describe('request_photo_alignment', () => {
       uploadId: 'up1', image: { w: 2000, h: 1500 },
       seed: expect.objectContaining({ kind: 'similarity', anchor: { lat: 36.7002, lng: -4.4002 }, rotationDeg: 45 }),
     })
-    expect(createProposalFor).not.toHaveBeenCalled()
+    expect(createAndApply).not.toHaveBeenCalled()
   })
 })
 
@@ -136,7 +136,7 @@ describe('propose_layout_from_photo', () => {
   it('without a saved georef: asks to align first, proposes nothing', async () => {
     const r = await run('propose', { upload_id: 'up1' })
     expect(r).toMatchObject({ ok: true, status: 'needs_alignment' })
-    expect(createProposalFor).not.toHaveBeenCalled()
+    expect(createAndApply).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -145,7 +145,7 @@ describe('propose_layout_from_photo', () => {
   ])('reading %s: says it is still reading, proposes nothing', async (_n, aerial) => {
     vi.mocked(getUploadForAccount).mockResolvedValue(row({ georef: GEOREF, aerial }))
     expect(await run('propose', { upload_id: 'up1' })).toMatchObject({ ok: true, status: 'reading' })
-    expect(createProposalFor).not.toHaveBeenCalled()
+    expect(createAndApply).not.toHaveBeenCalled()
   })
 
   it('a reading refused by the daily limit says so', async () => {
@@ -156,16 +156,16 @@ describe('propose_layout_from_photo', () => {
   it('an oblique reading is refused with "ask for top-down"', async () => {
     vi.mocked(getUploadForAccount).mockResolvedValue(row({ georef: GEOREF, aerial: { status: 'done', startedAt: 't', descriptor: descriptor([block('A', 2, 4)], { view: 'oblique' }) } }))
     expect((await run('propose', { upload_id: 'up1' })).error).toMatch(/TOP-DOWN/)
-    expect(createProposalFor).not.toHaveBeenCalled()
+    expect(createAndApply).not.toHaveBeenCalled()
   })
 
   it('done: one inventory_batch proposal, parcels numbered from max + 1, confidence per parcel on the card', async () => {
     vi.mocked(getUploadForAccount).mockResolvedValue(row({ georef: GEOREF, aerial: { status: 'done', startedAt: 't', descriptor: descriptor([block('A', 3, 10), block('B', 2, 5, 1000)]) } }))
     const r = await run('propose', { upload_id: 'up1' })
-    expect(r).toMatchObject({ ok: true, status: 'proposed', proposals: [{ actionId: 'a1', parcels: [5, 6] }] })
+    expect(r).toMatchObject({ ok: true, status: 'applied', proposals: [{ actionId: 'a1', parcels: [5, 6], status: 'applied' }] })
     const ops = vi.mocked(planInventory).mock.calls[0]![1] as InvOp[]
     expect(ops.filter((o) => o.op === 'create_parcel').map((o) => (o as { number: number }).number)).toEqual([5, 6])
-    const [, , , warnings] = vi.mocked(createProposalFor).mock.calls[0]!
+    const [, , , warnings] = vi.mocked(createAndApply).mock.calls[0]!
     expect(warnings!.join('\n')).toMatch(/Parcel 5: 3 x 10 \(30 sunbeds\), confidence \d+%/)
     expect(warnings!.join('\n')).toMatch(/coastline could not be checked/)
     expect(d.shore).toHaveBeenCalledWith(GEOREF.anchor)
@@ -175,7 +175,7 @@ describe('propose_layout_from_photo', () => {
     vi.mocked(getUploadForAccount).mockResolvedValue(row({ georef: GEOREF, aerial: { status: 'done', startedAt: 't', descriptor: descriptor([block('BIG', 30, 60)]) } }))
     const r = await run('propose', { upload_id: 'up1' })
     expect(r.ok).toBe(true)
-    expect(createProposalFor).toHaveBeenCalledTimes(r.proposals.length)
+    expect(createAndApply).toHaveBeenCalledTimes(r.proposals.length)
     expect(r.proposals.length).toBeGreaterThan(1)
     expect(r.parcels.reduce((n: number, p: { rows: number; seatsPerRow: number }) => n + p.rows * p.seatsPerRow, 0)).toBe(1800)
   })
@@ -184,6 +184,6 @@ describe('propose_layout_from_photo', () => {
     vi.mocked(getUploadForAccount).mockResolvedValue(row({ georef: GEOREF, aerial: { status: 'done', startedAt: 't', descriptor: descriptor([block('A', 2, 4)]) } }))
     const r = await run('propose', { upload_id: 'up1', min_confidence: 1 })
     expect(r.ok).toBe(false)
-    expect(createProposalFor).not.toHaveBeenCalled()
+    expect(createAndApply).not.toHaveBeenCalled()
   })
 })

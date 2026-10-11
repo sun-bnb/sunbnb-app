@@ -40,25 +40,26 @@ and its individual sunbeds load.
 - With a selection active you can also click the map to move the selection there ("Click map to move").
 - Single, loose sunbeds are dragged individually. Paired beds travel together.
 
+- **The assistant acts immediately.** Every change it makes shows as a done card with an **Undo** button (24 hours); you are not asked to confirm first. The only exception is deleting sunbeds, parcels or elements, which cannot be undone: that waits until you type DELETE on the card, and the map shows what would be removed.
 - **Ask the assistant for relative moves**: "move parcel 5 closer to parcel 4", "put parcel 2 next to
   parcel 3", "2 m from parcel 1". The assistant knows where every parcel sits (centre, size in metres,
   direction of the rows) and measures the gap between two parcels edge to edge, so you never need to give
   coordinates. It moves the parcel along the line between the two centres so the gap becomes what you
-  asked for (2 m if you name none, 0 for "touching"), shows the result as a ghost preview and waits for
-  Apply.
+  asked for (2 m if you name none, 0 for "touching") and does it straight away; the card has an Undo
+  button (24 hours). If the parcels are already at that gap, or the move would be under 0.5 m, it moves
+  nothing and tells you how far apart they are.
 - **Ask the assistant to move toward or away from the sea**: "move parcels 4 and 5 closer to the sea",
   "5 m from the waterline". On a map site the assistant reads the real shoreline (OpenStreetMap) around
   the venue; on a schematic site it uses the Water shapes you drew. It measures from the parcel's nearest
   edge to the waterline, so you never need to say which way the sea is. If you give no distance it tells
-  you the current distance and proposes the front edge 5 m from the waterline (never into the water).
+  you the current distance and puts the front edge 5 m from the waterline (never into the water).
   Several parcels moved together shift by one common amount, so the gaps between them stay as they are.
   If no shoreline can be found near the venue, the assistant asks you for the direction instead.
 - **Ask the assistant spatial questions about the whole site**: "which parcel is nearest the bar", "is
   anything on the promenade", "how far is parcel 3 from the road", "line parcel 9 up with parcel 8". The
   assistant first takes a look at the site (your parcels, the drawn elements, the shoreline, and on a map
   site the surrounding roads, footpaths, promenade, buildings and amenities such as lifeguard towers and
-  toilets from OpenStreetMap), then measures exactly between any two things and proposes the move as a
-  ghost preview. OpenStreetMap is a public service and may be slow or incomplete: when it cannot be read
+  toilets from OpenStreetMap), then measures exactly between any two things and makes the move (with Undo). OpenStreetMap is a public service and may be slow or incomplete: when it cannot be read
   the assistant says so, and what is not mapped there it cannot see.
 
 ## Rotate and spacing {#rotate-spacing}
@@ -156,8 +157,8 @@ The assistant can set up parcels from a **top-down drone photo** of the beach (m
 2. The photo appears over the map. Drag it, rotate / scale it with the corner handle and use the
    opacity slider until it matches the map (existing parcels and the shoreline help). Drone photos
    with GPS data start roughly in place. Confirm.
-3. The assistant proposes one parcel per regular block of sunbeds, with a confidence per parcel,
-   as a card with a ghost preview. Check it against the photo, then Apply (Undo within 24 hours).
+3. The assistant creates one parcel per regular block of sunbeds, with a confidence per parcel, as
+   done cards. Check the result against the photo; Undo reverts a card (24 hours).
 
 Use your own photo, taken straight down. Photos taken at an angle cannot be measured, and the
 assistant never uses satellite or Google imagery. Rows hidden under parasols are counted where the

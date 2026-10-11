@@ -166,6 +166,15 @@ export type SeatLookup = (id: string) => { at: Pt; rotation: number } | undefine
 
 export const MAX_GHOST_SEATS = 5000
 
+function centroid(points: readonly Pt[]): Pt {
+  let x = 0, y = 0
+  for (const p of points) { x += p.x; y += p.y }
+  return { x: x / points.length, y: y / points.length }
+}
+
+/** True when the preview deletes something: the only case a ghost is still drawn (everything else is applied at once). */
+export const hasRemovals = (g: GeometryPreview): boolean => g.removed.length > 0 || (g.elements?.removed.length ?? 0) > 0
+
 export function computeBounds(points: readonly Pt[]): Bounds | null {
   if (points.length === 0) return null
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
@@ -193,6 +202,8 @@ export function buildGhostModel(input: GeometryPreview, lookup?: SeatLookup): Gh
     seats.push({ key: `a:${a.tempId}`, kind: 'added', at, rotation: a.at.rotation ?? 0, label: a.label, parcel: a.parcel })
     track(at)
   }
+  const fromPts: Pt[] = []
+  const toPts: Pt[] = []
   for (const m of geo.moved) {
     const from = toPt(mode, m.before)
     const to = toPt(mode, m.after)
@@ -201,10 +212,16 @@ export function buildGhostModel(input: GeometryPreview, lookup?: SeatLookup): Gh
     track(to)
     if (from) {
       seats.push({ key: `f:${m.id}`, kind: 'moved-from', at: from, rotation: m.before.rotation ?? 0, itemId: m.id })
-      links.push({ key: `l:${m.id}`, from, to })
+      fromPts.push(from)
+      toPts.push(to)
       track(from)
     }
   }
+  // One connector per move, not one per seat: a moved parcel is hundreds of seats that all shift by the
+  // same vector, and a line from every old seat to its new one paints as a field of long streaks that
+  // hides the boxes at the new position. A lone seat keeps its own arrow; a group gets one arrow between centroids.
+  if (fromPts.length === 1) links.push({ key: `l:${geo.moved[0]!.id}`, from: fromPts[0]!, to: toPts[0]! })
+  else if (fromPts.length > 1) links.push({ key: 'l:group', from: centroid(fromPts), to: centroid(toPts) })
   for (const r of geo.removed) {
     const hit = lookup?.(r.id)
     if (!hit) continue // not loaded (parcel tier): the parcel footprint still marks the area

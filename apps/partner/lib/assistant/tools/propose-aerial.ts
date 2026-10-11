@@ -23,13 +23,13 @@ import { readPhotoMeta, type PhotoMeta } from '../aerial/photo-meta'
 import { planAerialLayout, DEFAULT_MIN_CONFIDENCE, type PlannedParcel } from '../aerial/plan'
 import { seedGeoref } from '../aerial/seed'
 import { validateGeoref } from '../aerial/georef-validate'
-import { createProposalFor } from '../proposals/create'
+import { createAndApply } from '../proposals/act'
 import { inventoryHandler, planInventory } from '../proposals/handlers/inventory'
 import { ID } from '../request'
 import { readUploadBlob } from '../uploads'
 import { withSummary } from './extract-plan'
 import { defineTool, type AssistantTool, type AssistantToolCtx } from './helpers'
-import { INSTRUCTION } from './propose-core'
+import { APPLIED_INSTRUCTION } from './propose-core'
 
 const NOT_MAP =
   'This site uses the schematic layout, not the map: an aerial photo cannot be placed on it. If the user has a drawn or printed PLAN, use extract_schematic_from_plan instead; otherwise they place parcels in the Schematic tab.'
@@ -141,7 +141,7 @@ export function createProposeLayoutFromPhoto(deps: AerialToolDeps = defaultAeria
     name: 'propose_layout_from_photo',
     label: 'Laying out parcels from the photo',
     description:
-      'Step 2: after the user CONFIRMED the photo alignment (request_photo_alignment), propose the sunbed parcels the photo shows as reviewable cards (ghost preview on the map). Each parcel carries a confidence; parcels below min_confidence (default 0.4) are left out. If the photo is still being read, it says so: tell the user and try again when they ask. PROPOSES only; never changes anything itself.',
+      'Step 2: after the user CONFIRMED the photo alignment (request_photo_alignment), create the sunbed parcels the photo shows on the map (applied immediately, one undoable card each; at most 5 cards per message). Each parcel carries a confidence; parcels below min_confidence (default 0.4) are left out. If the photo is still being read, it says so: tell the user and try again when they ask. Undo reverts a card within 24 h.',
     properties: {
       upload_id: { type: 'string', maxLength: 64, description: 'The aligned photo\'s uploadId' },
       min_confidence: { type: 'number', minimum: 0, maximum: 1, description: 'Leave out parcels below this confidence (default 0.4)' },
@@ -206,7 +206,7 @@ export function createProposeLayoutFromPhoto(deps: AerialToolDeps = defaultAeria
         return { ok: false, error: `No parcel was confident enough to propose (min_confidence ${minConfidence})`, warnings }
       }
 
-      const cards: Array<{ actionId: string; summary: string; parcels: number[] }> = []
+      const cards: Array<{ actionId: string; summary: string; parcels: number[]; status: 'applied' | 'proposed' }> = []
       const failed: string[] = []
       for (const [i, p] of plan.proposals.entries()) {
         const planned = await planInventory(ctx.siteId, p.ops)
@@ -217,20 +217,20 @@ export function createProposeLayoutFromPhoto(deps: AerialToolDeps = defaultAeria
         const lowest = Math.min(...p.parcels.map((x) => x.confidence))
         const part = plan.proposals.length > 1 ? ` (part ${i + 1} of ${plan.proposals.length})` : ''
         const summary = `From your photo${part}: ${p.parcels.length} parcel${p.parcels.length === 1 ? '' : 's'} (${p.seats} sunbeds), lowest confidence ${Math.round(lowest * 100)}%`
-        const res = await createProposalFor(ctx, withSummary(inventoryHandler, summary), planned.payload, [...(i === 0 ? warnings : []), ...p.parcels.map(describeParcel)])
-        if (res.ok) cards.push({ actionId: res.card.actionId, summary: res.card.summary, parcels: p.parcels.map((x) => x.number) })
+        const res = await createAndApply(ctx, withSummary(inventoryHandler, summary), planned.payload, [...(i === 0 ? warnings : []), ...p.parcels.map(describeParcel)])
+        if (res.ok) cards.push({ actionId: res.card.actionId, summary: res.card.summary, parcels: p.parcels.map((x) => x.number), status: res.applied ? 'applied' : 'proposed' })
         else failed.push(res.error)
       }
       if (cards.length === 0) return { ok: false, error: failed.join('; ') || 'No proposal could be made', warnings }
       return {
         ok: true,
-        status: 'proposed',
+        status: cards.every((c) => c.status === 'applied') ? 'applied' : 'partly_applied',
         proposals: cards,
         parcels: plan.proposals.flatMap((p) => p.parcels).map((p) => ({ number: p.number, rows: p.rows, seatsPerRow: p.seatsPerRow, paired: p.paired, confidence: p.confidence, warnings: p.warnings })),
         dropped: plan.dropped,
         warnings,
         ...(failed.length ? { failed } : {}),
-        instruction: `${INSTRUCTION} ${cards.length > 1 ? `There are ${cards.length} cards (one proposal holds at most 1200 sunbeds); each is applied on its own. ` : ''}Give each parcel's confidence, mention the warnings (overlaps, sea, hidden beds) and any parcels left out for low confidence, and suggest checking the ghost preview against the photo before applying.`,
+        instruction: `${APPLIED_INSTRUCTION} ${cards.length > 1 ? `There are ${cards.length} cards (one change holds at most 1200 sunbeds); each was applied on its own. ` : ''}Give each parcel's confidence, mention the warnings (overlaps, sea, hidden beds) and any parcels left out for low confidence, and tell the user to check the result against the photo (Undo reverts a card). Cards with a failure are listed under failed.`,
       }
     },
   })

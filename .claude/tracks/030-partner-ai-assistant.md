@@ -52,8 +52,15 @@ actions) produces the geometry, and every write is a reviewed proposal.
   extraction `claude-opus-5-5` (effort high); document extraction Sonnet 5.5. Confirm ids/prices
   against the claude-api reference before shipping. `tool_choice: auto` + `strict` tools;
   history append-only (Opus thinking cannot be disabled).
-- **D2 Always confirm.** Every write is a proposal (`AssistantAction`) the user applies;
-  no auto-apply in v1. Deletes need a typed confirmation and are not undoable.
+- **D2 Always confirm — SUPERSEDED 2026-10-11 by the founder ("I don't think we need previews, just do what is asked").**
+  Now **act immediately with Undo**: every `propose_*` / `run_js` / plan / photo tool creates the
+  `AssistantAction` and applies it in the same tool call through `applyProposal` (same auth, stale
+  check, snapshot, 24 h undo), emitting the card as `status: applied`. Exceptions stay proposals with
+  the typed `DELETE` confirmation (not undoable): any diff with `deletes` (propose_delete, shrinking
+  a parcel, removing products / rental items / layout elements, also inside batches). At most 5
+  actions applied per turn; a relative move < 0.5 m (or an already-met target) is refused so the
+  model reports the state instead. Ghost previews now exist only for pending deletes. Original text:
+  every write a proposal the user applies, no auto-apply in v1.
 - **D3 Documents:** PDF, JPEG/PNG/HEIC, DOCX (text via mammoth). Never written from a document:
   IBAN/bank account, payment provider, KYC, Verifactu grants, personal ID numbers.
 - **D4 UI:** right-side drawer in the site shell (`site-view.tsx`), persistent across tabs,
@@ -161,7 +168,7 @@ founder say-so.
 
 ## Open decisions
 
-- Model/cost ceiling (D1, D7), auto-apply for text fields (D2), IBAN from documents (D3),
+- Model/cost ceiling (D1, D7), IBAN from documents (D3),
   plan-gating (D6), DPA wording + retention (D8), EU inference (`inference_geo`), gallery (D9).
 
 ## Links
@@ -171,3 +178,9 @@ founder say-so.
 - [[track:020]] — large layouts (parcel tier payloads; preview must work at overview zoom)
 - [[track:021]] — seat labels (renumbering → QR reprint warnings)
 - [[subsystem:design-system]]
+
+- **2026-10-11** — D2 superseded by the founder: act immediately with Undo (see Decisions). `proposals/act.ts`
+  `createAndApply` (create + `applyProposal(id, {note:false})` + emit applied card), 5/turn cap, deletes stay pending,
+  negligible-move guard in `inventory-sim.ts` (`MIN_MOVE_M`), ghost layer only for pending deletes, moved-parcel
+  ghost streak fixed (one group connector instead of one arrow per seat). Tool names stay `propose_*` (renaming
+  would ripple through prompt/inspect/OP_META; descriptions say they apply).

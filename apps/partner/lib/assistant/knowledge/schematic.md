@@ -49,9 +49,9 @@ prices.
 ## Importing a drawn plan {#schematic-plan-import}
 
 On a schematic site the assistant can read a **drawn or printed plan** (a photo, scan or screenshot of
-the venue: water, pool, bar, decks, rows of sunbeds) and propose the matching layout. Attach the image
+the venue: water, pool, bar, decks, rows of sunbeds) and build the matching layout. Attach the image
 in the assistant and ask for it. It needs a scale: tell it one real size ("the whole area is 60 m wide")
-unless the drawing shows a scale bar or its size. You get up to four cards to apply in order: the canvas
+unless the drawing shows a scale bar or its size. It applies up to four cards in order: the canvas
 size, the elements, the sunbed parcels and (if asked) the picture as the **underlay** to trace over.
-Anything it was unsure about is listed as "please check". Each card has a ghost preview and can be undone
+Anything it was unsure about is listed as "please check". Each card can be undone
 within 24 hours. Limits: images only (not PDF), 10 plan or document readings per day.

@@ -88,4 +88,4 @@ over a private copy of this site's data only — parcels, sunbeds, layout elemen
 opening hours, reservations, F&B orders and invoices. The copy is refreshed when something changed
 (and at least every 10 minutes), so a booking made seconds ago may not be counted yet. Guest names,
 emails, phone numbers, payment references and bank details are never in the copy, so the assistant
-cannot look up a guest. Changes are never made this way: they are always proposals you apply.
+cannot look up a guest. Changes are never made this way: the assistant makes them through its change tools, which apply at once and show an Undo button.

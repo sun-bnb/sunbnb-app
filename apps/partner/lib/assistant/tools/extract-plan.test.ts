@@ -19,7 +19,7 @@ vi.mock('@/app/sites/[id]/inventory-actions', () => ({ deleteInventoryItems: vi.
 vi.mock('@/app/sites/[id]/schematic/actions', () => ({ createLayoutElement: vi.fn(), updateLayoutElement: vi.fn(), deleteLayoutElement: vi.fn() }))
 vi.mock('@/app/sites/[id]/site-actions', () => ({ saveLayoutDimensions: vi.fn() }))
 vi.mock('@repo/data/assistant', () => ({ getUploadForAccount: vi.fn(), createProposal: vi.fn() }))
-vi.mock('../proposals/create', () => ({ createProposalFor: vi.fn() }))
+vi.mock('../proposals/act', () => ({ createAndApply: vi.fn() }))
 vi.mock('../proposals/handlers/inventory', async (orig) => ({ ...(await orig<typeof import('../proposals/handlers/inventory')>()), planInventory: vi.fn() }))
 vi.mock('../proposals/handlers/place-image', async (orig) => ({ ...(await orig<typeof import('../proposals/handlers/place-image')>()), planPlaceImage: vi.fn() }))
 
@@ -28,7 +28,7 @@ import type { ChatResult } from '@repo/agent/model'
 import { auth } from '@/app/auth'
 import { getUploadForAccount } from '@repo/data/assistant'
 import prisma from '@repo/data/PrismaCient'
-import { createProposalFor } from '../proposals/create'
+import { createAndApply } from '../proposals/act'
 import { planInventory } from '../proposals/handlers/inventory'
 import { planPlaceImage } from '../proposals/handlers/place-image'
 import { summarizeDiff, type Diff } from '../proposals/types'
@@ -89,10 +89,10 @@ beforeEach(() => {
   vi.mocked(planInventory).mockImplementation((async (_s: string, ops: unknown[]) => ({ payload: { ops } })) as never)
   vi.mocked(planPlaceImage).mockResolvedValue({ payload: { target: 'schematic_underlay', uploadId: UP, destPath: 'p.jpg' }, warnings: [] } as never)
   // The fake runs the REAL diff of the layout kinds (cheap) so the plan summary is the real card title.
-  vi.mocked(createProposalFor).mockImplementation((async (_c: unknown, handler: any, payload: unknown, extra: string[] = []) => {
+  vi.mocked(createAndApply).mockImplementation((async (_c: unknown, handler: any, payload: unknown, extra: string[] = []) => {
     const diff: Diff = handler.kind.startsWith('layout_') ? await handler.diff({ siteId: SITE, accountId: OWNER }, payload) : { changes: [], creates: [{ target: 'x', fields: {} }] }
     const withWarn = { ...diff, warnings: [...(diff.warnings ?? []), ...extra] }
-    return { ok: true, card: { actionId: `act-${handler.kind}`, kind: handler.kind, summary: summarizeDiff(withWarn), preview: withWarn } }
+    return { ok: true, applied: true, appliedAt: 1, card: { actionId: `act-${handler.kind}`, kind: handler.kind, summary: summarizeDiff(withWarn), preview: withWarn } }
   }) as never)
   vi.mocked(prisma.layoutElement.findMany).mockResolvedValue([])
   vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([])
@@ -113,7 +113,7 @@ describe('refusals spend nothing (no job counted, no blob read, no model call)',
     expect(allowJob).not.toHaveBeenCalled()
     expect(read).not.toHaveBeenCalled()
     expect(vision).not.toHaveBeenCalled()
-    expect(createProposalFor).not.toHaveBeenCalled()
+    expect(createAndApply).not.toHaveBeenCalled()
   }
 
   it('a site that is not in schematic layout mode is refused with guidance', async () => {
@@ -188,7 +188,7 @@ describe('the vision call', () => {
     vision.mockResolvedValue(result)
     const r = await run({ uploadId: UP })
     expect(r.ok).toBe(false)
-    expect(createProposalFor).not.toHaveBeenCalled()
+    expect(createAndApply).not.toHaveBeenCalled()
   })
   it('output that breaks the strict schema is rejected, nothing proposed', async () => {
     for (const bad of [
@@ -202,7 +202,7 @@ describe('the vision call', () => {
       expect(r.ok).toBe(false)
       expect(r.error).toMatch(/could not be read reliably/)
     }
-    expect(createProposalFor).not.toHaveBeenCalled()
+    expect(createAndApply).not.toHaveBeenCalled()
   })
   it('a model/network exception is reported without leaking details', async () => {
     vision.mockRejectedValue(new Error('401 sk-ant-secret'))
@@ -221,12 +221,12 @@ describe('scale: ask, never guess', () => {
     expect(r.ok).toBe(true)
     expect(r.status).toBe('needs_scale')
     expect(r.question).toMatch(/real-world size/)
-    expect(createProposalFor).not.toHaveBeenCalled()
+    expect(createAndApply).not.toHaveBeenCalled()
   })
   it('the same plan with a user dimension is proposed', async () => {
     vision.mockResolvedValue(noScale())
     const r = await run({ uploadId: UP, knownDimension: { what: 'total_width', metres: 60 } })
-    expect(r.status).toBe('proposed')
+    expect(r.status).toBe('applied')
     expect(r.scale).toMatch(/60 m/)
   })
   it('a user dimension overrides a (wrong) printed scale', async () => {
@@ -237,21 +237,23 @@ describe('scale: ask, never guess', () => {
     vision.mockResolvedValue(noScale())
     const r = await run({ uploadId: UP, knownDimension: { what: 'total_width', metres: 900 } })
     expect(r.status).toBe('needs_scale')
-    expect(createProposalFor).not.toHaveBeenCalled()
+    expect(createAndApply).not.toHaveBeenCalled()
   })
 })
 
 describe('proposals from a mocked reading', () => {
   it('builds canvas, elements and parcels in apply order with the EXISTING kinds', async () => {
     const r = await run({ uploadId: UP })
-    expect(r.status).toBe('proposed')
+    expect(r.status).toBe('applied')
     expect(r.proposals.map((p: any) => p.kind)).toEqual(['layout_canvas', 'layout_elements', 'inventory_batch'])
+    expect(r.proposals.every((p: any) => p.status === 'applied')).toBe(true)
     expect(r.canvas).toEqual({ width: 60, height: 40 })
-    expect(r.instruction).toMatch(/PROPOSAL/)
+    expect(r.instruction).toMatch(/APPLIED/)
+    expect(r.instruction).toMatch(/Undo|undone/)
   })
   it('the elements payload is in metres, without the confidence field', async () => {
     await run({ uploadId: UP })
-    const call = vi.mocked(createProposalFor).mock.calls.find((c) => (c[1] as any).kind === 'layout_elements')!
+    const call = vi.mocked(createAndApply).mock.calls.find((c) => (c[1] as any).kind === 'layout_elements')!
     const add = (call[2] as any).add
     expect(add[0]).toMatchObject({ type: 'water', x: 0, y: 0, width: 60, height: 8 })
     expect(add[1]).toMatchObject({ type: 'bar', x: 40, y: 25, width: 10, height: 6, label: 'Chiringuito' })
@@ -271,7 +273,7 @@ describe('proposals from a mocked reading', () => {
     expect(elements.summary).toContain('2 elements')
     expect(elements.summary).toContain('1 to check')
     expect(r.lowConfidence.join()).toContain('Chiringuito')
-    const call = vi.mocked(createProposalFor).mock.calls.find((c) => (c[1] as any).kind === 'layout_elements')!
+    const call = vi.mocked(createAndApply).mock.calls.find((c) => (c[1] as any).kind === 'layout_elements')!
     expect((call[3] as string[]).join()).toContain('hard to read')
   })
   it('skips the canvas proposal when the site canvas already has the plan size', async () => {
@@ -283,7 +285,7 @@ describe('proposals from a mocked reading', () => {
     vi.mocked(prisma.layoutElement.count).mockResolvedValue(3)
     vi.mocked(prisma.inventoryItem.count).mockResolvedValue(40)
     const r = await run({ uploadId: UP })
-    const call = vi.mocked(createProposalFor).mock.calls.find((c) => (c[1] as any).kind === 'layout_elements')!
+    const call = vi.mocked(createAndApply).mock.calls.find((c) => (c[1] as any).kind === 'layout_elements')!
     expect((call[3] as string[]).join()).toContain('3 elements and 40 sunbeds')
     expect(r.ok).toBe(true)
   })
@@ -304,7 +306,7 @@ describe('proposals from a mocked reading', () => {
     expect(r.proposals.map((p: any) => p.kind)).toEqual(['layout_canvas', 'layout_elements'])
   })
   it('fails (not "proposed") when every proposal fails', async () => {
-    vi.mocked(createProposalFor).mockResolvedValue({ ok: false, error: 'conversation_not_found' } as never)
+    vi.mocked(createAndApply).mockResolvedValue({ ok: false, error: 'conversation_not_found' } as never)
     vi.mocked(planInventory).mockResolvedValue({ errors: ['x'] } as never)
     const r = await run({ uploadId: UP })
     expect(r.ok).toBe(false)
@@ -313,6 +315,6 @@ describe('proposals from a mocked reading', () => {
     vision.mockResolvedValue(modelReturns(goodPlan({ elements: [{ type: 'bar', label: null, x: 0, y: 0, w: 10, h: 10, rotation: 0, confidence: 0.1 }], parcels: [] })))
     const r = await run({ uploadId: UP })
     expect(r.ok).toBe(false)
-    expect(createProposalFor).not.toHaveBeenCalled()
+    expect(createAndApply).not.toHaveBeenCalled()
   })
 })

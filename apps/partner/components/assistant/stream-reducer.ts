@@ -21,6 +21,8 @@ export interface ProposalInfo {
   status: ProposalStatus
   /** Epoch ms of a local apply; undefined for restored transcripts. */
   appliedAt?: number
+  /** The assistant applied it itself during this turn (act-immediately); the card is a done card from the start. */
+  auto?: boolean
 }
 
 /** A `qr_print` request: print QR cards for a whole parcel and/or specific seats. */
@@ -196,7 +198,9 @@ function applyEvent(state: AssistantState, ev: AssistantEvent): AssistantState {
               kind: ev.kind,
               summary: ev.summary,
               preview: ev.preview,
-              status: 'proposed' as const,
+              ...(ev.status === 'applied'
+                ? { status: 'applied' as const, appliedAt: ev.appliedAt, auto: true }
+                : { status: 'proposed' as const }),
             },
           ],
         })),

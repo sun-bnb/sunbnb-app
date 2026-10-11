@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock('@/app/auth', () => ({ auth: vi.fn().mockResolvedValue(null) }))
 vi.mock('next-intl/server', () => ({ getLocale: vi.fn().mockResolvedValue('es') }))
+vi.mock('@/lib/assistant/proposals/lifecycle', () => ({ applyProposal: vi.fn().mockResolvedValue({ status: 'ok', summary: 'Changed site price per sunbed (incl. vat) 9 → 9.5' }) }))
 vi.mock('@repo/data/flags', () => ({ getFlagStates: vi.fn() }))
 vi.mock('@repo/data/rate-limit-shared', () => ({ rateLimitShared: vi.fn() }))
 vi.mock('@repo/data/email', () => ({ sendEmail: vi.fn().mockResolvedValue({}) }))
@@ -34,6 +35,7 @@ vi.mock('@repo/agent/claude-model', () => ({
 import { GET, POST } from './route'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { applyProposal } from '@/lib/assistant/proposals/lifecycle'
 import { getFlagStates } from '@repo/data/flags'
 import { rateLimitShared } from '@repo/data/rate-limit-shared'
 import { sendEmail } from '@repo/data/email'
@@ -478,7 +480,7 @@ describe('proposal events (track 030 S3)', () => {
       .mockResolvedValueOnce(
         modelResult({ toolCalls: [{ id: 'tu_1', name: 'propose_site_fields', arguments: JSON.stringify({ price: 9.5 }) }], providerContent: [{ type: 'tool_use', id: 'tu_1' }] }),
       )
-      .mockResolvedValueOnce(modelResult({ content: 'I prepared the change. Press Apply.' }))
+      .mockResolvedValueOnce(modelResult({ content: 'Done: the price is now 9.50.' }))
   }
 
   beforeEach(() => {
@@ -486,7 +488,7 @@ describe('proposal events (track 030 S3)', () => {
     vi.mocked(createProposal).mockResolvedValue({ id: 'act-1' } as never)
   })
 
-  it('a propose_* tool call emits `proposal` {actionId, kind, summary, preview} before its tool_result, and writes nothing', async () => {
+  it('a propose_* tool call applies at once: emits `proposal` with status applied before its tool_result, through the lifecycle (the tool writes nothing itself)', async () => {
     session(OWNER)
     modelProposes()
     const evs = await events(await POST(post({ siteId: SITE, message: 'set the price to 9.50' })))
@@ -499,7 +501,10 @@ describe('proposal events (track 030 S3)', () => {
       kind: 'site_fields',
       summary: expect.stringContaining('9 → 9.5'),
       preview: { changes: [{ target: 'Site', field: 'price', label: 'Price per sunbed (incl. VAT)', before: 9, after: 9.5 }] },
+      status: 'applied',
+      appliedAt: expect.any(Number),
     })
+    expect(applyProposal).toHaveBeenCalledWith('act-1', { note: false })
     expect(evs.find((e) => e.event === 'tool_result')!.data).toEqual({ name: 'propose_site_fields', ok: true })
     expect(createProposal).toHaveBeenCalledWith(expect.objectContaining({ conversationId: 'conv-1', accountId: OWNER, siteId: SITE, actorUserId: OWNER }))
     expect(prisma.site.update).not.toHaveBeenCalled()

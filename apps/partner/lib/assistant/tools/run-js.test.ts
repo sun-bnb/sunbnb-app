@@ -10,13 +10,13 @@ vi.mock('@repo/data/assistant-claim', () => ({ runAssistantSql: vi.fn() }))
 vi.mock('./spatial-data', () => ({ loadSiteBase: vi.fn(), loadElements: vi.fn().mockResolvedValue([]), seatLocal: vi.fn() }))
 vi.mock('./spatial', () => ({ shoreScene: vi.fn() }))
 vi.mock('../proposals/handlers/inventory', () => ({ inventoryHandler: { kind: 'inventory_batch' }, planInventory: vi.fn() }))
-vi.mock('../proposals/create', () => ({ createProposalFor: vi.fn() }))
+vi.mock('../proposals/act', () => ({ createAndApply: vi.fn() }))
 
 import { executeToolCall } from '@repo/agent/loop'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { runAssistantSql } from '@repo/data/assistant-claim'
-import { createProposalFor } from '../proposals/create'
+import { createAndApply } from '../proposals/act'
 import { planInventory } from '../proposals/handlers/inventory'
 import { geoFrame, toLocal, type Frame } from '../geo/frame'
 import { parseScriptProposal, MAX_SCRIPT_OPS, type ScriptSiteCtx } from '../sandbox/script-proposal'
@@ -65,7 +65,7 @@ beforeEach(async () => {
   process.env.ASSISTANT_DB_CLAIM_SECRET = 'x'.repeat(40)
   vi.mocked(runAssistantSql).mockImplementation(fakeReader as never)
   vi.mocked(planInventory).mockImplementation(async (_s, ops) => ({ payload: { ops } }))
-  vi.mocked(createProposalFor).mockResolvedValue({ ok: true, card: { actionId: 'act-1', summary: 'Move 2 parcels', preview: { changes: [{ label: 'Parcel 1' }] } } } as never)
+  vi.mocked(createAndApply).mockResolvedValue({ ok: true, applied: true, appliedAt: 1, card: { actionId: 'act-1', summary: 'Move 2 parcels', preview: { changes: [{ label: 'Parcel 1' }] } } } as never)
 })
 
 afterAll(() => {
@@ -132,7 +132,7 @@ describe('run_js tool: data access switch', () => {
 })
 
 describe('run_js tool: script proposals', () => {
-  it('turns a valid proposal into a normal inventory proposal (local metres, parcel numbers)', async () => {
+  it('turns a valid script proposal into an inventory change APPLIED straight away (local metres, parcel numbers)', async () => {
     const r = await call({
       purpose: 'space evenly',
       code: `const ops = scene.parcels.map((p, i) => ({ op: 'move', target: { parcel: p.number }, by: { dx: i * 2, dy: 0 } }));
@@ -141,7 +141,7 @@ describe('run_js tool: script proposals', () => {
     })
     expect(r.ok).toBe(true)
     expect(r.result).toEqual({ moved: 3, proposal: '(see proposal)' })
-    expect(r.proposal).toMatchObject({ ok: true, actionId: 'act-1', status: 'proposed', ops: 3, scriptSummary: 'Spread parcels' })
+    expect(r.proposal).toMatchObject({ ok: true, actionId: 'act-1', status: 'applied', ops: 3, scriptSummary: 'Spread parcels' })
     const ops = vi.mocked(planInventory).mock.calls[0]![1]
     expect(vi.mocked(planInventory).mock.calls[0]![0]).toBe(A)
     expect(ops[0]).toEqual({ op: 'move', target: { parcel: 1 }, by: { dx: 0, dy: 0 } })
@@ -150,8 +150,8 @@ describe('run_js tool: script proposals', () => {
     const back = toLocal(frame as Frame, { lat: to.y, lng: to.x })!
     expect(back.x).toBeCloseTo(100, 6)
     expect(back.y).toBeCloseTo(50, 6)
-    expect(createProposalFor).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(createProposalFor).mock.calls[0]![0]).toBe(ctx)
+    expect(createAndApply).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(createAndApply).mock.calls[0]![0]).toBe(ctx)
   })
 
   it('rejects a bad proposal without proposing anything', async () => {
@@ -159,7 +159,7 @@ describe('run_js tool: script proposals', () => {
     expect(r.proposal).toMatchObject({ ok: false })
     expect(r.proposal.errors[0]).toMatch(/cannot delete/)
     expect(planInventory).not.toHaveBeenCalled()
-    expect(createProposalFor).not.toHaveBeenCalled()
+    expect(createAndApply).not.toHaveBeenCalled()
   })
 })
 

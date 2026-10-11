@@ -9,6 +9,7 @@ import {
   STATUS_TONE,
   canApply,
   canUndo,
+  compactPreview,
   describeCreate,
   formatValue,
   humanizeKey,
@@ -23,7 +24,7 @@ import {
   type ProposalErrorCode,
 } from './proposal-model'
 import { runProposalOp, type ProposalOp } from './proposal-actions'
-import { GEOMETRY_KINDS, parseGeometry, summaryParts, type GeometryPreview } from './geometry-preview'
+import { GEOMETRY_KINDS, hasRemovals, parseGeometry, summaryParts, type GeometryPreview } from './geometry-preview'
 import { dispatch } from './assistant-store'
 import { dispatchPreview } from './preview-store'
 import { useActivePreview } from './useGhostPreview'
@@ -221,7 +222,10 @@ export default function ProposalCard({ proposal, siteId }: { proposal: ProposalI
   const t = useTranslations('Assistant.proposal')
   const ti = useTranslations('Assistant.proposal.image')
   const router = useRouter()
-  const preview = parsePreview(proposal.preview)
+  const full = parsePreview(proposal.preview)
+  // A done card is a receipt: a short change list, not the whole review.
+  const compact = proposal.status === 'applied' ? compactPreview(full) : { preview: full, hidden: 0 }
+  const preview = compact.preview
   const image = parseImagePreview(proposal.preview)
   const geo = GEOMETRY_KINDS.includes(proposal.kind) ? parseGeometry(proposal.preview) : null
   const [pending, setPending] = useState<ProposalOp | null>(null)
@@ -232,7 +236,7 @@ export default function ProposalCard({ proposal, siteId }: { proposal: ProposalI
   const { status } = proposal
   const deletes = hasDeletes(preview)
   const busy = pending !== null
-  const empty = !image && !preview.changes.length && !preview.creates.length && !deletes && !geo
+  const empty = !image && !preview.changes.length && !preview.creates.length && !deletes
 
   const run = async (op: ProposalOp) => {
     setPending(op)
@@ -268,7 +272,8 @@ export default function ProposalCard({ proposal, siteId }: { proposal: ProposalI
         </ul>
       )}
 
-      {geo && <MapPreviewControls siteId={siteId} actionId={proposal.actionId} geo={geo} proposed={status === 'proposed'} />}
+      {/* Ghosts exist only for a pending delete (to show what would go); applied cards have no preview. */}
+      {geo && status === 'proposed' && hasRemovals(geo) && <MapPreviewControls siteId={siteId} actionId={proposal.actionId} geo={geo} proposed />}
 
       {image && <ImageChange image={image} />}
 
@@ -303,6 +308,8 @@ export default function ProposalCard({ proposal, siteId }: { proposal: ProposalI
           </ul>
         </div>
       )}
+
+      {compact.hidden > 0 && <p className="text-xs text-gray-400">{t('moreChanges', { count: compact.hidden })}</p>}
 
       {deletes && (
         <div>

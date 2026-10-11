@@ -103,7 +103,7 @@ function refresh(action: Row) {
 }
 
 /** Append-only note so the model sees the outcome on its next turn. Never fails the action. */
-async function note(action: Row, text: string) {
+async function noteOutcome(action: Row, text: string) {
   try {
     await appendMessages(action.conversationId, action.accountId, [{ role: 'user', content: text, note: true }] as never)
   } catch (err) {
@@ -115,7 +115,13 @@ const message = (err: unknown) => (err instanceof ProposalError ? err.message : 
 
 // ─── apply ──────────────────────────────────────────────────────────────────
 
-export async function applyProposal(actionId: unknown): Promise<ActionResult> {
+/**
+ * `note: false` is for the assistant's own act-immediately path (`act.ts`): the tool result already
+ * tells the model what happened, and a transcript note appended mid-turn would land before the turn's
+ * own messages are saved.
+ */
+export async function applyProposal(actionId: unknown, opts: { note?: boolean } = {}): Promise<ActionResult> {
+  const note = opts.note === false ? async () => {} : noteOutcome
   const r = await resolve(actionId)
   if (isResult(r)) return r
   const { action, handler, ctx, payload, stored } = r
@@ -191,7 +197,7 @@ export async function rejectProposal(actionId: unknown): Promise<ActionResult> {
   if (action.status === STATUS.EXPIRED) return fail('expired')
   if (action.status !== STATUS.PROPOSED) return fail('already_resolved')
   if (!(await markRejected(action.id, action.accountId))) return fail('already_resolved')
-  await note(action, `[rejected] ${stored.summary}`)
+  await noteOutcome(action, `[rejected] ${stored.summary}`)
   return { status: 'ok', summary: stored.summary }
 }
 
@@ -235,6 +241,6 @@ export async function undoProposal(actionId: unknown): Promise<ActionResult> {
   }
   refresh(action)
   const removed = stored.deletes?.length ? ' (removed items are not restored)' : ''
-  await note(action, `[undone] ${stored.summary}${removed}`)
+  await noteOutcome(action, `[undone] ${stored.summary}${removed}`)
   return { status: 'ok', summary: `${stored.summary}${removed}` }
 }

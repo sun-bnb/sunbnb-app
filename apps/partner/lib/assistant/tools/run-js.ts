@@ -7,7 +7,7 @@
  * anything: if it returns `proposal: { ops, summary }`, the ops are strictly re-parsed
  * (`sandbox/script-proposal.ts`: inventory ops only, no delete, <= 50 ops, parcels by number within
  * this site) and go through the same planInventory -> createProposalFor path as the propose_* tools,
- * so the user still reviews a card + ghost preview and presses Apply.
+ * so the change is applied at once with an Undo card.
  */
 import prisma from '@repo/data/PrismaCient'
 import { inventoryHandler, planInventory } from '../proposals/handlers/inventory'
@@ -43,15 +43,15 @@ function runJsDescription(): string {
     '- geo: distance(a,b), bearing(a,b) (compass deg a->b), unit(bearing), angleBetween(b1,b2), add, sub, rotate(p, deg, about?)',
     '(clockwise), centroid(poly), area(poly), polygonGap(a,b) (edge gap of convex polygons, negative = overlap), pointInPolygon(p,poly),',
     'nearestOnPath(p,path,closed?), distanceToPath(p,path,closed?), toLocal({lat,lng}) / fromLocal({x,y}). Points are {x,y} or [x,y].',
-    'TO CHANGE THE LAYOUT, return { proposal: { summary: "...", ops: [...] }, ...anything else }: it becomes a normal proposal card',
-    `with a map preview that the user must Apply (nothing changes by itself). At most ${MAX_SCRIPT_OPS} ops; op is one of ${SCRIPT_OPS.join(', ')}`,
+    'TO CHANGE THE LAYOUT, return { proposal: { summary: "...", ops: [...] }, ...anything else }: it is APPLIED straight away as a normal undoable card',
+    `(the user can Undo it; nothing else changes by itself). At most ${MAX_SCRIPT_OPS} ops; op is one of ${SCRIPT_OPS.join(', ')}`,
     '(no delete). Shapes (local metres; parcels by NUMBER, seats by id): { op: "move", target: { parcel: 4 } | { seats: [...] },',
     'by: { dx, dy } } or to: { x, y } | { op: "rotate", target, degrees } (clockwise, relative) | { op: "spacing", target, axis: "x"|"y"|"both",',
     'factor } | { op: "set_status", target, status: "active"|"disabled" } | { op: "reverse", parcel, what: "numbering"|"orientation" } |',
     '{ op: "edit_parcel", parcel, rows?, seats_per_row?, horizontal_gap_m?, vertical_gap_m?, paired?, rotation? (absolute), category?, price? } |',
     '{ op: "create_parcel", anchor: { x, y } | { relative_to_parcel, offset_m: { dx, dy } }, rows, seats_per_row, paired?, gaps?, rotation?,',
     'category?, price? } (numbers assigned automatically). Ops apply in order. Parcel NUMBERS cannot be changed by any op.',
-    'Always tell the user what the script computed and what the proposal will change.',
+    'Always tell the user what the script computed and what it changed. If the computed change is negligible (moves under 0.5 m, or the target is already met) do NOT return a proposal: just report the current state.',
   ].join(' ')
 }
 

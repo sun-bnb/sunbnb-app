@@ -2064,6 +2064,7 @@
       "more": "más",
       "less": "menos",
       "noPreview": "No hay detalles que mostrar.",
+      "moreChanges": "+{count} cambios más",
       "typeToConfirm": "Esto elimina datos. Escribe {word} para habilitar Aplicar.",
       "done": {
         "apply": "Cambio aplicado.",

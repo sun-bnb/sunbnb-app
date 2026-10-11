@@ -23,7 +23,7 @@ last_verified: 2026-10-11
 
 # Subsystem: Partner AI Assistant
 
-A chat drawer in the partner site shell (track 030) that reads every site tab and **proposes**
+A chat drawer in the partner site shell (track 030) that reads every site tab and **changes** (act-immediately with Undo since 2026-10-11; only deletes wait for a typed confirmation — `proposals/act.ts`)
 writes — site fields, hours, brand, products, rentals, account, inventory parcels, schematic
 elements, image placement — plus three vision flows: company documents → field proposals, drawn
 plan → schematic, aerial photo → map parcels. Boundary: the model produces *intent*; existing
@@ -45,7 +45,7 @@ names) is canonical in `apps/partner/CLAUDE.md` § AI assistant; this page is th
 
 `propose_*` tool → handler validates against the **same bounds the real action enforces**
 (`validator-parity.test.ts`) → stores `AssistantAction{kind, payload, preview, status: proposed}` →
-card. Apply re-runs `requireSiteOwner`, re-diffs against current rows (stale → refused), snapshots
+card. **Since 2026-10-11 (D2 superseded) the tool applies it immediately**: `proposals/act.ts` `createAndApply` runs `applyProposal` in the same call and emits the card as `applied` (Undo available); only a diff with `deletes` stays `proposed` behind the typed confirm; ≤5 applied per turn. Apply (button or auto) re-runs `requireSiteOwner`, re-diffs against current rows (stale → refused), snapshots
 `before`, executes through the existing partner action, CAS `proposed → applied`. Undo (24 h)
 restores the snapshot only if the rows still match what apply wrote. Proposals expire after 1 h.
 Kinds live in one registry (`proposals/registry.ts`); adding a capability = a new `KindHandler`

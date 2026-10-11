@@ -10,6 +10,8 @@ export interface AssistantAppliedDetail {
   actionId: string
   /** Sub-target for kinds that span tabs (`place_image`: cover, product, ...). */
   target?: string
+  /** The assistant applied it by itself mid-turn (no card button involved): something must also `router.refresh()`. */
+  auto?: boolean
 }
 
 export function dispatchAssistantApplied(detail: AssistantAppliedDetail): void {

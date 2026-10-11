@@ -189,3 +189,30 @@ describe('align_photo in the reducer', () => {
     expect(s.messages).toHaveLength(2)
   })
 })
+
+describe('act-immediately: an applied proposal arrives already done', () => {
+  it('a proposal event with status applied renders as an applied (auto) card with appliedAt, no pending state', () => {
+    const s = run([sent, ev({ type: 'proposal', actionId: 'p1', kind: 'inventory_batch', summary: 'Moved parcel 5', preview: null, status: 'applied', appliedAt: 1234 })])
+    expect(s.messages[1].proposals).toEqual([
+      { actionId: 'p1', kind: 'inventory_batch', summary: 'Moved parcel 5', preview: null, status: 'applied', appliedAt: 1234, auto: true },
+    ])
+  })
+
+  it('a pending delete (no status) still arrives as proposed, in the same turn as applied ones', () => {
+    const s = run([
+      sent,
+      ev({ type: 'proposal', actionId: 'p1', kind: 'site_fields', summary: 'A', preview: null, status: 'applied', appliedAt: 1 }),
+      ev({ type: 'proposal', actionId: 'p2', kind: 'inventory_batch', summary: 'Delete parcel 3', preview: null }),
+    ])
+    expect(s.messages[1].proposals.map((p) => [p.actionId, p.status])).toEqual([['p1', 'applied'], ['p2', 'proposed']])
+  })
+
+  it('Undo of an auto-applied card moves it to undone like any other applied card', () => {
+    const s = run([
+      sent,
+      ev({ type: 'proposal', actionId: 'p1', kind: 'site_fields', summary: 'A', preview: null, status: 'applied', appliedAt: 1 }),
+      { type: 'proposal_status', actionId: 'p1', status: 'undone' },
+    ])
+    expect(s.messages[1].proposals[0]).toMatchObject({ status: 'undone', appliedAt: 1 })
+  })
+})

@@ -2064,6 +2064,7 @@
       "more": "more",
       "less": "less",
       "noPreview": "No details to show.",
+      "moreChanges": "+{count} more changes",
       "typeToConfirm": "This deletes data. Type {word} to enable Apply.",
       "done": {
         "apply": "Change applied.",

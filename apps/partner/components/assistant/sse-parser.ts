@@ -34,7 +34,17 @@ export type AssistantEvent =
   | { type: 'text'; delta: string }
   | { type: 'tool_start'; name: string; label: string }
   | { type: 'tool_result'; name: string; ok: boolean }
-  | { type: 'proposal'; actionId: string; kind: string; summary: string; preview: unknown }
+  | {
+      type: 'proposal'
+      actionId: string
+      kind: string
+      summary: string
+      preview: unknown
+      /** `applied` when the assistant acted immediately (act-immediately, track 030); absent = waiting for the user. */
+      status?: 'applied'
+      /** Epoch ms the server applied it. */
+      appliedAt?: number
+    }
   | { type: 'qr_print'; parcel?: number; seatLabels?: string[] }
   | { type: 'align_photo'; uploadId: string; seed: SimilarityGeoref; image: ImageSize }
   | { type: 'done'; conversationId?: string }
@@ -88,6 +98,7 @@ export function toAssistantEvent(name: string, data: unknown): AssistantEvent | 
         kind: str(d.kind) ?? '',
         summary: str(d.summary) ?? '',
         preview: d.preview,
+        ...(d.status === 'applied' ? { status: 'applied' as const, appliedAt: num(d.appliedAt) ?? Date.now() } : {}),
       }
     }
     case 'qr_print': {

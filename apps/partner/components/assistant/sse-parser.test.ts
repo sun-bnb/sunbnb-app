@@ -121,3 +121,17 @@ describe('align_photo event', () => {
     expect(createSseParser().push(ev('align_photo', bad))).toEqual([])
   })
 })
+
+describe('act-immediately proposal events', () => {
+  it('keeps status applied + appliedAt, and stays pending without a status', () => {
+    const p = createSseParser()
+    const evs = p.push(
+      `event: proposal\ndata: ${JSON.stringify({ actionId: 'a1', kind: 'k', summary: 'S', preview: {}, status: 'applied', appliedAt: 99 })}\n\n` +
+        `event: proposal\ndata: ${JSON.stringify({ actionId: 'a2', kind: 'k', summary: 'S', preview: {} })}\n\n` +
+        `event: proposal\ndata: ${JSON.stringify({ actionId: 'a3', kind: 'k', summary: 'S', preview: {}, status: 'bogus' })}\n\n`,
+    )
+    expect(evs[0]).toMatchObject({ type: 'proposal', actionId: 'a1', status: 'applied', appliedAt: 99 })
+    expect(evs[1]).not.toHaveProperty('status')
+    expect(evs[2]).not.toHaveProperty('status') // only 'applied' is honoured
+  })
+})

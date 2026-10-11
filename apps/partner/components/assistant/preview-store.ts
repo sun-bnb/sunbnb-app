@@ -7,7 +7,7 @@
  * 'proposed' and the derivation returns nothing. Module-level (like assistant-store)
  * so it survives the tab remount that every site route causes.
  */
-import { GEOMETRY_KINDS, parseGeometry, type GeometryPreview } from './geometry-preview'
+import { GEOMETRY_KINDS, hasRemovals, parseGeometry, type GeometryPreview } from './geometry-preview'
 import type { ProposalInfo } from './stream-reducer'
 
 export interface PreviewUi {
@@ -57,7 +57,7 @@ export interface ActivePreview {
   geometry: GeometryPreview
 }
 
-/** Which proposal should be drawn right now, or null. Pure. */
+/** Which pending delete proposal should be drawn right now, or null. Pure. */
 export function selectActivePreview(
   proposals: readonly Pick<ProposalInfo, 'actionId' | 'kind' | 'status' | 'preview'>[],
   ui: PreviewUi,
@@ -66,7 +66,8 @@ export function selectActivePreview(
   for (const p of proposals) {
     if (!GEOMETRY_KINDS.includes(p.kind) || p.status !== 'proposed') continue
     const geometry = parseGeometry(p.preview)
-    if (geometry) candidates.push({ actionId: p.actionId, geometry })
+    // Act-immediately: only a pending DELETE is still a proposal, and only that is ghosted (to show what would go).
+    if (geometry && hasRemovals(geometry)) candidates.push({ actionId: p.actionId, geometry })
   }
   const forced = ui.forcedId ? candidates.find((c) => c.actionId === ui.forcedId) : undefined
   if (forced) return forced

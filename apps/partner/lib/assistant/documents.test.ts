@@ -14,7 +14,7 @@ describe('document extraction guard', () => {
     for (const t of ['propose_account_fields', 'propose_site_fields', 'propose_working_hours', 'propose_products', 'propose_rental_items']) {
       expect(prompt).toContain(t)
     }
-    expect(prompt).toMatch(/ONE proposal per area/)
+    expect(prompt).toMatch(/ONE change per area/)
     expect(prompt).toMatch(/WHERE in the file/)
     expect(prompt).toMatch(/differs from an existing non-empty value/)
     expect(prompt).toMatch(/GROSS/)

@@ -2064,6 +2064,7 @@
       "more": "lisää",
       "less": "vähemmän",
       "noPreview": "Ei näytettäviä tietoja.",
+      "moreChanges": "+{count} muuta muutosta",
       "typeToConfirm": "Tämä poistaa tietoja. Kirjoita {word} ottaaksesi käyttöön.",
       "done": {
         "apply": "Muutos otettu käyttöön.",
