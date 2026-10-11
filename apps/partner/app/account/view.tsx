@@ -49,6 +49,9 @@ function Field({
         {label}{required && <span className="text-red-400 ml-0.5">*</span>}
       </label>
       <input
+        // Uncontrolled: a changed server default (assistant Apply/Undo + router.refresh) must
+        // remount THIS input to show it; untouched-by-server inputs keep what the user typed.
+        key={defaultValue}
         id={name}
         name={name}
         type={type}
@@ -94,6 +97,7 @@ function SelectField({
         {label}{required && <span className="text-red-400 ml-0.5">*</span>}
       </label>
       <select
+        key={defaultValue}
         id={name}
         name={name}
         required={required}

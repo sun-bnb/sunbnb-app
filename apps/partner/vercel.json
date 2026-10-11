@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/sync-promotion-trials",
       "schedule": "30 4 * * *"
+    },
+    {
+      "path": "/api/cron/purge-assistant-uploads",
+      "schedule": "40 3 * * *"
     }
   ],
   "regions": [

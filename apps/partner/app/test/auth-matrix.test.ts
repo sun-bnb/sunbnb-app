@@ -24,6 +24,39 @@ vi.mock('@/app/auth', () => ({
   auth: vi.fn().mockResolvedValue(null),
 }))
 
+// Assistant proposals (track 030 S3): the account-scoped lookup returns a proposal for whoever asks,
+// on SITE_ID, so the matrix exercises the site-ownership gate (requireSiteOwner) behind it.
+vi.mock('@repo/data/assistant', () => ({
+  ASSISTANT_ACTION_STATUS: { PROPOSED: 'proposed', APPLIED: 'applied', REJECTED: 'rejected', UNDONE: 'undone', EXPIRED: 'expired', FAILED: 'failed' },
+  ASSISTANT_UNDO_WINDOW_MS: 24 * 60 * 60 * 1000,
+  getProposalForAccount: vi.fn(async (id: string, accountId: string) => ({
+    id, accountId, conversationId: 'matrix-conv-1', siteId: 'matrix-site-1', kind: 'site_fields', status: 'proposed',
+    payload: { v: 1, data: { fields: { name: 'New name' } } }, preview: { summary: 's', changes: [{ target: 'Site', field: 'name', label: 'Name', before: 'a', after: 'New name' }] },
+    snapshot: null, expiresAt: new Date(Date.now() + 3_600_000), appliedAt: null,
+  })),
+  markApplied: vi.fn().mockResolvedValue(true),
+  markFailed: vi.fn().mockResolvedValue(true),
+  markRejected: vi.fn().mockResolvedValue(true),
+  markUndone: vi.fn().mockResolvedValue(true),
+  appendMessages: vi.fn().mockResolvedValue(null),
+  createProposal: vi.fn(),
+  createUpload: vi.fn().mockResolvedValue({ id: 'matrix-upload-1' }),
+  // Aerial (track 030 S7): an upload on matrix-site-1 owned by the matrix site owner, returned to whoever asks.
+  getUploadForAccount: vi.fn(async (id: string) => ({
+    id, accountId: 'matrix-owner-1', siteId: 'matrix-site-1', url: 'https://blob/x', mime: 'image/jpeg', sizeBytes: 1,
+    georef: null, aerial: null, expiresAt: new Date(Date.now() + 3_600_000), deletedAt: null,
+  })),
+  setUploadGeoref: vi.fn().mockResolvedValue(true),
+}))
+
+// Assistant uploads (track 030 S5): flag on, shared limiter allows.
+vi.mock('@repo/data/flags', () => ({
+  getFlagStates: vi.fn().mockResolvedValue({ assistant: { enabled: true } }),
+}))
+vi.mock('@repo/data/rate-limit-shared', () => ({
+  rateLimitShared: vi.fn().mockResolvedValue({ allowed: true, count: 1 }),
+}))
+
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
@@ -60,6 +93,8 @@ vi.mock('@/app/flags', () => ({
 // Mock @vercel/blob (used by uploadContentImage, updateProductImage, uploadSiteImage, addProduct)
 vi.mock('@vercel/blob', () => ({
   put: vi.fn().mockResolvedValue({ url: 'https://blob.vercel-storage.com/test.jpg' }),
+  del: vi.fn().mockResolvedValue(undefined),
+  get: vi.fn(),
 }))
 
 // Mock sharp (used by uploadContentImage, updateProductImage, uploadSiteImage, addProduct)
@@ -258,7 +293,15 @@ beforeEach(() => {
     rotation: 0,
     site: { userId: OWNER_ID },
   } as any)
-  vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([])
+  // One placed, unit-less seat in parcel 1: lets parcel-ops resolve a parcel
+  // (rotateParcel/applyParcelConfig) once auth passes. Actions that treat an
+  // empty list as a no-op also tolerate one seat.
+  vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([
+    {
+      id: ITEM_ID, number: 1, group: 1, rotation: 0, itemGroupId: null, sunbedGroupId: null,
+      locationLat: '60.1', locationLng: '24.9', schematicX: null, schematicY: null,
+    },
+  ] as any)
   vi.mocked(prisma.inventoryItem.findFirst).mockResolvedValue({
     id: ITEM_ID,
     siteId: SITE_ID,

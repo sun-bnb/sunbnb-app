@@ -373,6 +373,37 @@ window and are **close-independent** — daily accumulation never changes when t
   choosing one gets a refusal naming the mode and its band. The admin form and `setDevicePolicy`
   both call the latter, so what the operator reads while typing is what the server would answer
 
+## Partner AI assistant (`src/assistant.ts`) — track 030
+
+`@repo/data/assistant` — persistence for the partner assistant (models `AssistantConversation`,
+`AssistantAction`, `AssistantUpload`; migrations `20261011064712_assistant_models` +
+`20261011083109_assistant_upload_aerial_georef` adding `assistant_upload.georef` / `.aerial` jsonb).
+Server-only. **Every reader/writer is ACCOUNT-SCOPED** — `accountId` is always in the predicate, so a
+guessed id from another account behaves like a missing row (null/false).
+- Status constants `ASSISTANT_ACTION_STATUS` (`proposed → applied|rejected|expired|failed`,
+  `applied → undone`, rest terminal); pure `canTransition` **plus** a compare-and-set in each UPDATE
+  (`markApplied`/`markRejected`/`markFailed`/`markUndone`) so two racing requests cannot both apply.
+  Plain strings, not a Prisma enum (data-access rule).
+- TTLs: `ASSISTANT_PROPOSAL_TTL_MS` 1 h (`expireStaleProposals`), `ASSISTANT_UNDO_WINDOW_MS` 24 h,
+  `ASSISTANT_UPLOAD_TTL_MS` 30 days (`listExpiredUploads` / `markUploadDeleted` drive the partner purge cron).
+- Conversations: `createConversation`, `getConversationForAccount`, `appendMessages` (append-only,
+  accumulates `AssistantUsage` via `addUsage`), `recordConsent` (not yet called).
+- Aerial (S7): `setUploadGeoref`, `claimAerialExtraction` (CAS claim; `running` older than
+  `AERIAL_STALE_RUNNING_MS` 10 min is reclaimable; a `done` descriptor is returned cached — no second
+  model call), `saveAerialDescriptor`, `failAerialExtraction`.
+
+## Coastline lookup (`src/coastline-lookup.ts`, `src/coastline-overpass.ts`) — track 027 → 030 S7a
+
+- `@repo/data/coastline-lookup` — `shoreAround(lat, lng, radiusM)`: the DB-then-Overpass shoreline
+  lookup behind marketing `/api/coastline`, shared so the partner assistant's aerial land check reads
+  the same shore. Returns raw shore polylines (water on the right) + water rings; reducing them to a
+  shore frame is `@repo/agent/geo/coastline`. Needs `COASTLINE_POSTGRES_URL` — every call throws
+  without it, and callers fall back to "no shore" (land check skipped).
+- `@repo/data/coastline-overpass` — `fetchCoastTile` / `parseCoastAnswer` / `OVERPASS_URLS` (moved
+  from `apps/marketing/lib/overpass.ts`): instances are raced, and an answer counts only if complete —
+  Overpass reports its own timeouts as HTTP 200 with a `remark`, which must never be cached as "no
+  coast here".
+
 ## Testing
 
 ```bash

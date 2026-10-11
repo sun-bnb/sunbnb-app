@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
 import Collapse from '@mui/material/Collapse'
@@ -19,6 +19,7 @@ import CheckIcon from '@mui/icons-material/Check'
 import ImageIcon from '@mui/icons-material/Image'
 import { Product } from '@/types/shared'
 import { updateProduct, updateProductImage, deleteProduct, toggleProductSoldOut } from './actions'
+import { reconcileFields } from '@/lib/resync'
 
 const CATEGORY_LABELS: Record<string, string> = {
   food: '🍽️ Food',
@@ -50,6 +51,32 @@ export default function ProductItem({ product, onUpdated }: ProductItemProps) {
   const [soldOut, setSoldOut] = useState(product.soldOut ?? false)
 
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // The assistant can edit a product server-side; the list refetch hands us a new `product`. These
+  // useState copies only read props once, so reconcile: reset a field only when the server value
+  // moved and the user has not edited it (matters while the inline editor is open).
+  const snap = (p: Product) => ({
+    name: p.name, description: p.description || '', totalPrice: String(p.totalPrice), tax: String(p.tax),
+    category: p.category || 'food', prepTime: String(p.prepTime ?? ''), soldOut: String(p.soldOut ?? false),
+  })
+  const serverRef = useRef(snap(product))
+  useEffect(() => {
+    const next = snap(product)
+    const r = reconcileFields(
+      { name, description, totalPrice: String(totalPrice), tax: String(tax), category, prepTime: String(prepTime), soldOut: String(soldOut) },
+      serverRef.current,
+      next,
+    )
+    serverRef.current = next
+    if (r.reset.includes('name')) setName(product.name)
+    if (r.reset.includes('description')) setDescription(product.description || '')
+    if (r.reset.includes('totalPrice')) setTotalPrice(product.totalPrice)
+    if (r.reset.includes('tax')) setTax(product.tax)
+    if (r.reset.includes('category')) setCategory(product.category || 'food')
+    if (r.reset.includes('prepTime')) setPrepTime(product.prepTime ?? '')
+    if (r.reset.includes('soldOut')) setSoldOut(product.soldOut ?? false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product])
 
   const handleSave = async () => {
     setSaving(true)

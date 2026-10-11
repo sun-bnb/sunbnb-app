@@ -1957,5 +1957,212 @@
     "reqJobTitle": "Representative job title",
     "reqMcc": "Business category",
     "reqUrl": "Business website"
+  },
+  "Assistant": {
+    "attachments": {
+      "add": "Attach files",
+      "hint": "PDF, JPEG, PNG, WEBP, HEIC or DOCX, up to 20 MB each",
+      "list": "Attached files",
+      "remove": "Remove {name}",
+      "uploading": "Uploading",
+      "failed": "Upload failed",
+      "drop": "Drop files to attach",
+      "default": "Please review the attached file(s).",
+      "attached": "Attached files",
+      "errors": {
+        "tooLarge": "That file is larger than 20 MB.",
+        "unsupported": "That file type is not supported. Use PDF, JPEG, PNG, WEBP or DOCX.",
+        "heic": "This HEIC photo could not be read. Please export it as JPEG or PNG and try again.",
+        "rateLimited": "You have reached the daily upload limit. Please try again tomorrow.",
+        "forbidden": "You do not have permission to upload files here.",
+        "unavailable": "The upload failed. Please try again.",
+        "limit": "You can attach up to 5 files per message."
+      }
+    },
+    "title": "Assistant",
+    "toggle": "Assistant",
+    "close": "Close assistant",
+    "newConversation": "New conversation",
+    "placeholder": "Ask about this site…",
+    "send": "Send",
+    "stop": "Stop",
+    "emptyTitle": "How can I help with this site?",
+    "emptyBody": "Ask how something works, or what is set up right now.",
+    "starters": "Suggested questions",
+    "thinking": "Thinking…",
+    "you": "You",
+    "assistant": "Assistant",
+    "activity": "Assistant activity",
+    "toolRunning": "in progress",
+    "toolDone": "done",
+    "toolFailed": "failed",
+    "errors": {
+      "unavailable": "Assistant is unavailable right now",
+      "rate_limited": "You are sending messages too quickly. Please wait a moment and try again.",
+      "budget": "Daily assistant limit reached",
+      "bad_request": "That message could not be sent. Please try again."
+    },
+    "starter": {
+      "inventory1": "How do I add a parcel?",
+      "inventory2": "Rotate parcel 3 by 10°",
+      "inventory3": "How many sunbeds are active?",
+      "schematic1": "How do I add a pool to the layout?",
+      "schematic2": "Rotate parcel 3 by 10°",
+      "schematic3": "How many sunbeds are placed?",
+      "general1": "What should I fill in before going live?",
+      "general2": "What are my current opening hours?",
+      "general3": "How do I change the price?",
+      "products1": "How do I add a product?",
+      "products2": "Which products have no image?",
+      "products3": "How do I change a price?",
+      "rentals1": "How do I add a rental item?",
+      "rentals2": "What rentals do I have?",
+      "rentals3": "How do hourly and daily prices work?",
+      "default1": "What is left to set up on this site?",
+      "default2": "How do I get my site ready for bookings?",
+      "default3": "What can you help me with?"
+    },
+    "proposal": {
+      "image": {
+        "title": {
+          "cover": "Set cover photo to {file}",
+          "product": "Set the image of {name} to {file}",
+          "rental_item": "Set the image of {name} to {file}",
+          "brand_logo": "Set brand logo to {file}",
+          "brand_background": "Set brand background to {file}",
+          "schematic_underlay": "Set schematic underlay to {file}"
+        },
+        "current": "Current",
+        "new": "New",
+        "none": "No image",
+        "unavailable": "Preview unavailable"
+      },
+      "title": "Proposed change",
+      "status": {
+        "proposed": "Proposed",
+        "applied": "Applied",
+        "rejected": "Rejected",
+        "undone": "Undone",
+        "expired": "Expired",
+        "failed": "Failed"
+      },
+      "apply": "Apply",
+      "applying": "Applying…",
+      "reject": "Reject",
+      "rejecting": "Rejecting…",
+      "undo": "Undo",
+      "undoing": "Undoing…",
+      "changes": "Changes",
+      "creates": "Will be created",
+      "deletes": "Will be deleted",
+      "to": "changed to",
+      "on": "On",
+      "off": "Off",
+      "empty": "—",
+      "more": "more",
+      "less": "less",
+      "noPreview": "No details to show.",
+      "typeToConfirm": "This deletes data. Type {word} to enable Apply.",
+      "done": {
+        "apply": "Change applied.",
+        "reject": "Proposal rejected.",
+        "undo": "Change undone."
+      },
+      "errors": {
+        "not_found": "This proposal no longer exists.",
+        "forbidden": "You are not allowed to change this site.",
+        "expired": "This proposal expired. Ask again.",
+        "stale": "This changed since it was proposed — ask again.",
+        "already_resolved": "This proposal was already handled.",
+        "undo_window": "This change can no longer be undone.",
+        "apply_failed": "The change could not be applied. Nothing was changed.",
+        "unknown": "Something went wrong. Please try again."
+      },
+      "create": {
+        "parcelShape": "{rows, plural, one {# row} other {# rows}} × {perRow, plural, one {# sunbed} other {# sunbeds}}",
+        "paired": "paired",
+        "total": "{count} in total",
+        "rotated": "rotated {degrees}°",
+        "onMap": "on the map",
+        "schematicAt": "x {x} m, y {y} m",
+        "elementShape": "{width} × {height} m at ({x}, {y})",
+        "elementTitle": "{type} “{label}”",
+        "types": {
+          "water": "Water",
+          "sand": "Sand",
+          "grass": "Grass",
+          "deck": "Deck",
+          "pool": "Pool",
+          "bar": "Bar",
+          "reception": "Reception",
+          "shower": "Shower",
+          "restroom": "Restroom"
+        },
+        "fields": {
+          "name": "Name",
+          "price": "Price",
+          "vat": "VAT",
+          "category": "Category",
+          "description": "Description",
+          "soldOut": "Sold out",
+          "label": "Label",
+          "color": "Colour",
+          "position": "Position",
+          "rotation": "Rotation",
+          "x": "X",
+          "y": "Y",
+          "width": "Width",
+          "height": "Height"
+        }
+      }
+    },
+    "preview": {
+      "show": "Show on map",
+      "hide": "Hide from map",
+      "viewOnMap": "View on map",
+      "openOnMap": "Open on map",
+      "back": "Back to proposal",
+      "count": {
+        "added": "{count} added",
+        "moved": "{count} moved",
+        "changed": "{count} changed",
+        "removed": "{count} removed"
+      }
+    },
+    "qr": {
+      "printParcel": "Print QR cards for parcel {parcel}",
+      "printSeats": "Print QR cards ({count} seats)",
+      "preparing": "Preparing PDF…",
+      "none": "No matching seats found to print."
+    },
+    "align": {
+      "title": "Align aerial photo",
+      "chip": "Align photo on the map",
+      "chipOpen": "Alignment open on the map",
+      "desktopOnly": "Aligning a photo on the map needs a larger screen. Open Sunbnb on a desktop or laptop to continue.",
+      "reading": "Reading photo…",
+      "readDone": "Photo read",
+      "readFailed": "Could not read the photo.",
+      "retry": "Retry",
+      "hint": "Drag the photo to move it, drag the blue corner handle to rotate and resize. Line it up with the beach.",
+      "opacity": "Opacity",
+      "pin": "Pin 2 points",
+      "pinBack": "Undo pin",
+      "pinCancel": "Cancel pinning",
+      "pinDegenerate": "Those two points are too close together. Start again with points further apart.",
+      "pinStep": {
+        "photo1": "Pin 1: click a recognisable point on the photo.",
+        "map1": "Pin 1: now click where that point is on the map.",
+        "photo2": "Pin 2: click a second point on the photo, far from the first.",
+        "map2": "Pin 2: now click where that second point is on the map."
+      },
+      "reset": "Reset",
+      "cancel": "Cancel",
+      "confirm": "Confirm alignment",
+      "saving": "Saving…",
+      "saveError": "Could not save the alignment. Please try again.",
+      "waitReply": "Wait for the assistant to finish replying.",
+      "canned": "I've aligned the photo — please propose the layout."
+    }
   }
 }

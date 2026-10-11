@@ -2,6 +2,10 @@
 
 import { trackOnce } from '@/components/Analytics'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { usePublishAssistantSelection } from '@/components/assistant/AssistantContext'
+import { useAssistantResync } from '@/components/assistant/useAssistantResync'
+import { useGhostPreview } from '@/components/assistant/useGhostPreview'
+import { INVENTORY_BATCH_KIND, LAYOUT_ELEMENTS_KIND, LAYOUT_CANVAS_KIND, type SeatLookup } from '@/components/assistant/geometry-preview'
 import { useTranslations } from 'next-intl'
 import { useSite } from '@/app/sites/site-context'
 import type { InventoryItem, LayoutElementProps } from '@/types/shared'
@@ -13,6 +17,7 @@ import {
   saveInventoryItemSchematicLocation,
 } from '../inventory-actions'
 import { useSunbedEditing } from '../inventory/useSunbedEditing'
+import { rotateParcel, applyParcelConfig } from '../inventory/parcel-ops'
 import {
   syncChairsWithLayout,
   getItemGroup,
@@ -37,6 +42,7 @@ import { ELEMENT_PRESETS } from './palette'
 import SchematicCanvas from './SchematicCanvas'
 import ElementPalette from './ElementPalette'
 import ElementForm from './ElementForm'
+import { parcelIsPaired } from '../inventory/parcel-config'
 
 type EditorMode = 'none' | 'create-chair' | 'edit-chair' | 'create-parcel' | 'edit-parcel'
 
@@ -118,6 +124,12 @@ export default function SchematicView() {
     return items[0]!.group || null
   }, [selectedItemIds, inventory])
 
+  usePublishAssistantSelection({
+    itemIds: selectedItemId ? [selectedItemId] : selectedItemIds,
+    parcel: selectedParcelGroupNumber ?? undefined,
+    elementId: selectedElementId ?? undefined,
+  })
+
   const selectedParcelTotal = useMemo(() => {
     if (!selectedParcelGroupNumber) return 0
     return inventory.filter(i => i.group === selectedParcelGroupNumber).length
@@ -159,7 +171,7 @@ export default function SchematicView() {
           group: ig.number,
           category: ig.category || undefined,
           price: ig.price || undefined,
-          pairSeats: ig.pairGap > 0,
+          pairSeats: parcelIsPaired(groupItems, ig.pairGap),
           intraPairGap: ig.pairGap,
           baseLat: ig.schematicY ?? 0,
           baseLng: ig.schematicX ?? 0,
@@ -192,6 +204,25 @@ export default function SchematicView() {
   }
 
   const sunbedEditing = useSunbedEditing(siteId, refresh)
+
+  // Assistant inventory proposal -> ghosts on the canvas (track 030 S4b).
+  const seatLookup = useMemo<SeatLookup>(() => {
+    const byId = new Map(inventory.map((i) => [i.id, i]))
+    return (id) => {
+      const it = byId.get(id)
+      if (!it || it.schematicX == null || it.schematicY == null) return undefined
+      return { at: { x: it.schematicX, y: it.schematicY }, rotation: it.rotation || 0 }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [site.inventoryItems])
+  const ghost = useGhostPreview(siteId, 'schematic', seatLookup)
+
+  // Apply/Undo of an inventory batch: re-pull the site through the editor's own refresh.
+  useAssistantResync([INVENTORY_BATCH_KIND, LAYOUT_ELEMENTS_KIND, LAYOUT_CANVAS_KIND], async () => {
+    await refresh()
+    setSelectedItemIds([])
+    setSelectedItemId(null)
+  })
 
   // ─── Escape key ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -227,19 +258,9 @@ export default function SchematicView() {
 
   // ─── Parcel handlers ───────────────────────────────────────────────────
   const handleParcelReorder = async () => {
-    if (!selectedParcelConfig || !selectedParcelGroupNumber) return
-    const groupItems = inventory.filter(i => i.group === selectedParcelGroupNumber)
-    const firstWithGroup = groupItems.find(i => i.itemGroupId)
-    let baseLat = selectedParcelConfig.baseLat
-    let baseLng = selectedParcelConfig.baseLng
-    if (firstWithGroup?.itemGroupId) {
-      const ig = await getItemGroup(firstWithGroup.itemGroupId)
-      if (ig) {
-        baseLat = ig.schematicY ?? baseLat
-        baseLng = ig.schematicX ?? baseLng
-      }
-    }
-    await syncChairsWithLayout(siteId, { ...selectedParcelConfig, baseLat, baseLng }, 'rearrange')
+    if (!selectedParcelGroupNumber) return
+    // Server composition (track 030 S1b): config + schematic anchor read server-side.
+    await applyParcelConfig(siteId, selectedParcelGroupNumber, {})
     const updated = await getSite(siteId)
     if (updated) {
       setSite(updated)
@@ -263,32 +284,12 @@ export default function SchematicView() {
   const handleRotateSelected = async (delta: number) => {
     if (selectedItemIds.length === 0) return
 
-    // Complete parcel: regenerate grid at new rotation (mirrors ParcelForm "Apply").
+    // Complete parcel: regenerate the grid at the new rotation, server-side
+    // (rotateParcel falls back to a selection rotation without an ItemGroup).
     if (isCompleteParcelSelected && selectedParcelGroupNumber) {
-      const groupItems = inventory.filter(i => i.group === selectedParcelGroupNumber)
-      const firstWithGroup = groupItems.find(i => i.itemGroupId)
-      if (firstWithGroup?.itemGroupId) {
-        const ig = await getItemGroup(firstWithGroup.itemGroupId)
-        if (ig) {
-          const newConfig: ChairConfig = {
-            rows: Math.ceil(groupItems.length / ig.seatsPerRow),
-            seatsPerRow: ig.seatsPerRow,
-            horizontalGap: ig.horizontalGap,
-            verticalGap: ig.verticalGap,
-            rotation: ig.rotation + delta,
-            group: ig.number,
-            category: ig.category || undefined,
-            price: ig.price || undefined,
-            pairSeats: ig.pairGap > 0,
-            intraPairGap: ig.pairGap,
-            baseLat: ig.schematicY ?? 0,
-            baseLng: ig.schematicX ?? 0,
-          }
-          await syncChairsWithLayout(siteId, newConfig, 'rearrange')
-          await refresh()
-          return
-        }
-      }
+      await rotateParcel(siteId, selectedParcelGroupNumber, delta)
+      await refresh()
+      return
     }
 
     await rotateSelection(siteId, selectedItemIds, delta)
@@ -321,45 +322,8 @@ export default function SchematicView() {
   const handleRestoreParcelOrder = async (group: number) => {
     const groupItems = inventory.filter(i => i.group === group)
     if (groupItems.length === 0) return
-    const firstWithGroup = groupItems.find(i => i.itemGroupId)
-    let config: ChairConfig
-    if (firstWithGroup?.itemGroupId) {
-      const ig = await getItemGroup(firstWithGroup.itemGroupId)
-      if (!ig) return
-      config = {
-        itemGroupId: ig.id,
-        rows: Math.ceil(groupItems.length / ig.seatsPerRow),
-        seatsPerRow: ig.seatsPerRow,
-        horizontalGap: ig.horizontalGap,
-        verticalGap: ig.verticalGap,
-        rotation: ig.rotation,
-        group: ig.number,
-        category: ig.category || undefined,
-        price: ig.price || undefined,
-        pairSeats: ig.pairGap > 0,
-        intraPairGap: ig.pairGap,
-        baseLat: ig.schematicY ?? 0,
-        baseLng: ig.schematicX ?? 0,
-      }
-    } else {
-      const xs = groupItems.map(i => i.schematicX ?? 0)
-      const ys = groupItems.map(i => i.schematicY ?? 0)
-      const avgX = xs.reduce((s, v) => s + v, 0) / xs.length
-      const avgY = ys.reduce((s, v) => s + v, 0) / ys.length
-      config = {
-        rows: Math.ceil(groupItems.length / (parcelConfig.seatsPerRow || 4)),
-        seatsPerRow: parcelConfig.seatsPerRow || 4,
-        horizontalGap: parcelConfig.horizontalGap,
-        verticalGap: parcelConfig.verticalGap,
-        rotation: groupItems[0]?.rotation || 0,
-        group,
-        pairSeats: true,
-        intraPairGap: parcelConfig.intraPairGap,
-        baseLat: avgY,
-        baseLng: avgX,
-      }
-    }
-    await syncChairsWithLayout(siteId, config, 'rearrange')
+    // Server composition (track 030 S1b): empty patch = re-lay on the stored config.
+    await applyParcelConfig(siteId, group, {})
     const updated = await getSite(siteId)
     if (updated) {
       setSite(updated)
@@ -381,13 +345,8 @@ export default function SchematicView() {
 
   async function handleRotateSingleItem(delta: number) {
     if (!selectedItemId || !selectedItem) return
-    // Group-first: collect other members of the same SunbedGroup from in-memory inventory.
-    const partnerIds: string[] = selectedItem.sunbedGroupId
-      ? inventory
-          .filter((i) => i.sunbedGroupId === selectedItem.sunbedGroupId && i.id !== selectedItemId)
-          .map((i) => i.id)
-      : []
-    await sunbedEditing.rotateSingle(selectedItemId, selectedItem.rotation ?? 0, delta, partnerIds)
+    // The unit's members are resolved server-side from sunbedGroupId.
+    await sunbedEditing.rotateSingle(selectedItemId, delta)
   }
 
   async function handleDeleteSingleItem() {
@@ -772,6 +731,7 @@ export default function SchematicView() {
             editingItemId={selectedItemId}
             selectedElementId={selectedElementId}
             highlightedGroup={editGroup}
+            ghostModel={ghost.model}
             placementActive={
               editorMode === 'create-chair' ||
               editorMode === 'create-parcel' ||
@@ -826,7 +786,7 @@ export default function SchematicView() {
                         group: ig.number,
                         category: ig.category || undefined,
                         price: ig.price || undefined,
-                        pairSeats: ig.pairGap > 0,
+                        pairSeats: parcelIsPaired(allGroupItems, ig.pairGap),
                         intraPairGap: ig.pairGap,
                         baseLat: ig.schematicY ?? 0,
                         baseLng: ig.schematicX ?? 0,

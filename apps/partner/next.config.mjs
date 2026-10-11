@@ -4,6 +4,12 @@ const withNextIntl = createNextIntlPlugin()
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // @repo/agent ships TypeScript source (track 030).
+  transpilePackages: ['@repo/agent'],
+  // The assistant's how-to markdown is read from disk at runtime; trace it into the function bundle.
+  outputFileTracingIncludes: {
+    '/api/assistant': ['./lib/assistant/knowledge/**'],
+  },
   // Dev is served over mkcert HTTPS on this host (server.js); Next 16 blocks
   // cross-origin /_next/* dev requests unless the origin is listed.
   allowedDevOrigins: ['local.sunbnb.app'],

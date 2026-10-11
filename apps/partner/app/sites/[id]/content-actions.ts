@@ -6,6 +6,7 @@ import { requireSiteOwner } from '@/lib/auth-helpers'
 import { validateImageFile, safeBlobKey } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 import { put } from '@vercel/blob'
+import { setSiteCover } from '@/lib/site-images'
 import sharp from 'sharp'
 
 // ─── Save Content Fields ────────────────────────────────────────────────────
@@ -65,16 +66,12 @@ export async function uploadContentImage(
   const image = sharp(buffer)
   const metadata = await image.metadata()
 
-  const siteData: Record<string, unknown> = {}
-  if (metadata.width && metadata.height) {
-    siteData.imageWidth = metadata.width
-    siteData.imageHeight = metadata.height
-  }
-
   const blob = await put(safeBlobKey(`sites/${siteId}/content`, imageFile), imageFile, { access: 'public' })
-  siteData.image = blob.url
-
-  await prisma.site.update({ data: siteData, where: { id: siteId } })
+  await setSiteCover(
+    siteId,
+    blob.url,
+    metadata.width && metadata.height ? { width: metadata.width, height: metadata.height } : undefined,
+  )
 
   revalidatePath('/sites')
   return { status: 'ok', imageUrl: blob.url }

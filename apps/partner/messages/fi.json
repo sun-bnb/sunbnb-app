@@ -1957,5 +1957,212 @@
     "reqJobTitle": "Edustajan tehtävänimike",
     "reqMcc": "Toimialaluokka",
     "reqUrl": "Yrityksen verkkosivusto"
+  },
+  "Assistant": {
+    "attachments": {
+      "add": "Liitä tiedostoja",
+      "hint": "PDF, JPEG, PNG, WEBP, HEIC tai DOCX, enintään 20 Mt kukin",
+      "list": "Liitetyt tiedostot",
+      "remove": "Poista {name}",
+      "uploading": "Ladataan",
+      "failed": "Lataus epäonnistui",
+      "drop": "Pudota tiedostot liitettäväksi",
+      "default": "Tarkista liitetyt tiedostot.",
+      "attached": "Liitetyt tiedostot",
+      "errors": {
+        "tooLarge": "Tiedosto on yli 20 Mt.",
+        "unsupported": "Tiedostotyyppiä ei tueta. Käytä PDF-, JPEG-, PNG-, WEBP- tai DOCX-tiedostoa.",
+        "heic": "HEIC-kuvaa ei voitu lukea. Vie se JPEG- tai PNG-muodossa ja yritä uudelleen.",
+        "rateLimited": "Päivittäinen latausraja on täynnä. Yritä huomenna uudelleen.",
+        "forbidden": "Sinulla ei ole oikeutta ladata tiedostoja tänne.",
+        "unavailable": "Lataus epäonnistui. Yritä uudelleen.",
+        "limit": "Voit liittää enintään 5 tiedostoa viestiä kohden."
+      }
+    },
+    "title": "Avustaja",
+    "toggle": "Avustaja",
+    "close": "Sulje avustaja",
+    "newConversation": "Uusi keskustelu",
+    "placeholder": "Kysy tästä kohteesta…",
+    "send": "Lähetä",
+    "stop": "Pysäytä",
+    "emptyTitle": "Miten voin auttaa tämän kohteen kanssa?",
+    "emptyBody": "Kysy, miten jokin toimii tai mitä on tällä hetkellä asetettu.",
+    "starters": "Ehdotetut kysymykset",
+    "thinking": "Mietitään…",
+    "you": "Sinä",
+    "assistant": "Avustaja",
+    "activity": "Avustajan toiminta",
+    "toolRunning": "käynnissä",
+    "toolDone": "valmis",
+    "toolFailed": "epäonnistui",
+    "errors": {
+      "unavailable": "Avustaja ei ole tällä hetkellä käytettävissä",
+      "rate_limited": "Lähetät viestejä liian nopeasti. Odota hetki ja yritä uudelleen.",
+      "budget": "Avustajan päivittäinen raja on täynnä",
+      "bad_request": "Viestiä ei voitu lähettää. Yritä uudelleen."
+    },
+    "starter": {
+      "inventory1": "Miten lisään alueen?",
+      "inventory2": "Käännä alue 3 kymmenen astetta",
+      "inventory3": "Montako aurinkovuodetta on käytössä?",
+      "schematic1": "Miten lisään altaan pohjakuvaan?",
+      "schematic2": "Käännä alue 3 kymmenen astetta",
+      "schematic3": "Montako aurinkovuodetta on sijoitettu?",
+      "general1": "Mitä pitää täyttää ennen julkaisua?",
+      "general2": "Mitkä ovat nykyiset aukioloaikani?",
+      "general3": "Miten muutan hintaa?",
+      "products1": "Miten lisään tuotteen?",
+      "products2": "Missä tuotteissa ei ole kuvaa?",
+      "products3": "Miten muutan hintaa?",
+      "rentals1": "Miten lisään vuokrattavan tuotteen?",
+      "rentals2": "Mitä vuokrattavaa minulla on?",
+      "rentals3": "Miten tunti- ja päivähinnat toimivat?",
+      "default1": "Mitä tässä kohteessa on vielä asettamatta?",
+      "default2": "Miten saan kohteen valmiiksi varauksia varten?",
+      "default3": "Missä voit auttaa?"
+    },
+    "proposal": {
+      "image": {
+        "title": {
+          "cover": "Aseta {file} kansikuvaksi",
+          "product": "Aseta {file} tuotteen {name} kuvaksi",
+          "rental_item": "Aseta {file} vuokrakohteen {name} kuvaksi",
+          "brand_logo": "Aseta {file} brändin logoksi",
+          "brand_background": "Aseta {file} brändin taustakuvaksi",
+          "schematic_underlay": "Aseta {file} kaaviopohjan taustakuvaksi"
+        },
+        "current": "Nykyinen",
+        "new": "Uusi",
+        "none": "Ei kuvaa",
+        "unavailable": "Esikatselu ei käytettävissä"
+      },
+      "title": "Ehdotettu muutos",
+      "status": {
+        "proposed": "Ehdotettu",
+        "applied": "Otettu käyttöön",
+        "rejected": "Hylätty",
+        "undone": "Peruttu",
+        "expired": "Vanhentunut",
+        "failed": "Epäonnistui"
+      },
+      "apply": "Ota käyttöön",
+      "applying": "Otetaan käyttöön…",
+      "reject": "Hylkää",
+      "rejecting": "Hylätään…",
+      "undo": "Peru muutos",
+      "undoing": "Perutaan…",
+      "changes": "Muutokset",
+      "creates": "Luodaan",
+      "deletes": "Poistetaan",
+      "to": "muuttuu arvoon",
+      "on": "Päällä",
+      "off": "Pois",
+      "empty": "—",
+      "more": "lisää",
+      "less": "vähemmän",
+      "noPreview": "Ei näytettäviä tietoja.",
+      "typeToConfirm": "Tämä poistaa tietoja. Kirjoita {word} ottaaksesi käyttöön.",
+      "done": {
+        "apply": "Muutos otettu käyttöön.",
+        "reject": "Ehdotus hylätty.",
+        "undo": "Muutos peruttu."
+      },
+      "errors": {
+        "not_found": "Tätä ehdotusta ei enää ole.",
+        "forbidden": "Sinulla ei ole oikeutta muokata tätä kohdetta.",
+        "expired": "Ehdotus on vanhentunut. Pyydä uudelleen.",
+        "stale": "Tämä on muuttunut ehdotuksen jälkeen — pyydä uudelleen.",
+        "already_resolved": "Tämä ehdotus on jo käsitelty.",
+        "undo_window": "Tätä muutosta ei voi enää perua.",
+        "apply_failed": "Muutosta ei voitu ottaa käyttöön. Mitään ei muutettu.",
+        "unknown": "Jokin meni pieleen. Yritä uudelleen."
+      },
+      "create": {
+        "parcelShape": "{rows, plural, one {# rivi} other {# riviä}} × {perRow, plural, one {# aurinkotuoli} other {# aurinkotuolia}}",
+        "paired": "parittain",
+        "total": "yhteensä {count}",
+        "rotated": "käännetty {degrees}°",
+        "onMap": "kartalla",
+        "schematicAt": "x {x} m, y {y} m",
+        "elementShape": "{width} × {height} m kohdassa ({x}, {y})",
+        "elementTitle": "{type} ”{label}”",
+        "types": {
+          "water": "Vesi",
+          "sand": "Hiekka",
+          "grass": "Nurmi",
+          "deck": "Terassi",
+          "pool": "Uima-allas",
+          "bar": "Baari",
+          "reception": "Vastaanotto",
+          "shower": "Suihku",
+          "restroom": "WC"
+        },
+        "fields": {
+          "name": "Nimi",
+          "price": "Hinta",
+          "vat": "ALV",
+          "category": "Luokka",
+          "description": "Kuvaus",
+          "soldOut": "Loppuunmyyty",
+          "label": "Nimike",
+          "color": "Väri",
+          "position": "Sijainti",
+          "rotation": "Kierto",
+          "x": "X",
+          "y": "Y",
+          "width": "Leveys",
+          "height": "Korkeus"
+        }
+      }
+    },
+    "preview": {
+      "show": "Näytä kartalla",
+      "hide": "Piilota kartalta",
+      "viewOnMap": "Näytä kartalla",
+      "openOnMap": "Avaa kartalla",
+      "back": "Takaisin ehdotukseen",
+      "count": {
+        "added": "{count} lisätty",
+        "moved": "{count} siirretty",
+        "changed": "{count} muutettu",
+        "removed": "{count} poistettu"
+      }
+    },
+    "qr": {
+      "printParcel": "Tulosta QR-kortit lohkolle {parcel}",
+      "printSeats": "Tulosta QR-kortit ({count} paikkaa)",
+      "preparing": "Valmistellaan PDF:ää…",
+      "none": "Tulostettavia paikkoja ei löytynyt."
+    },
+    "align": {
+      "title": "Kohdista ilmakuva",
+      "chip": "Kohdista kuva kartalle",
+      "chipOpen": "Kohdistus auki kartalla",
+      "desktopOnly": "Kuvan kohdistaminen kartalle vaatii suuremman näytön. Avaa Sunbnb tietokoneella jatkaaksesi.",
+      "reading": "Luetaan kuvaa…",
+      "readDone": "Kuva luettu",
+      "readFailed": "Kuvaa ei voitu lukea.",
+      "retry": "Yritä uudelleen",
+      "hint": "Siirrä kuvaa vetämällä ja käännä ja skaalaa sitä sinisestä kulmakahvasta. Kohdista se rantaan.",
+      "opacity": "Läpinäkyvyys",
+      "pin": "Kiinnitä 2 pistettä",
+      "pinBack": "Kumoa piste",
+      "pinCancel": "Peruuta kiinnitys",
+      "pinDegenerate": "Pisteet ovat liian lähellä toisiaan. Aloita alusta kauempana toisistaan olevilla pisteillä.",
+      "pinStep": {
+        "photo1": "Piste 1: napsauta tunnistettavaa kohtaa kuvassa.",
+        "map1": "Piste 1: napsauta nyt samaa kohtaa kartalla.",
+        "photo2": "Piste 2: napsauta toista kohtaa kuvassa kaukana ensimmäisestä.",
+        "map2": "Piste 2: napsauta nyt samaa toista kohtaa kartalla."
+      },
+      "reset": "Palauta",
+      "cancel": "Peruuta",
+      "confirm": "Vahvista kohdistus",
+      "saving": "Tallennetaan…",
+      "saveError": "Kohdistusta ei voitu tallentaa. Yritä uudelleen.",
+      "waitReply": "Odota, että avustaja vastaa loppuun.",
+      "canned": "Olen kohdistanut kuvan — ehdota asettelua."
+    }
   }
 }

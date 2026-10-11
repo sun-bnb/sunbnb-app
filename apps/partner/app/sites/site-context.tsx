@@ -2,6 +2,8 @@
 
 import React, { createContext, useContext, useState } from 'react'
 import { SiteProps } from '@/types/shared'
+import { useAssistantResync } from '@/components/assistant/useAssistantResync'
+import { getSiteScalars } from '@/app/sites/[id]/queries'
 
 interface SiteContextValue {
   site: SiteProps
@@ -31,6 +33,15 @@ export function SiteProvider(props: SiteContextProps & { children: React.ReactNo
     setNonce(Math.random())
     setSite(newSite)
   }
+
+  // The assistant writes site fields / hours / slug / brand through server actions. router.refresh()
+  // re-renders the server tree but this provider's useState ignores new props, so pull the light
+  // site columns and merge them over the context copy (seats/products/layout stay untouched).
+  // Tabs reconcile their own form state against the new `site` identity.
+  useAssistantResync(['site_fields', 'working_hours', 'brand', 'slug', 'place_image:cover', 'place_image:schematic_underlay'], async () => {
+    const fresh = await getSiteScalars(props.site.id!)
+    if (fresh) updateSite(prev => ({ ...prev, ...(fresh as unknown as Partial<SiteProps>) }))
+  })
 
   return (
     <SiteContext.Provider value={{ site, setSite: updateSite, nonce, apiKey: props.apiKey }}>

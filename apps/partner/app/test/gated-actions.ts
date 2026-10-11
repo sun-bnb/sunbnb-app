@@ -148,6 +148,21 @@ import {
 } from '@/app/sites/[id]/inventory/actions'
 
 import {
+  rotateParcel,
+  applyParcelConfig,
+  rotateUnit,
+  setSeatsStatus,
+} from '@/app/sites/[id]/inventory/parcel-ops'
+
+import {
+  applyAssistantAction,
+  rejectAssistantAction,
+  undoAssistantAction,
+} from '@/app/assistant/actions'
+import { uploadAssistantFile } from '@/app/assistant/upload-actions'
+import { saveUploadGeoref } from '@/app/assistant/aerial-actions'
+
+import {
   setRentalPaymentType,
   getRentalItems,
   createRentalItem,
@@ -968,6 +983,111 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'session-owner',
     invoke: (_accessKey?) => reverseParcelOrientation(SITE_ID, 1),
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // session-owner: sites/[id]/inventory/parcel-ops.ts (track 030 S1b —
+  // server compositions shared by the editors and the AI assistant)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  {
+    name: 'parcel-ops.rotateParcel',
+    kind: 'action',
+    gate: 'session-owner',
+    invoke: (_accessKey?) => rotateParcel(SITE_ID, 1, 90),
+  },
+  {
+    name: 'parcel-ops.applyParcelConfig',
+    kind: 'action',
+    gate: 'session-owner',
+    invoke: (_accessKey?) => applyParcelConfig(SITE_ID, 1, { horizontalGap: 1.2 }),
+  },
+  {
+    name: 'parcel-ops.rotateUnit',
+    kind: 'action',
+    gate: 'session-owner',
+    invoke: (_accessKey?) => rotateUnit(SITE_ID, ITEM_ID, 90),
+  },
+  {
+    name: 'parcel-ops.setSeatsStatus',
+    kind: 'action',
+    gate: 'session-owner',
+    invoke: (_accessKey?) => setSeatsStatus(SITE_ID, [ITEM_ID], 'disabled'),
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // session-owner: assistant/actions.ts (track 030 S3 -- apply / reject / undo
+  // of assistant proposals). Gate: session -> account-scoped proposal ->
+  // requireSiteOwner(action.siteId) (sudo ok). The matrix mocks
+  // @repo/data/assistant so getProposalForAccount returns a proposal for the
+  // caller's account on SITE_ID; a non-owner is then rejected by requireSiteOwner
+  // ('forbidden' + 'Not authorized'). Foreign-account / expired / stale / already-
+  // resolved paths are covered in lib/assistant/proposals/lifecycle.test.ts.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  {
+    name: 'assistant.applyAssistantAction',
+    kind: 'action',
+    gate: 'session-owner',
+    invoke: (_accessKey?) => normaliseThrow(() => applyAssistantAction('matrix-action-1')),
+  },
+  {
+    name: 'assistant.rejectAssistantAction',
+    kind: 'action',
+    gate: 'session-owner',
+    invoke: (_accessKey?) => normaliseThrow(() => rejectAssistantAction('matrix-action-1')),
+  },
+  {
+    name: 'assistant.undoAssistantAction',
+    kind: 'action',
+    gate: 'session-owner',
+    invoke: (_accessKey?) => normaliseThrow(() => undoAssistantAction('matrix-action-1')),
+  },
+  // track 030 S5: requireSiteOwner(siteId) first, then kill switch / flag / validation / limits.
+  // The invoke enables the kill switch and sends a minimal valid PDF so the owner path reaches 'ok'.
+  {
+    name: 'assistant.uploadAssistantFile',
+    kind: 'action',
+    gate: 'session-owner',
+    invoke: async (_accessKey?) => {
+      const saved = { en: process.env.PARTNER_ASSISTANT_ENABLED, key: process.env.ANTHROPIC_API_KEY }
+      process.env.PARTNER_ASSISTANT_ENABLED = '1'
+      process.env.ANTHROPIC_API_KEY = 'test-key'
+      try {
+        const fd = new FormData()
+        fd.append('file', new File([new TextEncoder().encode('%PDF-1.4 matrix upload body')], 'plan.pdf', { type: 'application/pdf' }))
+        return await normaliseThrow(() => uploadAssistantFile(SITE_ID, fd))
+      } finally {
+        if (saved.en === undefined) delete process.env.PARTNER_ASSISTANT_ENABLED
+        else process.env.PARTNER_ASSISTANT_ENABLED = saved.en
+        if (saved.key === undefined) delete process.env.ANTHROPIC_API_KEY
+        else process.env.ANTHROPIC_API_KEY = saved.key
+      }
+    },
+  },
+
+  // track 030 S7: resolveAerialUpload -> account-scoped upload (the matrix mock returns one on SITE_ID
+  // owned by the site owner for whoever asks) -> requireSiteOwner(upload.siteId), so a non-owner is
+  // rejected with 'Not authorized'. Foreign / other-site / expired uploads: aerial-actions.test.ts.
+  {
+    name: 'assistant.saveUploadGeoref',
+    kind: 'action',
+    gate: 'session-owner',
+    invoke: async (_accessKey?) => {
+      const saved = { en: process.env.PARTNER_ASSISTANT_ENABLED, key: process.env.ANTHROPIC_API_KEY }
+      process.env.PARTNER_ASSISTANT_ENABLED = '1'
+      process.env.ANTHROPIC_API_KEY = 'test-key'
+      try {
+        return await normaliseThrow(() => saveUploadGeoref('matrix-upload-1', {
+          kind: 'similarity', anchorPx: { x: 1000, y: 750 }, anchor: { lat: 36.72, lng: -4.42 }, metersPerPx: 0.05, rotationDeg: 0,
+        }))
+      } finally {
+        if (saved.en === undefined) delete process.env.PARTNER_ASSISTANT_ENABLED
+        else process.env.PARTNER_ASSISTANT_ENABLED = saved.en
+        if (saved.key === undefined) delete process.env.ANTHROPIC_API_KEY
+        else process.env.ANTHROPIC_API_KEY = saved.key
+      }
+    },
   },
 
   // ══════════════════════════════════════════════════════════════════════════

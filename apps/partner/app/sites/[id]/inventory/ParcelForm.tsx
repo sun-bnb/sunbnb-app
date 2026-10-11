@@ -11,7 +11,8 @@ import CloseIcon from '@mui/icons-material/Close'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import { useSite } from '@/app/sites/site-context'
 import { ChairConfig } from './chair-util'
-import { syncChairsWithLayout, setItemStatusByGroup, reverseParcelNumbering, reverseParcelOrientation } from './actions'
+import { setItemStatusByGroup, reverseParcelNumbering, reverseParcelOrientation } from './actions'
+import { applyParcelConfig } from './parcel-ops'
 import { deleteItemsByGroup } from '../inventory-actions'
 import { getSite } from '../queries'
 import PriceBreakdown from '@/components/PriceBreakdown'
@@ -80,7 +81,19 @@ export default function ParcelFormView({
   }
 
   const handleApplyChanges = async () => {
-    await syncChairsWithLayout(siteId, config, 'rearrange')
+    // Server composition (track 030 S1b): only the editable fields travel; the
+    // group's anchor/ItemGroup are re-read server-side.
+    await applyParcelConfig(siteId, config.group, {
+      rows: config.rows,
+      seatsPerRow: config.seatsPerRow,
+      horizontalGap: config.horizontalGap,
+      verticalGap: config.verticalGap,
+      rotation: config.rotation,
+      pairSeats: config.pairSeats,
+      intraPairGap: config.intraPairGap,
+      category: config.category,
+      price: config.price,
+    })
     const updatedSite = await getSite(siteId)
     setSite(updatedSite!)
   }

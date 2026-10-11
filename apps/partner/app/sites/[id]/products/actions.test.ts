@@ -405,3 +405,37 @@ describe('addProduct', () => {
     expect(createCall.data.category).toBe('food')
   })
 })
+
+// ─── Sudo bypass (track 030 S3: the assistant applies as the owner OR a sudo) ──
+
+describe('sudo bypass on product-scoped actions', () => {
+  function actAs(userId: string, sudo: boolean) {
+    mockAuth.mockResolvedValue({ user: { id: userId } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo } as any)
+    vi.mocked(prisma.product.findUnique).mockResolvedValue({ siteId: SITE_ID, site: { userId: OWNER_ID } } as any)
+    vi.mocked(prisma.product.update).mockResolvedValue({} as any)
+  }
+
+  it('a sudo who does not own the site may update, sold-out toggle and remove a product', async () => {
+    actAs('admin-1', true)
+    expect((await updateProduct('prod-1', { name: 'X' })).status).toBe('ok')
+    expect((await toggleProductSoldOut('prod-1', true)).status).toBe('ok')
+    expect((await deleteProduct('prod-1')).status).toBe('ok')
+    expect(prisma.product.update).toHaveBeenCalledTimes(3)
+  })
+
+  it('a non-owner non-sudo is still rejected by all three', async () => {
+    actAs('intruder', false)
+    expect((await updateProduct('prod-1', { name: 'X' })).errors).toContain('Not authorized')
+    expect((await toggleProductSoldOut('prod-1', true)).errors).toContain('Not authorized')
+    expect((await deleteProduct('prod-1')).errors).toContain('Not authorized')
+    expect(prisma.product.update).not.toHaveBeenCalled()
+  })
+
+  it('the owner never needs the sudo lookup', async () => {
+    actAs(OWNER_ID, false)
+    vi.mocked(prisma.user.findUnique).mockClear()
+    await deleteProduct('prod-1')
+    expect(prisma.user.findUnique).not.toHaveBeenCalled()
+  })
+})

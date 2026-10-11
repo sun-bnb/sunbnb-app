@@ -78,6 +78,10 @@ MOLLIE_CLIENT_ID=
 MOLLIE_CLIENT_SECRET=
 MOLLIE_ORG_TOKEN=
 RESEND_API_KEY=
+export ANTHROPIC_API_KEY=
+export PARTNER_ASSISTANT_ENABLED=
+export ASSISTANT_BLOB_READ_WRITE_TOKEN=   # private Blob store sunbnb-private-blob (assistant uploads)
+export COASTLINE_POSTGRES_URL=   # coastline DB (aerial photo land check; shared with marketing)
 
 [packages/data/.env.local]
 POSTGRES_URL_TEST=

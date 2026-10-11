@@ -2,7 +2,7 @@
 
 import { saveContentFields, uploadContentImage } from '../content-actions'
 
-import React, { useRef, useState, useCallback } from 'react'
+import React, { useRef, useState, useCallback, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import Button from '@mui/material/Button'
 import TextField from '@mui/material/TextField'
@@ -18,6 +18,7 @@ import CloudDoneIcon from '@mui/icons-material/CloudDone'
 import SyncIcon from '@mui/icons-material/Sync'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import { useSite } from '@/app/sites/site-context'
+import { reconcileFields, cancelPendingSave, listKey, fromListKey } from '@/lib/resync'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -46,6 +47,10 @@ export default function Content() {
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
   const savedTimerRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Server values as last known (props, a completed save, or a resync) -- see general/view.tsx.
+  const knownServices = (xs: string[] | null | undefined) => (xs || []).filter(s => ALL_SERVICES.map(sv => sv.value).includes(s))
+  const serverRef = useRef({ description: site.description || '', services: listKey(knownServices(site.services)) })
+
   const doSave = useCallback(async (overrides?: {
     description?: string
     services?: string[]
@@ -58,6 +63,10 @@ export default function Content() {
         services: overrides?.services ?? services,
       })
       if (result.status === 'ok') {
+        serverRef.current = {
+          description: overrides?.description ?? description,
+          services: listKey(overrides?.services ?? services),
+        }
         setSaveStatus('saved')
         if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
         savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 3000)
@@ -68,6 +77,25 @@ export default function Content() {
       setSaveStatus('error')
     }
   }, [site.id, description, services])
+
+  const doSaveRef = useRef(doSave)
+  doSaveRef.current = doSave
+
+  // Assistant Apply/Undo changes description/services server-side; the SiteProvider refetches and
+  // `site` changes identity. Reset only untouched fields whose server value moved, and drop the
+  // pending debounced save (it holds the stale closure), re-arming it for any kept user edits.
+  useEffect(() => {
+    const next = { description: site.description || '', services: listKey(knownServices(site.services)) }
+    const r = reconcileFields({ description, services: listKey(services) }, serverRef.current, next)
+    serverRef.current = next
+    if (r.reset.length === 0) return
+    if (cancelPendingSave(debounceRef)) {
+      debounceRef.current = setTimeout(() => { void doSaveRef.current() }, 2000)
+    }
+    if (r.reset.includes('description')) setDescription(r.values.description)
+    if (r.reset.includes('services')) setServices(fromListKey(r.values.services))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [site])
 
   const scheduleSave = useCallback((overrides?: Parameters<typeof doSave>[0]) => {
     if (debounceRef.current) clearTimeout(debounceRef.current)

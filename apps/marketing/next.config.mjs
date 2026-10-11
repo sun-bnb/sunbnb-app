@@ -4,7 +4,7 @@ const withNextIntl = createNextIntlPlugin('./i18n/request.ts')
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ['@repo/data', '@repo/schematic'],
+  transpilePackages: ['@repo/agent', '@repo/data', '@repo/schematic'],
   // Dev is served over mkcert HTTPS on this host (server.cjs); Next 16 blocks
   // cross-origin /_next/* dev requests unless the origin is listed.
   allowedDevOrigins: ['local.sunbnb.app'],

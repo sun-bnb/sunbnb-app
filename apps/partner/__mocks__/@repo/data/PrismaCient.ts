@@ -18,6 +18,7 @@ const prisma = {
     update: vi.fn(),
     updateMany: vi.fn(),
     deleteMany: vi.fn(),
+    count: vi.fn(),
   },
   order: {
     findUnique: vi.fn(),
@@ -39,12 +40,15 @@ const prisma = {
     delete: vi.fn(),
     deleteMany: vi.fn(),
     count: vi.fn(),
+    groupBy: vi.fn(),
+    aggregate: vi.fn(),
   },
   product: {
     findUnique: vi.fn(),
     findMany: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    count: vi.fn(),
   },
   rentalBooking: {
     findUnique: vi.fn(),
@@ -61,6 +65,7 @@ const prisma = {
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
+    count: vi.fn(),
   },
   partnerAccount: {
     findUnique: vi.fn(),
@@ -69,6 +74,9 @@ const prisma = {
   },
   siteBrand: {
     upsert: vi.fn(),
+    findUnique: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
   },
   subscription: {
     findUnique: vi.fn(),
@@ -93,6 +101,7 @@ const prisma = {
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
+    count: vi.fn(),
   },
   itemGroup: {
     findUnique: vi.fn(),
@@ -101,6 +110,7 @@ const prisma = {
     create: vi.fn(),
     update: vi.fn(),
     updateMany: vi.fn(),
+    deleteMany: vi.fn(),
   },
   // HW devices (track 019 P2 / 021 P5) — the fleet list and assignment actions.
   device: {
@@ -142,6 +152,7 @@ const prisma = {
   },
   sunbedGroup: {
     create: vi.fn(),
+    createMany: vi.fn(),
     // createManyAndReturn preserves input order (assignChairPairings maps
     // minted groups back to pairs by index) — default mirrors that contract.
     createManyAndReturn: vi.fn((args: { data: unknown[] }) =>
@@ -187,6 +198,7 @@ const prisma = {
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
+    count: vi.fn(),
   },
   tableReservation: {
     findUnique: vi.fn(),
@@ -272,6 +284,37 @@ const prisma = {
   rateLimitCounter: {
     deleteMany: vi.fn(),
   },
+  // Track 030: partner AI assistant persistence (@repo/data/assistant).
+  assistantConversation: {
+    create: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    findUnique: vi.fn(),
+    findUniqueOrThrow: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+    deleteMany: vi.fn(),
+  },
+  assistantAction: {
+    create: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    findUnique: vi.fn(),
+    findUniqueOrThrow: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+    deleteMany: vi.fn(),
+  },
+  assistantUpload: {
+    create: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    findUnique: vi.fn(),
+    findUniqueOrThrow: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+    deleteMany: vi.fn(),
+  },
   impersonationLog: {
     create: vi.fn(),
     findUnique: vi.fn(),
@@ -347,6 +390,7 @@ const prisma = {
   },
   orderItem: {
     findMany: vi.fn(),
+    count: vi.fn(),
   },
   invoice: {
     findFirst: vi.fn(),

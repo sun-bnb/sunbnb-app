@@ -47,6 +47,17 @@ export interface FlagDefinition {
  * `new-checkout-flow` → `FF_NEW_CHECKOUT_FLOW`.
  */
 export const FLAG_REGISTRY = {
+  assistant: {
+    name: 'assistant',
+    description:
+      'Partner AI assistant (track 030): chat drawer, proposals, document/photo ingestion. Per-customer: enable for pilot operators. Sudo users always see it (resolveFlag sudo bypass); the route passes isSudo + accountId to getFlagStates.',
+    defaults: {
+      development: false,
+      preview: false,
+      test: false,
+      production: false,
+    },
+  },
   devices: {
     name: 'devices',
     description:

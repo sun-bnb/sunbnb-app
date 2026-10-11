@@ -11,6 +11,10 @@ import { getParcelColor } from './chair-util'
 import MapHandler from '@/components/maps/map-handler'
 import { CustomMapControl } from '@/components/maps/map-control'
 import { useSite } from '@/app/sites/site-context'
+import GhostLayer from './GhostLayer'
+import PhotoAlignLayer from './PhotoAlignLayer'
+import PhotoAlignToolbar from './PhotoAlignToolbar'
+import type { GhostModel } from '@/components/assistant/geometry-preview'
 
 interface InventoryMapProps {
   siteLat: string
@@ -34,6 +38,9 @@ interface InventoryMapProps {
   /** Parcel tier: a summary-derived box was dragged (no seats loaded). */
   onMovedGroup: (group: number, targetLat: number, targetLng: number) => void
   selectedPlace: google.maps.places.PlaceResult | null
+  /** Assistant proposal preview (track 030 S4b): non-interactive ghosts + fit trigger. */
+  ghostModel?: GhostModel | null
+  ghostFocusKey?: string
 }
 
 function getScaledSize(zoom: number): number {
@@ -643,8 +650,12 @@ export default function InventoryMap({
   onEnsureGroups,
   onMovedGroup,
   selectedPlace,
+  ghostModel = null,
+  ghostFocusKey = '',
 }: InventoryMapProps) {
 
+  const { site: alignSite } = useSite()
+  const alignSiteId = alignSite.id ?? ''
   const [zoom, setZoom] = useState(18)
   const [viewBounds, setViewBounds] = useState<ViewportBounds | null>(null)
   const [searchFocused, setSearchFocused] = useState(false)
@@ -683,6 +694,7 @@ export default function InventoryMap({
           </div>
         </div>
       )}
+      <PhotoAlignToolbar siteId={alignSiteId} />
       <SafeAPIProvider apiKey={apiKey}>
         <SafeMap
           mapId="7a0196a7ba317ea5"
@@ -723,6 +735,8 @@ export default function InventoryMap({
             zoom={zoom}
             viewBounds={viewBounds}
           />
+          <GhostLayer model={ghostModel} focusKey={ghostFocusKey} />
+          <PhotoAlignLayer siteId={alignSiteId} />
         </SafeMap>
         <CustomMapControl
           controlPosition={ControlPosition.TOP_LEFT}

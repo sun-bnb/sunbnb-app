@@ -89,6 +89,60 @@ Requires local Docker Postgres with `sunbnb_test` DB. No `@repo/data` mocks — 
 | `app/sites/[id]/item-counts.integration.test.ts` | track 020 C2 payload cut: `getSiteItemCounts` ORACLE-equivalence — the verbatim pre-C2 array computations (brand total/available-today, readiness active>0) run as referee over mixed statuses, pool sentinels, a now-overlapping reservation, an out-of-window one, and cross-site scoping | 4 |
 | `app/sites/[id]/inventory/actions.integration.test.ts` | track 020 P4 batched writes against real Postgres: moveParcel exact set-based arithmetic (seats + anchor, pool untouched, NaN rejected), moveItems subset scope, createInventoryItem concurrent number minting (advisory lock), rearrange re-pairing across crossed legacy SunbedGroups (historical P2025 double-delete); deleteInventoryItems bulk parcel delete (group dissolution, survivor pairId sweep, foreign-site scope); pure-rotation rearrange pair-stability (200-seat paired parcel, SunbedGroups/pairIds byte-identical, ~90ms) — 3 of the original 6 verified to FAIL on the pre-P4 code | 10 |
 
+### AI assistant (track 030)
+
+Unit config now also includes `components/**/*.test.ts` (pure client modules of the drawer). Files
+(test counts at 2026-10-11):
+
+| File | What it tests | Tests |
+|---|---|---|
+| `app/api/assistant/route.test.ts` | gate chain (kill switch 503 → session 401 → flag 403 → `requireSiteOwner` → limits), conversation scoping, SSE contract, transcript GET | 33 |
+| `app/api/assistant/route.attachments.test.ts` | attachment turns: per-turn caps, PDF/image/DOCX blocks, extraction budget | 6 |
+| `app/api/assistant/uploads/[id]/route.test.ts`, `.../image/route.test.ts` | owner-only upload streaming; foreign/expired/purged = same 404 | 6 + 3 |
+| `app/api/assistant/aerial/[uploadId]/extract/route.test.ts` | aerial extract auth matrix (kill switch, session, foreign upload, flag, mime, map-mode, budget 0) | 11 |
+| `app/api/cron/purge-assistant-uploads/route.test.ts` | `CRON_SECRET` fail-closed; failed blob delete left unstamped for retry | 2 |
+| `app/assistant/upload-actions.test.ts` / `aerial-actions.test.ts` | `uploadAssistantFile` (sniff, size, daily cap, kill switch) / `saveUploadGeoref` (site owner or sudo, georef validation) | 10 / 5 |
+| `app/sites/[id]/inventory/parcel-ops.test.ts` | `rotateParcel` / `applyParcelConfig` / `rotateUnit` / `setSeatsStatus` compositions (Prisma mocked) | 25 |
+| `lib/assistant/tools/tools.test.ts` | read tools: site binding, per-call ownership, handles not cuids | 32 |
+| `lib/assistant/proposals/{propose,lifecycle,inventory,layout,place-image,types}.test.ts` | propose tools build before→after; apply/reject/undo (re-auth, expiry, staleness, CAS); `inventory_batch` over an in-memory seat table; layout kinds; `place_image` copy-on-apply + undo | 28/36/45/15/24/7 |
+| `lib/assistant/proposals/validator-parity.test.ts` | propose-time bounds == the real actions' apply-time bounds | 1 |
+| `lib/assistant/tools/extract-plan.test.ts` + `lib/assistant/plan-extraction.test.ts` | plan → schematic: refusals spend nothing, budget, schema-validated output / pure pixel→metre conversion | 25 + 40 |
+| `lib/assistant/tools/propose-aerial.test.ts`, `lib/assistant/aerial/{extract,plan,photo-meta}.test.ts` | align/propose tools (map sites only); ≤1 billable call per upload (cached / running = no counters); plan numbering, confidence drop, overlap/land warnings, 1200-seat split; EXIF/DJI seed + georef validation | 10, 6/9/7 |
+| `lib/assistant/{assistant,attachments,documents,uploads}.test.ts` | config/limits/kill switch, attachment assembly, DOCX text, upload sniff + Blob seam | 19/11/4/6 |
+| `lib/resync.test.ts`, `lib/account-fields.test.ts` | resync merge rule (`reconcileFields`, `concerns`) / account field whitelist + patch | 13 / 14 |
+| `components/assistant/*.test.ts` | SSE parser, stream reducer, proposal model, preview/photo-align stores, geometry/layout overlays, photo-align maths, attachment chips, QR request, aerial API client, markdown-lite | 145 |
+
+Integration (`sunbnb_test`): `app/assistant/lifecycle.integration.test.ts` (16 — propose → apply → undo
+through the REAL actions; caught the jsonb key-order staleness bug), `inventory.integration.test.ts`
+(12), `layout.integration.test.ts` (5), `app/sites/[id]/inventory/parcel-ops.integration.test.ts`
+(13 — editor/assistant parity on real Postgres).
+
+`packages/agent` has its own Vitest suite (`cd packages/agent && npm run test`: claude-model,
+loop, limits, schema, `vision/{aerial-schema,extract}`, `geo/{georef,grid-fit}` incl. the
+ChairConfig → beds → px → descriptor → fit round trip).
+
+**How it is faked**
+
+- **Model**: never a real API call. The route test mocks `@repo/agent/claude-model` to return a
+  `{ name: 'fake', chat }` client driven per test; extraction code takes a deps object
+  (`ExtractDeps` for `createExtractPlanTool`, `AerialExtractDeps` for `runAerialExtraction`) whose
+  `extract` / `claim` / `allow*` / `read` / `prepare` are `vi.fn()`s returning canned `ChatResult`s
+  or descriptors — so "refusal spends nothing" is asserted on call counts.
+- **Blob seam**: `@vercel/blob` is `vi.mock`ed (`put`/`del`/`get`) in every upload, place-image,
+  extraction and purge test; `lib/assistant/uploads.ts` is the only module that picks the store
+  (`ASSISTANT_BLOB_READ_WRITE_TOKEN` → private, else default-store fallback).
+- **Persistence**: `@repo/data/assistant` is `vi.mock`ed per file in unit tests; the shared Prisma
+  mock (`__mocks__/@repo/data/PrismaCient.ts`) gained `assistantConversation` / `assistantAction` /
+  `assistantUpload`. Proposal fixtures live in `lib/assistant/proposals/test-support.ts` (not a test file).
+- **Limits**: `@repo/data/rate-limit-shared` mocked; `allowAssistantTurn` / `allow*` take an injectable
+  `CounterStore`.
+
+**Meta-guard registrations**: `app/test/gated-actions.ts` registers `applyAssistantAction`,
+`rejectAssistantAction`, `undoAssistantAction`, `uploadAssistantFile`, `saveUploadGeoref` (driven by
+`auth-matrix.test.ts`); `coverage-contract.test.ts` carries reasoned exemptions for the route handlers
+(`/api/assistant` POST+GET, `uploads/[id]`, `uploads/[id]/image`, `aerial/[uploadId]/extract`, the purge
+cron) and `updateAccountFields` (session-only) — each pointing at the file that holds its matrix.
+
 ### Mocking patterns
 
 - Use `vi.mock()` with `vi.fn()` in factory (never reference external variables — hoisting), then `vi.mocked(importedFn)` after import for typed references

@@ -8,7 +8,17 @@ import prisma from '@repo/data/PrismaCient'
 import { Prisma } from '@prisma/client'
 import { TERMINAL_STATUSES } from '@repo/data/reservation-status'
 
-import { generateChairs, generateChairsSchematic, ChairConfig } from './chair-util'
+import type { ChairConfig, generateChairs } from './chair-util'
+import {
+  buildItemGroupData,
+  flippedRotation,
+  generateLayout,
+  matchSeats,
+  reversedNumbers,
+  rotatePositions,
+  shiftToExistingCentroid,
+  spacePositions,
+} from './geometry'
 import { recomputeSeatLabels } from '@repo/data/seat-label-db'
 import {
   ensurePlacedSeatsHaveUnits,
@@ -46,56 +56,11 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
   const layoutMode = await getSiteLayoutMode(siteId)
   const isSchematic = layoutMode === 'schematic'
 
-  const generated = isSchematic
-    ? generateChairsSchematic({
-        ...config,
-        baseX: config.baseLng,
-        baseY: config.baseLat,
-      }).map((c) => ({
-        tempId: c.tempId,
-        pairTempId: c.pairTempId,
-        locationLat: '0',
-        locationLng: '0',
-        schematicX: c.schematicX,
-        schematicY: c.schematicY,
-        rotation: c.rotation,
-        group: c.group,
-        number: c.number,
-        isPrimary: c.isPrimary,
-      }))
-    : generateChairs(config).map((c) => ({ ...c, schematicX: undefined, schematicY: undefined }))
+  const generated = generateLayout(config, layoutMode)
 
   const group = config.group
 
-  const itemGroupData = isSchematic
-    ? {
-        number: config.group,
-        price: config.price,
-        category: config.category,
-        rows: config.rows,
-        seatsPerRow: config.seatsPerRow,
-        horizontalGap: config.horizontalGap,
-        verticalGap: config.verticalGap,
-        pairGap: config.intraPairGap,
-        rotation: config.rotation,
-        locationLat: '0',
-        locationLng: '0',
-        schematicX: config.baseLng,
-        schematicY: config.baseLat,
-      }
-    : {
-        number: config.group,
-        price: config.price,
-        category: config.category,
-        rows: config.rows,
-        seatsPerRow: config.seatsPerRow,
-        horizontalGap: config.horizontalGap,
-        verticalGap: config.verticalGap,
-        pairGap: config.intraPairGap,
-        rotation: config.rotation,
-        locationLat: String(config.baseLat),
-        locationLng: String(config.baseLng)
-      }
+  const itemGroupData = buildItemGroupData(config, layoutMode)
 
   if (mode === 'create') {
 
@@ -153,67 +118,15 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
       }
     })
 
-    // Preserve the visual centroid across the rearrange so rotation pivots
-    // around the parcel center rather than the first seat.
-    //
-    // SANITY GUARD: in every legitimate flow this shift is tiny — the grid is
-    // regenerated at the parcel's own anchor, so old and new centroids differ
-    // by at most a shape tweak (metres). A large shift means the centroid is
-    // poisoned (sentinel coords, corrupt anchor) — applying AND PERSISTING it
-    // teleports the parcel and compounds on every retry, which is exactly how
-    // an operator's "set rotation back to 0" makes things worse. Skip the
-    // shift instead: the grid regenerates at the stored anchor, which is the
-    // recoverable behaviour.
-    // Geo shifts are in degrees (0.01° ≈ 1.1 km); schematic shifts are in
-    // world units (a legit shape tweak moves the centroid well under 10).
-    const MAX_CENTROID_SHIFT = isSchematic ? 10 : 0.01
-    let shiftedGenerated = generated
-    let shiftedGroupData = itemGroupData
-    if (existing.length > 0 && generated.length > 0) {
-      if (isSchematic) {
-        const oldCx = existing.reduce((s, i) => s + (i.schematicX ?? 0), 0) / existing.length
-        const oldCy = existing.reduce((s, i) => s + (i.schematicY ?? 0), 0) / existing.length
-        const newCx = generated.reduce((s, g) => s + (g.schematicX ?? 0), 0) / generated.length
-        const newCy = generated.reduce((s, g) => s + (g.schematicY ?? 0), 0) / generated.length
-        const dx = oldCx - newCx
-        const dy = oldCy - newCy
-        if (Number.isFinite(dx) && Number.isFinite(dy) &&
-            Math.abs(dx) <= MAX_CENTROID_SHIFT && Math.abs(dy) <= MAX_CENTROID_SHIFT) {
-          shiftedGenerated = generated.map((g) => ({
-            ...g,
-            schematicX: (g.schematicX ?? 0) + dx,
-            schematicY: (g.schematicY ?? 0) + dy,
-          })) as typeof generated
-          shiftedGroupData = {
-            ...itemGroupData,
-            schematicX: (itemGroupData.schematicX ?? 0) + dx,
-            schematicY: (itemGroupData.schematicY ?? 0) + dy,
-          }
-        }
-      } else {
-        const oldCLat = existing.reduce((s, i) => s + parseFloat(i.locationLat), 0) / existing.length
-        const oldCLng = existing.reduce((s, i) => s + parseFloat(i.locationLng), 0) / existing.length
-        const newCLat = generated.reduce((s, g) => s + parseFloat(g.locationLat), 0) / generated.length
-        const newCLng = generated.reduce((s, g) => s + parseFloat(g.locationLng), 0) / generated.length
-        const dLat = oldCLat - newCLat
-        const dLng = oldCLng - newCLng
-        if (Number.isFinite(dLat) && Number.isFinite(dLng) &&
-            Math.abs(dLat) <= MAX_CENTROID_SHIFT && Math.abs(dLng) <= MAX_CENTROID_SHIFT) {
-          shiftedGenerated = generated.map((g) => ({
-            ...g,
-            locationLat: (parseFloat(g.locationLat) + dLat).toString(),
-            locationLng: (parseFloat(g.locationLng) + dLng).toString(),
-          })) as typeof generated
-          shiftedGroupData = {
-            ...itemGroupData,
-            locationLat: (parseFloat(itemGroupData.locationLat) + dLat).toString(),
-            locationLng: (parseFloat(itemGroupData.locationLng) + dLng).toString(),
-          }
-        }
-      }
-    }
-
-    const numberToId = new Map(existing.map((e) => [e.number, e.id]))
+    // Preserve the visual centroid across the rearrange so rotation pivots around the parcel
+    // centre rather than the first seat (with a sanity guard against a poisoned centroid — see
+    // shiftToExistingCentroid in geometry.ts, shared with the assistant's preview).
+    const { generated: shiftedGenerated, groupData: shiftedGroupData } = shiftToExistingCentroid(
+      existing,
+      generated,
+      itemGroupData,
+      layoutMode,
+    )
 
     let itemGroup = null
     if (existing.length > 0 && !(existing[0]?.itemGroupId)) {
@@ -227,28 +140,8 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
       })
     }
 
-    // Track which existing items get matched to a generated position
-    const matchedIds = new Set<string>()
-
-    // Pair each existing seat with its generated position: first by seat
-    // number, then remaining unmatched seats take leftover generated
-    // positions in order (so every seat in the group gets repositioned).
-    const assignments: Array<{ id: string; gen: (typeof shiftedGenerated)[number] }> = []
-    for (const gen of shiftedGenerated) {
-      const id = numberToId.get(gen.number)
-      if (id) {
-        matchedIds.add(id)
-        assignments.push({ id, gen })
-      }
-    }
-    const unmatchedExisting = existing.filter((e) => !matchedIds.has(e.id))
-    const unmatchedGenerated = shiftedGenerated.filter((g) => !numberToId.has(g.number))
-    unmatchedExisting.forEach((existingItem, idx) => {
-      const gen = unmatchedGenerated[idx]
-      if (!gen) return
-      matchedIds.add(existingItem.id)
-      assignments.push({ id: existingItem.id, gen })
-    })
+    // Pair each existing seat with its generated position (geometry.ts matchSeats).
+    const { assignments, surplus, vacant } = matchSeats(existing, shiftedGenerated)
 
     // Track 020: this was one UPDATE per seat via Promise.all — a rotation of
     // a 60-seat parcel was 60 statements (founder-reported multi-second
@@ -326,8 +219,8 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
     // devices are assigned, every location they answer for). Overlapping spots
     // keep their seat ids, unit ids and persisted ordinals; only the difference
     // is created or removed.
-    const surplusSeats = unmatchedExisting.slice(unmatchedGenerated.length)
-    const vacantPositions = unmatchedGenerated.slice(unmatchedExisting.length)
+    const surplusSeats = surplus
+    const vacantPositions = vacant
 
     if (surplusSeats.length > 0) {
       const surplusIds = surplusSeats.map((seat) => seat.id)
@@ -836,49 +729,27 @@ export async function rotateSelection(
 
   if (items.length === 0) return { status: 'ok' }
 
-  // Compute centroid of the selection
-  const centerLat = isSchematic
-    ? items.reduce((s, i) => s + (i.schematicY ?? 0), 0) / items.length
-    : items.reduce((s, i) => s + parseFloat(i.locationLat), 0) / items.length
-  const centerLng = isSchematic
-    ? items.reduce((s, i) => s + (i.schematicX ?? 0), 0) / items.length
-    : items.reduce((s, i) => s + parseFloat(i.locationLng), 0) / items.length
+  // Orbit the selection around its centroid (pure — geometry.ts rotatePositions, shared with the
+  // assistant's preview) and turn each chair by the same angle.
+  const rotated = rotatePositions(
+    items.map((i) => ({
+      id: i.id,
+      y: isSchematic ? (i.schematicY ?? 0) : parseFloat(i.locationLat),
+      x: isSchematic ? (i.schematicX ?? 0) : parseFloat(i.locationLng),
+      rotation: i.rotation,
+    })),
+    deltaDegrees,
+    isSchematic ? 'schematic' : 'geo',
+  )
 
-  // Schematic uses SVG Y-down, while the rotation matrix below is written for
-  // Y-up (geographic). Invert the angle in schematic mode so the orbit matches
-  // each seat's own CW tilt (same compensation generateChairsSchematic applies).
-  const rad = (isSchematic ? -deltaDegrees : deltaDegrees) * (Math.PI / 180)
-  const metersPerLat = isSchematic ? 1 : 111320
-  const metersPerLng = isSchematic ? 1 : 111320 * Math.cos(centerLat * Math.PI / 180)
-
-  // Build all updates: orbit positions around centroid + update each chair's facing angle
-  const updates = items.map((item) => {
-    const itemY = isSchematic ? (item.schematicY ?? 0) : parseFloat(item.locationLat)
-    const itemX = isSchematic ? (item.schematicX ?? 0) : parseFloat(item.locationLng)
-    let newLatVal = itemY
-    let newLngVal = itemX
-
-    if (items.length > 1) {
-      const dLat = itemY - centerLat
-      const dLng = itemX - centerLng
-      const dy = dLat * metersPerLat
-      const dx = dLng * metersPerLng
-
-      const newLatM = dy * Math.cos(rad) - dx * Math.sin(rad)
-      const newLngM = dy * Math.sin(rad) + dx * Math.cos(rad)
-      newLatVal = centerLat + newLatM / metersPerLat
-      newLngVal = centerLng + newLngM / metersPerLng
-    }
-
-    const newRotation = Math.round((item.rotation ?? 0) + deltaDegrees)
-
-    return prisma.inventoryItem.update({
-      where: { id: item.id },
+  const updates = rotated.map((r) =>
+    prisma.inventoryItem.update({
+      where: { id: r.id },
       data: isSchematic
-        ? { schematicY: newLatVal, schematicX: newLngVal, rotation: newRotation }
-        : { locationLat: String(newLatVal), locationLng: String(newLngVal), rotation: newRotation },
-    })
-  })
+        ? { schematicY: r.y, schematicX: r.x, rotation: r.rotation }
+        : { locationLat: String(r.y), locationLng: String(r.x), rotation: r.rotation },
+    }),
+  )
 
   // Execute all updates in a single transaction
   await prisma.$transaction(updates)
@@ -971,58 +842,29 @@ export async function adjustItemSpacing(
 
   if (items.length < 2) return { status: 'ok' }
 
-  // Compute centroid
-  const centerLat = isSchematic
-    ? items.reduce((s, i) => s + (i.schematicY ?? 0), 0) / items.length
-    : items.reduce((s, i) => s + parseFloat(i.locationLat), 0) / items.length
-  const centerLng = isSchematic
-    ? items.reduce((s, i) => s + (i.schematicX ?? 0), 0) / items.length
-    : items.reduce((s, i) => s + parseFloat(i.locationLng), 0) / items.length
-
-  // Average rotation to determine the group's axes
-  const avgRotation = items.reduce((s, i) => s + (i.rotation || 0), 0) / items.length
-  const rad = avgRotation * (Math.PI / 180)
-  const metersPerLat = isSchematic ? 1 : 111320
-  const metersPerLng = isSchematic ? 1 : 111320 * Math.cos(centerLat * Math.PI / 180)
+  // Scale the spread along one axis of the selection's rotation (pure — geometry.ts spacePositions,
+  // shared with the assistant's preview).
+  const spaced = spacePositions(
+    items.map((i) => ({
+      id: i.id,
+      y: isSchematic ? (i.schematicY ?? 0) : parseFloat(i.locationLat),
+      x: isSchematic ? (i.schematicX ?? 0) : parseFloat(i.locationLng),
+      rotation: i.rotation,
+    })),
+    axis,
+    factor,
+    isSchematic ? 'schematic' : 'geo',
+  )
 
   await Promise.all(
-    items.map((item) => {
-      const itemY = isSchematic ? (item.schematicY ?? 0) : parseFloat(item.locationLat)
-      const itemX = isSchematic ? (item.schematicX ?? 0) : parseFloat(item.locationLng)
-      const dLat = itemY - centerLat
-      const dLng = itemX - centerLng
-
-      // Convert to meters (dy=north, dx=east)
-      const dy = dLat * metersPerLat
-      const dx = dLng * metersPerLng
-
-      // Project onto rotated axes matching generateChairs convention:
-      // In generateChairs: lat = dy*cos - dx*sin, lng = dy*sin + dx*cos
-      // So "vertical" (row) component = dy*cos - dx*sin (lat-dominant)
-      // And "horizontal" (col) component = dy*sin + dx*cos (lng-dominant)
-      // Inverse: given (latM, lngM) from offsets, recover (v, h):
-      //   v = latM*cos + lngM*sin,  h = -latM*sin + lngM*cos
-      // But we're working with (dy, dx) directly in meters:
-      const hComponent = -dy * Math.sin(rad) + dx * Math.cos(rad)
-      const vComponent = dy * Math.cos(rad) + dx * Math.sin(rad)
-
-      const newH = axis === 'horizontal' ? hComponent * factor : hComponent
-      const newV = axis === 'vertical' ? vComponent * factor : vComponent
-
-      // Convert back: lat = v*cos - h*sin, lng = v*sin + h*cos
-      const newLatM = newV * Math.cos(rad) - newH * Math.sin(rad)
-      const newLngM = newV * Math.sin(rad) + newH * Math.cos(rad)
-
-      const newLat = centerLat + newLatM / metersPerLat
-      const newLng = centerLng + newLngM / metersPerLng
-
-      return prisma.inventoryItem.update({
-        where: { id: item.id },
+    spaced.map((r) =>
+      prisma.inventoryItem.update({
+        where: { id: r.id },
         data: isSchematic
-          ? { schematicY: newLat, schematicX: newLng }
-          : { locationLat: String(newLat), locationLng: String(newLng) },
-      })
-    })
+          ? { schematicY: r.y, schematicX: r.x }
+          : { locationLat: String(r.y), locationLng: String(r.x) },
+      }),
+    ),
   )
 
   // Persist gap changes to ItemGroup if all items belong to the same group
@@ -1139,32 +981,8 @@ export async function reverseParcelNumbering(siteId: string, group: number) {
 
   if (items.length === 0) return { status: 'ok' }
 
-  // Group items by row prefix (all digits except the last 2 = seat suffix).
-  const rowMap = new Map<string, Array<{ id: string; number: number }>>()
-  for (const item of items) {
-    const numStr = String(item.number)
-    const rowPrefix = numStr.slice(0, -2) // everything except last 2 digits
-    if (!rowMap.has(rowPrefix)) rowMap.set(rowPrefix, [])
-    rowMap.get(rowPrefix)!.push(item)
-  }
-
-  // Build all updates: for each row, sort by seat suffix ascending, then
-  // remap s_i → s_(n+1-i) while keeping coordinates/rotation intact.
-  const updates: Array<{ id: string; newNumber: number }> = []
-  for (const [rowPrefix, rowItems] of rowMap) {
-    // Sort by current seat suffix so indices are well-defined
-    rowItems.sort((a, b) => a.number - b.number)
-
-    const n = rowItems.length
-    for (let i = 0; i < n; i++) {
-      const reversedIndex = n - 1 - i
-      const item = rowItems[i]!
-      const reversedItem = rowItems[reversedIndex]!
-      const originalSeatSuffix = String(reversedItem.number).slice(-2)
-      const newNumber = Number(`${rowPrefix}${originalSeatSuffix}`)
-      updates.push({ id: item.id, newNumber })
-    }
-  }
+  // Remap each row's seat suffixes s_i -> s_(n+1-i) (pure — geometry.ts reversedNumbers).
+  const updates = reversedNumbers(items)
 
   // Execute atomically.  No uniqueness constraint on (siteId, number) means
   // we can do a single-pass update without a temp-offset stage.
@@ -1204,7 +1022,7 @@ export async function reverseParcelOrientation(siteId: string, group: number) {
     items.map((item) =>
       prisma.inventoryItem.update({
         where: { id: item.id },
-        data: { rotation: ((((item.rotation ?? 0) + 180) % 360) + 360) % 360 },
+        data: { rotation: flippedRotation(item.rotation) },
       })
     )
   )

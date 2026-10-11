@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { useAssistantResync } from '@/components/assistant/useAssistantResync'
 import { useTranslations } from 'next-intl'
 import Button from '@mui/material/Button'
 import TextField from '@mui/material/TextField'
@@ -208,6 +209,9 @@ export default function RentalsView() {
   useEffect(() => {
     fetchItems()
   }, [fetchItems])
+
+  // Assistant Apply/Undo edits rental items server-side; re-pull the list.
+  useAssistantResync(['rental_items', 'place_image:rental_item'], fetchItems)
 
   const handleCreate = async (data: any) => {
     setSaving(true)

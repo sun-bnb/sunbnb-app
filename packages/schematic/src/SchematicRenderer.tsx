@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { BedGlyphSvg } from './BedGlyph'
 
 import type {
@@ -36,6 +36,12 @@ export interface SchematicRendererProps {
     ids: string[],
     mods: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean },
   ) => void
+  /**
+   * Optional layer drawn LAST (above elements, items and selection chrome) in world coordinates
+   * (metres, same space as `elements`/`items`). Never receives pointer events. `worldPerPx` converts
+   * screen pixels to metres for stroke widths. Unused = no change to the rendered output.
+   */
+  overlay?: (ctx: { worldPerPx: number }) => ReactNode
 }
 
 export const SCHEMATIC_DRAG_MIME = 'application/x-schematic-element'
@@ -1147,6 +1153,7 @@ export function SchematicRenderer(props: SchematicRendererProps) {
           />
         )
       })() : null}
+      {props.overlay ? <g pointerEvents="none">{props.overlay({ worldPerPx })}</g> : null}
     </svg>
   )
 }

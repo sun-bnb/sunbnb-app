@@ -10,16 +10,14 @@
  * default layout and snaps to the shore only if this answers.
  *
  * Only coordinates leave us (no lead data). The coastline comes from our own PostGIS cache
- * (@repo/data/coastline-db), filled one ~10 km tile at a time from Overpass — so at ad traffic
- * Overpass sees a handful of tile requests, not one per visitor.
+ * (@repo/data/coastline-lookup `shoreAround`), filled one ~10 km tile at a time from Overpass — so
+ * at ad traffic Overpass sees a handful of tile requests, not one per visitor.
  */
 import type { NextRequest } from 'next/server'
 import { allow } from '@/lib/limits.ts'
-import { nearestShoreFrame, trimShore, verifyShoreFrame, type GeoPoint } from '@/lib/coastline.ts'
+import { nearestShoreFrame, trimShore, verifyShoreFrame } from '@/lib/coastline.ts'
 import { clientIp } from '@/lib/places.ts'
-import { fetchCoastTile } from '@/lib/overpass.ts'
-import { coastlineNear, inlandShoreNear, storeCoastTile, uncoveredCoastTiles, waterNear } from '@repo/data/coastline-db'
-import { coastTilesAround } from '@repo/data/coastline-tiles'
+import { shoreAround } from '@repo/data/coastline-lookup'
 
 /** Google's beach point can sit in the dunes behind the sand; beyond this there is no beach to snap to. */
 const SEARCH_RADIUS_M = 400
@@ -43,30 +41,7 @@ export async function GET(request: NextRequest) {
   if (lat === null || lng === null) return Response.json({ error: 'invalid_coordinates' }, { status: 400 })
 
   try {
-    // 1. Bulk-imported regions (scripts/import-coastline.ts — OSM coastlines + water polygons):
-    //    answered from our own tables, never touching Overpass. Recognised by the imported rows
-    //    themselves (negative ids), so a world import needs no per-tile bookkeeping.
-    // Lakes, reservoirs and rivers (P15) come only from imported regions; read them alongside.
-    let [found, inland] = await Promise.all([coastlineNear(lat, lng, SHORE_RADIUS_M), inlandShoreNear(lat, lng, SHORE_RADIUS_M)])
-    let imported = found.filter((w) => w.id < 0)
-    if (!imported.length) {
-      // 2. Elsewhere: read-through cache, one Overpass request per never-fetched ~10 km tile.
-      //    A tile Overpass couldn't deliver stays uncovered and is retried by the next visitor.
-      const missing = await uncoveredCoastTiles(coastTilesAround(lat, lng, SHORE_RADIUS_M))
-      await Promise.all(
-        missing.map(async (key) => {
-          const ways = await fetchCoastTile(key)
-          if (ways) await storeCoastTile(key, ways)
-        }),
-      )
-      if (missing.length) found = await coastlineNear(lat, lng, SHORE_RADIUS_M)
-      imported = found.filter((w) => w.id < 0)
-    }
-    // Imported and Overpass copies of the same shore can coexist; prefer one consistent source.
-    // Lake and river shores follow the same water-on-the-right convention, so the nearest shore
-    // wins whichever water it borders.
-    const ways: GeoPoint[][] = [...(imported.length ? imported : found).map((w) => w.points), ...inland]
-    const water = imported.length || inland.length ? await waterNear(lat, lng, SHORE_RADIUS_M + 200) : []
+    const { ways, water } = await shoreAround(lat, lng, SHORE_RADIUS_M)
     const raw = nearestShoreFrame(ways, { lat, lng })
     if (!raw || raw.distanceM > SEARCH_RADIUS_M) return Response.json({ frame: null, shore: [], water: [] })
     const frame = verifyShoreFrame(raw, water)

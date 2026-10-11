@@ -10,6 +10,7 @@ Sunbnb is a sunbed reservation SaaS platform — a Turborepo monorepo with:
 - `apps/admin/` — Platform admin (port 3003)
 - `apps/mobile/` — Expo/React Native floor app for on-site staff (iOS + Android) — scaffolded, building toward v1, see [[track:024]]
 - `packages/data/` — `@repo/data` — Prisma schema, migrations, shared DB client, payment logic, auth, email
+- `packages/agent/` — `@repo/agent` — provider-neutral, Prisma-free AI agent core: model adapter (`claude-model`), tool loop, AI-turn limits, `vision/` descriptors, `geo/` (coastline, beach layout, georef, grid fit) — shared by the marketing agent and the partner assistant ([[track:030]])
 - `packages/floor-core/` — `@repo/floor-core` — floor view-model types + `bed-state`/`grid-helpers`, shared by the partner manage grid and the mobile app
 - `packages/ui/` — `@repo/ui` — Shared React components (Button, TextField, Card, Code)
 - `packages/eslint-config/` — `@repo/eslint-config`
@@ -197,6 +198,12 @@ Vercel-managed via git branches: `main` → preview, `test` → test.sunbnb.app,
 - `CRON_SECRET` — Protects `/api/cron/send-reminders` (Vercel Cron sends as `Authorization: Bearer`)
 - `NEXT_PUBLIC_GA4_ID` — GA4 measurement id (`G-…`) per app and environment, read via `@repo/ui/google-analytics` (consent-gated; unset = no tag). User app → property "Sunbnb – sunbnb.app"; partner app → the try.sunbnb.app property (one B2B funnel); previews → the matching "(test)" property
 - `NEXT_PUBLIC_DEMO_MODE` — Enables demo payment mode (server-controlled)
+- `ANTHROPIC_API_KEY` — Claude API key (marketing agent; partner assistant — its presence is half of the partner kill switch)
+- `PARTNER_ASSISTANT_ENABLED` — partner AI assistant kill switch (`1`/`true` + `ANTHROPIC_API_KEY` required; else 503), on top of the account flag `assistant`
+- `PARTNER_ASSISTANT_MODEL`, `PARTNER_ASSISTANT_EXTRACTION_MODEL` — optional model-id overrides (defaults `claude-sonnet-5-5` chat, `claude-opus-5-5` plan/aerial vision)
+- `PARTNER_AI_DAILY_TURNS` — global daily assistant turn budget (default 1000; `0` = AI off); `ASSISTANT_NOTIFY_EMAIL` receives the one budget-tripped email
+- `ASSISTANT_BLOB_READ_WRITE_TOKEN` — PRIVATE Vercel Blob store for assistant uploads (company documents/photos; store connected with prefix `ASSISTANT_BLOB`); unset = falls back to the default store
+- `COASTLINE_POSTGRES_URL` — coastline DB (track 027) — marketing `/api/coastline` and, since track 030, the partner assistant's aerial land check (`@repo/data/coastline-lookup`; unset = check skipped)
 
 ## Architecture
 
@@ -237,7 +244,7 @@ commission invoice; they do not sum to the consumer total. The rule is canonical
 - **Image upload**: Vercel Blob `put()` in server actions; remote patterns whitelisted in `next.config.mjs`
 - **Error handling**: Server actions return `{ status: 'ok' | 'error', errors?: string[] }`; UI shows auto-dismissing banners
 - **i18n**: `next-intl` with `getRequestConfig()` from `Accept-Language` header. Message files in `messages/{en,es,fi}.json`
-- **Cron jobs**: `/api/reservations-cleanup` (partner, every 15 min) cleans stale bookings; `/api/cron/send-reminders` (user, daily 07:00 UTC) sends reminder emails; `/api/cron/prune-telemetry` (user, daily 03:20 UTC) evicts device telemetry history past the `device-telemetry-retention-days` preference
+- **Cron jobs**: `/api/reservations-cleanup` (partner, every 15 min) cleans stale bookings; `/api/cron/send-reminders` (user, daily 07:00 UTC) sends reminder emails; `/api/cron/prune-telemetry` (user, daily 03:20 UTC) evicts device telemetry history past the `device-telemetry-retention-days` preference; `/api/cron/purge-assistant-uploads` (partner, daily 03:40 UTC) deletes assistant upload blobs past their 30-day TTL
 - **Equipment rentals**: Sites enable via `features[]` array (add `"rentals"`). Supports hourly and daily bookings (`durationType: 'hours' | 'days'`). Availability checked by aggregating booked quantities for overlapping time windows. Categories: surfboard, paddleboard, kayak, pedal boat, snorkel, other
 
 ## Known Quirks

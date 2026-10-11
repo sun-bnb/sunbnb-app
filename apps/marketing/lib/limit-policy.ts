@@ -6,6 +6,8 @@
  * instances, plus a global daily cap on AI turns — the Anthropic key has no provider-side spend
  * limit, so this cap IS the spend limit.
  */
+import { parseTurnBudget } from '@repo/agent/limits'
+
 const MIN = 60_000
 const HOUR = 60 * MIN
 const DAY = 24 * HOUR
@@ -39,6 +41,5 @@ export const DEFAULT_AI_DAILY_TURNS = 2000
  * given (0 turns the AI off); anything else falls back to the default rather than to "unlimited".
  */
 export function aiDailyBudget(raw: string | undefined = process.env.MARKETING_AI_DAILY_TURNS): number {
-  if (raw !== undefined && /^\d{1,7}$/.test(raw.trim())) return Number(raw.trim())
-  return DEFAULT_AI_DAILY_TURNS
+  return parseTurnBudget(raw, DEFAULT_AI_DAILY_TURNS)
 }

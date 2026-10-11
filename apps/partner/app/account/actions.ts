@@ -2,9 +2,16 @@
 
 import { grantLaunchPromotionIfEligible } from '@repo/data/promotion-db'
 import { revalidatePath } from 'next/cache';
-import { validateVatId } from '@repo/data/vat-id'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import {
+  ACCOUNT_FIELD_LABELS,
+  ACCOUNT_REQUIRED_FIELDS,
+  applyAccountPatch,
+  taxIdentityFor,
+  validateAccountFormats,
+  type AccountPatch,
+} from '@/lib/account-fields'
 
 export async function submitForm(
   previousState: { status: string, errors?: string[] },
@@ -15,44 +22,15 @@ export async function submitForm(
 
   if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
 
-  const requiredFields = ['firstName', 'lastName', 'email', 'phoneNumber', 'company', 'address', 'city', 'postalCode', 'country', 'businessId']
-  const fieldLabels: Record<string, string> = {
-    firstName: 'First name', lastName: 'Last name', email: 'Email',
-    phoneNumber: 'Phone number', company: 'Company name', address: 'Address',
-    city: 'City', postalCode: 'Postal code', country: 'Country',
-    businessId: 'Business ID',
-  }
-  const errors = requiredFields.filter(field => !formData.get(field)).map(field => `${fieldLabels[field] ?? field} is required`)
+  const requiredFields = ACCOUNT_REQUIRED_FIELDS
+  const errors = requiredFields
+    .filter(field => !formData.get(field))
+    .map(field => `${ACCOUNT_FIELD_LABELS[field] ?? field} is required`)
   if (errors.length > 0) return { status: 'error', errors }
 
-  // Length caps
-  const STRING_LIMITS: Record<string, number> = {
-    firstName: 100, lastName: 100, email: 320, phoneNumber: 50,
-    company: 200, businessId: 50, websiteUrl: 2000,
-    address: 300, city: 100, postalCode: 20, country: 100, bankAccount: 50,
-  }
-  for (const [field, max] of Object.entries(STRING_LIMITS)) {
-    const val = formData.get(field) as string | null
-    if (val && val.length > max) {
-      return { status: 'error', errors: [`${fieldLabels[field] ?? field} is too long (max ${max} characters)`] }
-    }
-  }
-
-  // Email format
-  const email = formData.get('email') as string
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return { status: 'error', errors: ['Invalid email format'] }
-  }
-
-  // URL format (if provided)
-  const websiteUrl = formData.get('websiteUrl') as string
-  if (websiteUrl) {
-    try {
-      new URL(websiteUrl)
-    } catch {
-      return { status: 'error', errors: ['Invalid website URL'] }
-    }
-  }
+  // Length caps, email format, URL format (shared with the field patch below).
+  const formatError = validateAccountFormats((field) => formData.get(field) as string | null)
+  if (formatError) return { status: 'error', errors: [formatError] }
 
   const accountData = {
     userId: session.user.id,
@@ -79,12 +57,7 @@ export async function submitForm(
   // and a venue that cannot onboard sells for cash without invoicing at all —
   // a worse outcome than a flagged id we can chase. Enforcement belongs at
   // transmission, where the remedy is "fix it and re-send".
-  const vatCheck = validateVatId(accountData.businessId, accountData.country)
-  const taxIdentity = {
-    businessId: vatCheck.normalized || accountData.businessId,
-    vatIdStatus: vatCheck.status,
-    vatIdCheckedAt: new Date(),
-  }
+  const taxIdentity = taxIdentityFor(accountData.businessId, accountData.country)
   Object.assign(accountData, taxIdentity)
 
   const account = await prisma.partnerAccount.findUnique({ where: { userId: session.user.id } })
@@ -133,4 +106,23 @@ export async function submitForm(
 
   }
   
+}
+
+/**
+ * Field-level update of the session user's own PartnerAccount — only the fields in `patch`, unlike
+ * `submitForm`'s 10-field replace (track 030 S3). Allowed: company, businessId, address, city,
+ * postalCode, country, phoneNumber, email, websiteUrl. Never the bank account, payment provider,
+ * Stripe/KYC or Verifactu. A businessId/country change re-records the tax-id verdict (never rejects).
+ */
+export async function updateAccountFields(
+  patch: AccountPatch,
+): Promise<{ status: string; errors?: string[] }> {
+  const session = await auth()
+  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+
+  const result = await applyAccountPatch(session.user.id, patch as Record<string, unknown>)
+  if (result.status === 'error') return { status: 'error', errors: result.errors }
+
+  revalidatePath('/account')
+  return { status: 'ok' }
 }

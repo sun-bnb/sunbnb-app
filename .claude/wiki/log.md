@@ -201,3 +201,9 @@ Operations:
 - changed: token/`content` references moved from `tailwind.config.js` to `globals.css` `@theme` / `@source`; one pitfall on Tailwind 4 + MUI cascade layers (enableCssLayer + layer-order GlobalStyles), never importing pre-compiled Tailwind CSS from a package, and `@theme inline` for next/font variables.
 - reason: gate criteria 3 + 4 — the config contract moved (every page citing `tailwind.config.js` was now wrong) and three hard-earned gotchas each blanked real UI during the migration (user app MUI unstyled, TextField's v3 output.css overriding all utilities, Geist falling back to the system font).
 - by: claude
+
+## [2026-10-11] ingest | Partner AI assistant subsystem page (track 030)
+- mode: add (subsystems/partner-assistant.md) + patch (subsystems/schematic-editor.md § Consumers + related, index.md)
+- changed: new subsystem page — layers (`@repo/agent` / `@repo/data/assistant` / `lib/assistant` / SSE route / apply actions / UI), proposal lifecycle, vision flows, 6 invariants, 5 pitfalls (resync, jsonb key order, gated-action registry, pairing derivation, missing COASTLINE_POSTGRES_URL); schematic-editor cross-links it.
+- reason: gate criterion 2 (new sub-system + new shared package `@repo/agent`) — spans partner app, `packages/data`, `packages/agent` and the marketing agent; surface detail stays canonical in `apps/partner/CLAUDE.md` § AI assistant. Built 2026-10-11, uncommitted at time of writing.
+- by: claude

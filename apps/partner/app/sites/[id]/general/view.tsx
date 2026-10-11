@@ -38,6 +38,7 @@ import SurfingIcon from '@mui/icons-material/Surfing'
 import CardTerminalsCard from './CardTerminalsCard'
 
 import { useSite } from '@/app/sites/site-context'
+import { reconcileFields, cancelPendingSave } from '@/lib/resync'
 import { ServiceFee } from '@/types/shared'
 import { PROVIDER_LABELS } from '@repo/data/payment-providers/availability'
 import type { ReadinessStatus } from '@repo/data/payment-providers/readiness'
@@ -349,6 +350,22 @@ const READINESS_BADGE: Record<ReadinessStatus, { key: string; cls: string }> = {
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
+type GeneralServerKey = 'name' | 'type' | 'price' | 'vat' | 'status' | 'partial'
+
+function generalSnapshot(site: {
+  name?: string | null; type?: string | null; price?: unknown; vat?: unknown; status?: string | null
+  partialGroupBookingEnabled?: boolean | null
+}): Record<GeneralServerKey, string> {
+  return {
+    name: site.name || '',
+    type: site.type ?? 'paid',
+    price: (site.price as { toString(): string } | null | undefined)?.toString() || '',
+    vat: (site.vat as { toString(): string } | null | undefined)?.toString() || '',
+    status: site.status ?? 'hidden',
+    partial: String(site.partialGroupBookingEnabled ?? false),
+  }
+}
+
 export default function GeneralView() {
   const { site, apiKey } = useSite()
   const router = useRouter()
@@ -388,6 +405,11 @@ export default function GeneralView() {
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
   const savedTimerRef = useRef<NodeJS.Timeout | null>(null)
 
+  // The server's value for each form field as WE last knew it (initial props, a completed save, or a
+  // resync). The assistant can change the site underneath this form; the effect below reconciles
+  // against this snapshot so a stale local value is never auto-saved over an applied change.
+  const serverRef = useRef<Record<GeneralServerKey, string>>(generalSnapshot(site))
+
   const doSave = useCallback(async (overrides?: {
     name?: string
     type?: string
@@ -414,6 +436,13 @@ export default function GeneralView() {
         ...(overrides?.layoutHeight !== undefined ? { layoutHeight: overrides.layoutHeight } : {}),
       })
       if (result.status === 'ok') {
+        serverRef.current = {
+          ...serverRef.current,
+          name: overrides?.name ?? name,
+          type: overrides?.type ?? siteType,
+          price: overrides?.price ?? price,
+          vat: overrides?.vat ?? vat,
+        }
         setSaveStatus('saved')
         setLayoutLockedReason(null)
         if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
@@ -427,6 +456,9 @@ export default function GeneralView() {
       setSaveStatus('error')
     }
   }, [site.id, name, siteType, price, vat, mapCoords])
+
+  const doSaveRef = useRef(doSave)
+  doSaveRef.current = doSave
 
   const scheduleSave = useCallback((overrides?: Parameters<typeof doSave>[0]) => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -449,6 +481,37 @@ export default function GeneralView() {
   }
 
   const [workingHours, setWorkingHours] = useState(site.workingHours ?? [])
+
+  // Resync when the context `site` changes underneath us (assistant Apply/Undo -> SiteProvider
+  // refetch). Reset only fields whose server value moved and that the user has not edited, and drop
+  // any pending debounced save (its closure holds the stale values).
+  const hoursRef = useRef(site.workingHours)
+  useEffect(() => {
+    const next = generalSnapshot(site)
+    const local: Record<GeneralServerKey, string> = {
+      name, type: siteType, price, vat, status: siteStatus, partial: String(partialGroupBooking),
+    }
+    const r = reconcileFields(local, serverRef.current, next)
+    serverRef.current = next
+    if (r.reset.length > 0) {
+      // A pending save held the stale closure; re-arm it so the user's other in-progress edits
+      // still save, now reading the latest (reset) state at fire time.
+      if (cancelPendingSave(debounceRef)) {
+        debounceRef.current = setTimeout(() => { void doSaveRef.current() }, 2000)
+      }
+      if (r.reset.includes('name')) setName(r.values.name)
+      if (r.reset.includes('type')) setSiteType(r.values.type)
+      if (r.reset.includes('price')) setPrice(r.values.price)
+      if (r.reset.includes('vat')) setVat(r.values.vat)
+      if (r.reset.includes('status')) setSiteStatusLocal(r.values.status)
+      if (r.reset.includes('partial')) setPartialGroupBookingLocal(r.values.partial === 'true')
+    }
+    if (site.workingHours !== hoursRef.current) {
+      hoursRef.current = site.workingHours
+      setWorkingHours(site.workingHours ?? [])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [site])
 
   const sortedHours = useMemo(
     () => [...workingHours].sort((a, b) => a.day - b.day),
@@ -778,6 +841,7 @@ export default function GeneralView() {
               const result = await setSiteStatus(site.id!, newStatus)
               if (result.status === 'ok') {
                 setSiteStatusLocal(newStatus)
+                serverRef.current = { ...serverRef.current, status: newStatus }
                 if (newStatus === 'active') trackOnce(`site_published:${site.id}`, 'site_published')
               }
             }}
@@ -915,6 +979,7 @@ export default function GeneralView() {
                   // Revert on failure — the switch must never show a policy the
                   // site isn't actually running.
                   if (result.status !== 'ok') setPartialGroupBookingLocal(!next)
+                  else serverRef.current = { ...serverRef.current, partial: String(next) }
                 }}
                 color="primary"
               />

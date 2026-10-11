@@ -5,9 +5,11 @@ import { auth } from '@/app/auth'
 import { requireSiteOwner } from '@/lib/auth-helpers'
 import { validateImageFile, isValidOrderPaymentType, isValidProductCategory } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
+import { isOwnerOrSudo } from '@/lib/owner-or-sudo'
 import { computeVatAndBaseAmounts } from '@repo/data/payment'
 import { put } from '@vercel/blob'
 import sharp from 'sharp'
+import { setProductImage } from '@/lib/site-images'
 import { Product } from '@/types/shared'
 
 export async function toggleAppSales(siteId: string, enabled: boolean) {
@@ -159,7 +161,7 @@ export async function updateProduct(
     where: { id },
     select: { siteId: true, site: { select: { userId: true } } },
   })
-  if (!product || product.site.userId !== session.user.id) {
+  if (!product || !(await isOwnerOrSudo(product.site.userId, session.user.id))) {
     return { status: 'error', errors: ['Not authorized'] }
   }
 
@@ -205,7 +207,7 @@ export async function updateProductImage(id: string, formData: FormData) {
     where: { id },
     select: { siteId: true, site: { select: { userId: true } } },
   })
-  if (!product || product.site.userId !== session.user.id) {
+  if (!product || !(await isOwnerOrSudo(product.site.userId, session.user.id))) {
     return { status: 'error', errors: ['Not authorized'] }
   }
 
@@ -218,15 +220,13 @@ export async function updateProductImage(id: string, formData: FormData) {
     contentType: file.type,
   })
 
-  await prisma.product.update({
-    where: { id },
-    data: {
-      imageUrl: blob.url,
-      ...(meta?.width && meta.height
-        ? { imageWidth: meta.width, imageHeight: meta.height }
-        : {}),
-    },
-  })
+  const written = await setProductImage(
+    product.siteId,
+    id,
+    blob.url,
+    meta?.width && meta.height ? { width: meta.width, height: meta.height } : undefined,
+  )
+  if (!written.ok) return { status: 'error', errors: [written.error] }
 
   return { status: 'ok', imageUrl: blob.url }
 }
@@ -239,7 +239,7 @@ export async function deleteProduct(id: string) {
     where: { id },
     select: { site: { select: { userId: true } } },
   })
-  if (!product || product.site.userId !== session.user.id) {
+  if (!product || !(await isOwnerOrSudo(product.site.userId, session.user.id))) {
     return { status: 'error', errors: ['Not authorized'] }
   }
 
@@ -259,7 +259,7 @@ export async function toggleProductSoldOut(id: string, soldOut: boolean) {
     where: { id },
     select: { site: { select: { userId: true } } },
   })
-  if (!product || product.site.userId !== session.user.id) {
+  if (!product || !(await isOwnerOrSudo(product.site.userId, session.user.id))) {
     return { status: 'error', errors: ['Not authorized'] }
   }
 

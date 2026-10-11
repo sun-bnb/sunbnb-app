@@ -14,6 +14,7 @@ sources:
   - packages/table-reservations-ui
 related:
   - subsystem:table-reservations
+  - subsystem:partner-assistant
 last_verified: 2026-10-08
 ---
 
@@ -104,7 +105,7 @@ and handles drag MIME for drag-and-drop.
 
 ## Consumers
 
-The persisted sunbed rows this layer places live behind `apps/partner/app/sites/[id]/inventory-actions.ts`; the create/move/rotate parcel journey runs through `apps/partner/app/sites/[id]/inventory/actions.ts`. Restaurant tables consume the same geometry via `packages/table-reservations-ui`. (Dedicated `inventory-item` / `parcel-edit` wiki pages are future candidates — add `related:` links when they exist.)
+The persisted sunbed rows this layer places live behind `apps/partner/app/sites/[id]/inventory-actions.ts`; the create/move/rotate parcel journey runs through `apps/partner/app/sites/[id]/inventory/actions.ts`. Restaurant tables consume the same geometry via `packages/table-reservations-ui`. The partner AI assistant proposes parcel/layout edits through the same actions plus `inventory/parcel-ops.ts` (shared with the map editor) — see [[subsystem:partner-assistant]]. (Dedicated `inventory-item` / `parcel-edit` wiki pages are future candidates — add `related:` links when they exist.)
 
 ## Common pitfalls
 

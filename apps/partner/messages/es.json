@@ -1957,5 +1957,212 @@
     "reqJobTitle": "Cargo del representante",
     "reqMcc": "Categoría del negocio",
     "reqUrl": "Sitio web del negocio"
+  },
+  "Assistant": {
+    "attachments": {
+      "add": "Adjuntar archivos",
+      "hint": "PDF, JPEG, PNG, WEBP, HEIC o DOCX, hasta 20 MB cada uno",
+      "list": "Archivos adjuntos",
+      "remove": "Quitar {name}",
+      "uploading": "Subiendo",
+      "failed": "Error al subir",
+      "drop": "Suelta los archivos para adjuntarlos",
+      "default": "Revisa por favor el archivo o los archivos adjuntos.",
+      "attached": "Archivos adjuntos",
+      "errors": {
+        "tooLarge": "Ese archivo supera los 20 MB.",
+        "unsupported": "Ese tipo de archivo no es compatible. Usa PDF, JPEG, PNG, WEBP o DOCX.",
+        "heic": "No se pudo leer esta foto HEIC. Expórtala como JPEG o PNG e inténtalo de nuevo.",
+        "rateLimited": "Has alcanzado el límite diario de subidas. Inténtalo de nuevo mañana.",
+        "forbidden": "No tienes permiso para subir archivos aquí.",
+        "unavailable": "No se pudo subir el archivo. Inténtalo de nuevo.",
+        "limit": "Puedes adjuntar hasta 5 archivos por mensaje."
+      }
+    },
+    "title": "Asistente",
+    "toggle": "Asistente",
+    "close": "Cerrar asistente",
+    "newConversation": "Nueva conversación",
+    "placeholder": "Pregunta sobre este sitio…",
+    "send": "Enviar",
+    "stop": "Detener",
+    "emptyTitle": "¿En qué puedo ayudarte con este sitio?",
+    "emptyBody": "Pregunta cómo funciona algo o qué está configurado ahora mismo.",
+    "starters": "Preguntas sugeridas",
+    "thinking": "Pensando…",
+    "you": "Tú",
+    "assistant": "Asistente",
+    "activity": "Actividad del asistente",
+    "toolRunning": "en curso",
+    "toolDone": "hecho",
+    "toolFailed": "fallido",
+    "errors": {
+      "unavailable": "El asistente no está disponible en este momento",
+      "rate_limited": "Estás enviando mensajes demasiado rápido. Espera un momento e inténtalo de nuevo.",
+      "budget": "Se alcanzó el límite diario del asistente",
+      "bad_request": "No se pudo enviar el mensaje. Inténtalo de nuevo."
+    },
+    "starter": {
+      "inventory1": "¿Cómo añado una parcela?",
+      "inventory2": "Gira la parcela 3 en 10°",
+      "inventory3": "¿Cuántas hamacas están activas?",
+      "schematic1": "¿Cómo añado una piscina al plano?",
+      "schematic2": "Gira la parcela 3 en 10°",
+      "schematic3": "¿Cuántas hamacas hay colocadas?",
+      "general1": "¿Qué debo completar antes de publicar?",
+      "general2": "¿Cuál es mi horario de apertura actual?",
+      "general3": "¿Cómo cambio el precio?",
+      "products1": "¿Cómo añado un producto?",
+      "products2": "¿Qué productos no tienen imagen?",
+      "products3": "¿Cómo cambio un precio?",
+      "rentals1": "¿Cómo añado un artículo de alquiler?",
+      "rentals2": "¿Qué alquileres tengo?",
+      "rentals3": "¿Cómo funcionan los precios por hora y por día?",
+      "default1": "¿Qué falta por configurar en este sitio?",
+      "default2": "¿Cómo dejo mi sitio listo para recibir reservas?",
+      "default3": "¿En qué puedes ayudarme?"
+    },
+    "proposal": {
+      "image": {
+        "title": {
+          "cover": "Poner {file} como foto de portada",
+          "product": "Poner {file} como imagen de {name}",
+          "rental_item": "Poner {file} como imagen de {name}",
+          "brand_logo": "Poner {file} como logotipo de la marca",
+          "brand_background": "Poner {file} como fondo de la marca",
+          "schematic_underlay": "Poner {file} como imagen de fondo del esquema"
+        },
+        "current": "Actual",
+        "new": "Nueva",
+        "none": "Sin imagen",
+        "unavailable": "Vista previa no disponible"
+      },
+      "title": "Cambio propuesto",
+      "status": {
+        "proposed": "Propuesto",
+        "applied": "Aplicado",
+        "rejected": "Rechazado",
+        "undone": "Deshecho",
+        "expired": "Caducado",
+        "failed": "Fallido"
+      },
+      "apply": "Aplicar",
+      "applying": "Aplicando…",
+      "reject": "Rechazar",
+      "rejecting": "Rechazando…",
+      "undo": "Deshacer",
+      "undoing": "Deshaciendo…",
+      "changes": "Cambios",
+      "creates": "Se creará",
+      "deletes": "Se eliminará",
+      "to": "cambia a",
+      "on": "Activado",
+      "off": "Desactivado",
+      "empty": "—",
+      "more": "más",
+      "less": "menos",
+      "noPreview": "No hay detalles que mostrar.",
+      "typeToConfirm": "Esto elimina datos. Escribe {word} para habilitar Aplicar.",
+      "done": {
+        "apply": "Cambio aplicado.",
+        "reject": "Propuesta rechazada.",
+        "undo": "Cambio deshecho."
+      },
+      "errors": {
+        "not_found": "Esta propuesta ya no existe.",
+        "forbidden": "No tienes permiso para modificar este sitio.",
+        "expired": "Esta propuesta ha caducado. Vuelve a pedirla.",
+        "stale": "Esto ha cambiado desde que se propuso — vuelve a pedirlo.",
+        "already_resolved": "Esta propuesta ya se ha gestionado.",
+        "undo_window": "Este cambio ya no se puede deshacer.",
+        "apply_failed": "No se pudo aplicar el cambio. No se ha modificado nada.",
+        "unknown": "Algo salió mal. Inténtalo de nuevo."
+      },
+      "create": {
+        "parcelShape": "{rows, plural, one {# fila} other {# filas}} × {perRow, plural, one {# hamaca} other {# hamacas}}",
+        "paired": "en parejas",
+        "total": "{count} en total",
+        "rotated": "girada {degrees}°",
+        "onMap": "en el mapa",
+        "schematicAt": "x {x} m, y {y} m",
+        "elementShape": "{width} × {height} m en ({x}, {y})",
+        "elementTitle": "{type} «{label}»",
+        "types": {
+          "water": "Agua",
+          "sand": "Arena",
+          "grass": "Césped",
+          "deck": "Tarima",
+          "pool": "Piscina",
+          "bar": "Bar",
+          "reception": "Recepción",
+          "shower": "Ducha",
+          "restroom": "Aseos"
+        },
+        "fields": {
+          "name": "Nombre",
+          "price": "Precio",
+          "vat": "IVA",
+          "category": "Categoría",
+          "description": "Descripción",
+          "soldOut": "Agotado",
+          "label": "Etiqueta",
+          "color": "Color",
+          "position": "Posición",
+          "rotation": "Rotación",
+          "x": "X",
+          "y": "Y",
+          "width": "Ancho",
+          "height": "Alto"
+        }
+      }
+    },
+    "preview": {
+      "show": "Mostrar en el mapa",
+      "hide": "Ocultar del mapa",
+      "viewOnMap": "Ver en el mapa",
+      "openOnMap": "Abrir en el mapa",
+      "back": "Volver a la propuesta",
+      "count": {
+        "added": "{count} añadidas",
+        "moved": "{count} movidas",
+        "changed": "{count} cambiados",
+        "removed": "{count} eliminadas"
+      }
+    },
+    "qr": {
+      "printParcel": "Imprimir tarjetas QR de la parcela {parcel}",
+      "printSeats": "Imprimir tarjetas QR ({count} asientos)",
+      "preparing": "Preparando PDF…",
+      "none": "No se encontraron asientos para imprimir."
+    },
+    "align": {
+      "title": "Alinear foto aérea",
+      "chip": "Alinear la foto en el mapa",
+      "chipOpen": "Alineación abierta en el mapa",
+      "desktopOnly": "Alinear una foto en el mapa requiere una pantalla más grande. Abre Sunbnb en un ordenador para continuar.",
+      "reading": "Leyendo la foto…",
+      "readDone": "Foto leída",
+      "readFailed": "No se pudo leer la foto.",
+      "retry": "Reintentar",
+      "hint": "Arrastra la foto para moverla y el tirador azul de la esquina para girarla y cambiar su tamaño. Alinéala con la playa.",
+      "opacity": "Opacidad",
+      "pin": "Fijar 2 puntos",
+      "pinBack": "Deshacer punto",
+      "pinCancel": "Cancelar fijado",
+      "pinDegenerate": "Esos dos puntos están demasiado juntos. Empieza de nuevo con puntos más separados.",
+      "pinStep": {
+        "photo1": "Punto 1: haz clic en un punto reconocible de la foto.",
+        "map1": "Punto 1: ahora haz clic en dónde está ese punto en el mapa.",
+        "photo2": "Punto 2: haz clic en un segundo punto de la foto, lejos del primero.",
+        "map2": "Punto 2: ahora haz clic en dónde está ese segundo punto en el mapa."
+      },
+      "reset": "Restablecer",
+      "cancel": "Cancelar",
+      "confirm": "Confirmar alineación",
+      "saving": "Guardando…",
+      "saveError": "No se pudo guardar la alineación. Inténtalo de nuevo.",
+      "waitReply": "Espera a que el asistente termine de responder.",
+      "canned": "He alineado la foto — por favor, propón la distribución."
+    }
   }
 }

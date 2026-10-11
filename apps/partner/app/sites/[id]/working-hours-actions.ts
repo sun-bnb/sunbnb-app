@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import { requireSiteOwner } from '@/lib/auth-helpers'
 import prisma from '@repo/data/PrismaCient'
+import { isOwnerOrSudo } from '@/lib/owner-or-sudo'
 
 type WorkingHour = { id: string; day: number; openTime: Date; closeTime: Date }
 
@@ -69,7 +70,7 @@ export async function updateWorkingHours(
     where: { id },
     select: { siteId: true, site: { select: { userId: true } } },
   })
-  if (!wh || wh.site.userId !== session.user.id) {
+  if (!wh || !(await isOwnerOrSudo(wh.site.userId, session.user.id))) {
     return { status: 'error' as const, errors: ['Not authorized'] }
   }
 
@@ -96,7 +97,7 @@ export async function deleteWorkingHours(id: string) {
     where: { id },
     select: { siteId: true, site: { select: { userId: true } } },
   })
-  if (!wh || wh.site.userId !== session.user.id) {
+  if (!wh || !(await isOwnerOrSudo(wh.site.userId, session.user.id))) {
     return { status: 'error' as const, errors: ['Not authorized'] }
   }
 

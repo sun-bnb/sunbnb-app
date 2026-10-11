@@ -9,6 +9,8 @@ import { SiteProvider } from '@/app/sites/site-context'
 import { useFlag } from '@repo/ui/flags'
 import ReadinessChecklist from './readiness-checklist'
 import { createRestaurant } from '@/app/restaurants/[id]/actions'
+import AssistantDrawer, { AssistantToggle } from '@/components/assistant/AssistantDrawer'
+import { AssistantContextProvider } from '@/components/assistant/AssistantContext'
 
 function RestaurantCard({ site, t, className = 'mx-4 mt-3' }: { site: SiteProps; t: ReturnType<typeof useTranslations<'SiteView'>>; className?: string }) {
   const router = useRouter()
@@ -104,14 +106,20 @@ export default function SiteView(
 
   return (
     <SiteProvider site={site} apiKey={apiKey}>
-      <div className="mt-2">
+     <AssistantContextProvider tab={tab} layoutMode={isSchematic ? 'schematic' : 'geo'}>
+      {/* From lg the assistant drawer is a 400px column BESIDE the tab content
+          (push, not overlay) so it never covers the map controls; the map
+          just gets the narrower column. Below lg it is a fixed full-screen sheet. */}
+      <div className="mt-2 lg:flex lg:items-start lg:gap-4">
+      <div className="min-w-0 flex-1">
         {/* Tab nav: scrolls horizontally on phones (seven tabs never fit 360px),
             spreads evenly sm–md (the old MUI fullWidth Tabs look), and from lg
             sits left-aligned at natural width so it doesn't stretch across a
             1100px+ frame. */}
+        <div className="flex items-center gap-2 border-b border-gray-200">
         <nav
           ref={navRef}
-          className="relative flex overflow-x-auto border-b border-gray-200 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="relative flex min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {tabs.map(({ value, label }) => {
             const selected = value === tab
@@ -134,6 +142,8 @@ export default function SiteView(
             )
           })}
         </nav>
+        <AssistantToggle siteId={site.id ?? ''} className="mr-2" />
+        </div>
         {/* Setup nudges: stacked on phones/tablets; side by side from lg (each
             takes half, or the full row when it is alone). */}
         <div className="lg:flex lg:items-start lg:gap-4 lg:*:flex-1 lg:*:min-w-0">
@@ -158,6 +168,9 @@ export default function SiteView(
           { children }
         </div>
       </div>
+      <AssistantDrawer siteId={site.id ?? ''} tab={tab} />
+      </div>
+     </AssistantContextProvider>
     </SiteProvider>
   )
 

@@ -407,6 +407,12 @@ const UNGATED_ALLOWLIST: AllowlistEntry[] = [
     reason: 'Session-only: updates the session user\'s own PartnerAccount (scoped to session.user.id); no cross-user data access possible',
   },
 
+  {
+    export: 'updateAccountFields',
+    file: 'app/account/actions.ts',
+    reason: 'Session-only (track 030 S3): field-level patch of the session user\'s OWN PartnerAccount (userId = session.user.id); whitelisted fields only (never bank account / payment provider / Stripe / Verifactu). No site or cross-user dimension, so it has no owner-vs-non-owner matrix; rules covered in lib/account-fields.test.ts and app/account/actions.test.ts. The assistant reaches another owner\'s account only via lib/account-fields applyAccountPatch after its own requireSiteOwner re-check',
+  },
+
   // ── Server actions: account/mollie (session-scoped Mollie token ops) ───────
   {
     export: 'disconnectMollie',
@@ -735,6 +741,39 @@ const UNGATED_ALLOWLIST: AllowlistEntry[] = [
     export: 'getProducts',
     file: 'app/sites/[id]/products/actions.ts',
     reason: 'SAFE — ownership enforced via requireSiteOwner(siteId) at products/actions.ts:271; returns [] for non-owners. Auth-only (non-standard return: Product[] not { status })',
+  },
+
+  // ── Route handlers: partner AI assistant (track 030 S2) ───────────────────
+  {
+    export: 'POST',
+    file: 'app/api/assistant/route.ts',
+    reason: 'Kill switch (PARTNER_ASSISTANT_ENABLED + ANTHROPIC_API_KEY, 503) → session (401) → flag `assistant` (403) → requireSiteOwner(siteId) (403, sudo ok) → AI-turn limits → account+site-scoped conversation. siteId is bound by the route; tools re-check requireSiteOwner per call. Auth matrix for routes lives in api/assistant/route.test.ts',
+  },
+  {
+    export: 'GET',
+    file: 'app/api/assistant/route.ts',
+    reason: 'Same gate chain as POST (kill switch, session, flag, requireSiteOwner); transcript read is scoped to (site owner account, siteId) and returns render-friendly text only. Covered by api/assistant/route.test.ts',
+  },
+
+  {
+    export: 'GET',
+    file: 'app/api/assistant/uploads/[id]/route.ts',
+    reason: 'Session (401) -> account-scoped getUploadForAccount (own upload only; sudo may read any); foreign / expired / purged all answer 404 so nothing leaks; Cache-Control private. Matrix in api/assistant/uploads/[id]/route.test.ts (track 030 S6b)',
+  },
+  {
+    export: 'POST',
+    file: 'app/api/assistant/aerial/[uploadId]/extract/route.ts',
+    reason: 'Kill switch (503) -> session (401) -> resolveAerialUpload: account-scoped upload (sudo ok), live, site-bound, requireSiteOwner(upload.siteId), upload account == site owner (404 otherwise) -> flag `assistant` (403) -> image mime (415) -> map-mode site (409) -> global budget not 0 (503). Billing only after the CAS claim in runAerialExtraction (cached / running = no counters). Matrix in api/assistant/aerial/[uploadId]/extract/route.test.ts (track 030 S7)',
+  },
+  {
+    export: 'GET',
+    file: 'app/api/assistant/uploads/[id]/image/route.ts',
+    reason: 'Session (401) -> resolveAerialUpload (account-scoped + site owner, sudo ok); foreign / other-site / expired / non-image all answer 404; Cache-Control private. Matrix in api/assistant/uploads/[id]/image/route.test.ts (track 030 S7)',
+  },
+  {
+    export: 'GET',
+    file: 'app/api/cron/purge-assistant-uploads/route.ts',
+    reason: 'Cron route -- gated by CRON_SECRET (fails closed 503 without it); deletes expired assistant upload blobs (track 030 D8). Covered by cron/purge-assistant-uploads/route.test.ts',
   },
 
   // ── Route handlers: manage-floor HTTP surface (track 024 P6.5) ─────────────

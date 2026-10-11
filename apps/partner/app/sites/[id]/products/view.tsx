@@ -16,6 +16,7 @@ import PaymentsIcon from '@mui/icons-material/Payments'
 import EventAvailableIcon from '@mui/icons-material/EventAvailable'
 import { useSite } from '@/app/sites/site-context'
 import ProductItem from './ProductItem'
+import { useAssistantResync } from '@/components/assistant/useAssistantResync'
 
 export default function ProductsView() {
 
@@ -44,6 +45,9 @@ export default function ProductsView() {
     const fetched = await getProducts(site.id!)
     setProductList(fetched)
   }
+
+  // Assistant Apply/Undo edits products server-side; re-pull the list (rows reconcile themselves).
+  useAssistantResync(['products', 'place_image:product'], refreshProducts)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null

@@ -1,10 +1,7 @@
 'use client'
 
-import {
-  deleteInventoryItem,
-  saveInventoryItemProperties,
-} from '../inventory-actions'
-import { rotateSelection } from './actions'
+import { deleteInventoryItem } from '../inventory-actions'
+import { rotateUnit } from './parcel-ops'
 
 /**
  * Coordinate-free, setup-independent single-sunbed editing actions.
@@ -22,25 +19,14 @@ export function useSunbedEditing(
   refresh: () => void | Promise<void>,
 ) {
   /**
-   * Rotate a single item (and its group partners, if any) by `delta` degrees.
-   * Callers pass `partnerIds` = the other members of the item's SunbedGroup
-   * (group-first resolution with pairId fallback).
-   *  - If partnerIds is non-empty, all beds are rotated together via rotateSelection.
-   *  - Otherwise the single bed is updated directly via saveInventoryItemProperties,
-   *    normalising the angle into [0, 360).
+   * Rotate a single item (and the other members of its SunbedGroup unit) by
+   * `delta` degrees. The unit's members are resolved server-side by
+   * `rotateUnit` (parcel-ops.ts) — the same action the AI assistant uses — so
+   * the client no longer picks ids or chooses between rotateSelection and
+   * saveInventoryItemProperties.
    */
-  async function rotateSingle(
-    itemId: string,
-    currentRotation: number,
-    delta: number,
-    partnerIds: string[] = [],
-  ) {
-    if (partnerIds.length > 0) {
-      await rotateSelection(siteId, [itemId, ...partnerIds], delta)
-    } else {
-      const newRotation = ((currentRotation + delta) + 360) % 360
-      await saveInventoryItemProperties(itemId, { rotation: newRotation })
-    }
+  async function rotateSingle(itemId: string, delta: number) {
+    await rotateUnit(siteId, itemId, delta)
     await refresh()
   }
 

@@ -1,0 +1,13 @@
+{
+  "extends": "@repo/typescript-config/base.json",
+  "compilerOptions": {
+    // Sources are consumed as .ts (workspace transpile + Node type stripping for the marketing
+    // eval), so relative imports carry the .ts suffix and nothing is emitted.
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}

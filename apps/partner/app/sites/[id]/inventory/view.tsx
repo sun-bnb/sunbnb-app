@@ -2,6 +2,10 @@
 
 import { trackOnce } from '@/components/Analytics'
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { usePublishAssistantSelection } from '@/components/assistant/AssistantContext'
+import { useAssistantResync } from '@/components/assistant/useAssistantResync'
+import { useGhostPreview } from '@/components/assistant/useGhostPreview'
+import { INVENTORY_BATCH_KIND, type SeatLookup } from '@/components/assistant/geometry-preview'
 import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { InventoryItem, SiteProps } from '@/types/shared'
@@ -23,6 +27,8 @@ import { MapMouseEvent } from '@vis.gl/react-google-maps'
 import { ChairConfig, getParcelColor } from './chair-util'
 import { syncChairsWithLayout, getItemGroup, moveParcel, moveItems, rotateSelection, adjustItemSpacing, assignItemsToGroup, removeItemsFromGroup } from './actions'
 import { useSunbedEditing } from './useSunbedEditing'
+import { rotateParcel, applyParcelConfig } from './parcel-ops'
+import { parcelIsPaired } from './parcel-config'
 
 export default function InventoryView() {
 
@@ -159,6 +165,32 @@ export default function InventoryView() {
     [selectedParcelGroupNumber, parcelSeatCount],
   )
 
+  // Assistant inventory proposal -> ghosts on the map (track 030 S4b). `removed` seats arrive
+  // as ids only, so resolve their position from whatever is loaded (parcel tier: the rest is
+  // covered by the parcel footprint the server sends).
+  const seatLookup = useMemo<SeatLookup>(() => {
+    const byId = new Map(inventory.map((i) => [i.id, i]))
+    return (id) => {
+      const it = byId.get(id)
+      if (!it) return undefined
+      const lat = Number(it.locationLat)
+      const lng = Number(it.locationLng)
+      return Number.isFinite(lat) && Number.isFinite(lng) ? { at: { x: lng, y: lat }, rotation: it.rotation || 0 } : undefined
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [site.inventoryItems])
+  const ghost = useGhostPreview(siteId, 'geo', seatLookup)
+
+  // After the assistant applies/undoes an inventory batch, pull fresh seats through the editor's
+  // own full-site refresh (router.refresh() never resets this client copy).
+  useAssistantResync([INVENTORY_BATCH_KIND], async () => {
+    await refresh()
+    setSelectedItemIds([])
+    setSelectedItemId(null)
+  })
+
+  usePublishAssistantSelection({ itemIds: selectedItemId ? [selectedItemId] : selectedItemIds, parcel: selectedParcelGroupNumber ?? undefined })
+
   // Whether ALL members of the parcel are in the selection
   const isCompleteParcelSelected = useMemo(() => {
     if (!selectedParcelGroupNumber) return false
@@ -198,7 +230,7 @@ export default function InventoryView() {
             group: ig.number,
             category: ig.category || undefined,
             price: ig.price || undefined,
-            pairSeats: ig.pairGap > 0,
+            pairSeats: parcelIsPaired(groupItems, ig.pairGap),
             intraPairGap: ig.pairGap,
             baseLat: parseFloat(ig.locationLat),
             baseLng: parseFloat(ig.locationLng),
@@ -226,21 +258,11 @@ export default function InventoryView() {
   // --- Parcel handlers ---
 
   const handleParcelReorder = async () => {
-    if (!selectedParcelConfig || !selectedParcelGroupNumber) return
+    if (!selectedParcelGroupNumber) return
 
-    const groupItems = inventory.filter(i => i.group === selectedParcelGroupNumber)
-    const firstWithGroup = groupItems.find(i => i.itemGroupId)
-    let freshBaseLat = selectedParcelConfig.baseLat
-    let freshBaseLng = selectedParcelConfig.baseLng
-    if (firstWithGroup?.itemGroupId) {
-      const ig = await getItemGroup(firstWithGroup.itemGroupId)
-      if (ig) {
-        freshBaseLat = parseFloat(ig.locationLat)
-        freshBaseLng = parseFloat(ig.locationLng)
-      }
-    }
-    const config = { ...selectedParcelConfig, baseLat: freshBaseLat, baseLng: freshBaseLng }
-    await syncChairsWithLayout(siteId, config, 'rearrange')
+    // Server composition (track 030 S1b): the config + fresh anchor are read
+    // server-side; an empty patch re-lays the seats on the stored config.
+    await applyParcelConfig(siteId, selectedParcelGroupNumber, {})
     const updatedSite = await getSite(siteId)
     if (updatedSite) {
       setSite(updatedSite)
@@ -263,32 +285,13 @@ export default function InventoryView() {
   const handleRotateSelected = async (delta: number) => {
     if (selectedItemIds.length === 0) return
 
-    // Complete parcel: regenerate grid at new rotation (mirrors ParcelForm "Apply").
+    // Complete parcel: regenerate the grid at the new rotation. The server
+    // rebuilds the config from the ItemGroup (rotateParcel falls back to a
+    // plain selection rotation when the parcel has no ItemGroup record).
     if (isCompleteParcelSelected && selectedParcelGroupNumber) {
-      const groupItems = inventory.filter(i => i.group === selectedParcelGroupNumber)
-      const firstWithGroup = groupItems.find(i => i.itemGroupId)
-      if (firstWithGroup?.itemGroupId) {
-        const ig = await getItemGroup(firstWithGroup.itemGroupId)
-        if (ig) {
-          const newConfig: ChairConfig = {
-            rows: Math.ceil(groupItems.length / ig.seatsPerRow),
-            seatsPerRow: ig.seatsPerRow,
-            horizontalGap: ig.horizontalGap,
-            verticalGap: ig.verticalGap,
-            rotation: ig.rotation + delta,
-            group: ig.number,
-            category: ig.category || undefined,
-            price: ig.price || undefined,
-            pairSeats: ig.pairGap > 0,
-            intraPairGap: ig.pairGap,
-            baseLat: parseFloat(ig.locationLat),
-            baseLng: parseFloat(ig.locationLng),
-          }
-          await syncChairsWithLayout(siteId, newConfig, 'rearrange')
-          await refreshItems(groupItems.map((i) => i.id))
-          return
-        }
-      }
+      const res = await rotateParcel(siteId, selectedParcelGroupNumber, delta)
+      await refreshItems(res.changedItemIds ?? selectedItemIds)
+      return
     }
 
     await rotateSelection(siteId, selectedItemIds, delta)
@@ -349,52 +352,10 @@ export default function InventoryView() {
     const groupItems = inventory.filter(i => i.group === group)
     if (groupItems.length === 0) return
 
-    const firstWithGroup = groupItems.find(i => i.itemGroupId)
-    if (firstWithGroup?.itemGroupId) {
-      const ig = await getItemGroup(firstWithGroup.itemGroupId)
-      if (ig) {
-        const config: ChairConfig = {
-          itemGroupId: ig.id,
-          rows: Math.ceil(groupItems.length / ig.seatsPerRow),
-          seatsPerRow: ig.seatsPerRow,
-          horizontalGap: ig.horizontalGap,
-          verticalGap: ig.verticalGap,
-          rotation: ig.rotation,
-          group: ig.number,
-          category: ig.category || undefined,
-          price: ig.price || undefined,
-          pairSeats: ig.pairGap > 0,
-          intraPairGap: ig.pairGap,
-          baseLat: parseFloat(ig.locationLat),
-          baseLng: parseFloat(ig.locationLng),
-        }
-        await syncChairsWithLayout(siteId, config, 'rearrange')
-        const updatedSite = await getSite(siteId)
-        if (updatedSite) {
-          setSite(updatedSite)
-          const updatedGroupItems = (updatedSite.inventoryItems || []).filter((i: InventoryItem) => i.group === group && i.status !== 'pool')
-          setSelectedItemIds(updatedGroupItems.map((i: InventoryItem) => i.id))
-        }
-        return
-      }
-    }
-
-    // Fallback for parcels without an ItemGroup record
-    const avgLat = groupItems.reduce((s, i) => s + Number(i.locationLat), 0) / groupItems.length
-    const avgLng = groupItems.reduce((s, i) => s + Number(i.locationLng), 0) / groupItems.length
-    const config: ChairConfig = {
-      rows: Math.ceil(groupItems.length / (parcelConfig.seatsPerRow || 4)),
-      seatsPerRow: parcelConfig.seatsPerRow || 4,
-      horizontalGap: parcelConfig.horizontalGap,
-      verticalGap: parcelConfig.verticalGap,
-      rotation: groupItems[0]?.rotation || 0,
-      group,
-      pairSeats: true,
-      intraPairGap: parcelConfig.intraPairGap,
-      baseLat: avgLat,
-      baseLng: avgLng,
-    }
-    await syncChairsWithLayout(siteId, config, 'rearrange')
+    // Server composition (track 030 S1b): empty patch = re-lay on the stored
+    // config (or, for a legacy parcel without an ItemGroup, on a fresh one
+    // anchored at the seats' centroid).
+    await applyParcelConfig(siteId, group, {})
     const updatedSite = await getSite(siteId)
     if (updatedSite) {
       setSite(updatedSite)
@@ -533,13 +494,8 @@ export default function InventoryView() {
 
   const handleRotateSingleItem = async (delta: number) => {
     if (!selectedItemId || !selectedItem) return
-    // Group-first: collect other members of the same SunbedGroup from in-memory inventory.
-    const partnerIds: string[] = selectedItem.sunbedGroupId
-      ? inventory
-          .filter((i) => i.sunbedGroupId === selectedItem.sunbedGroupId && i.id !== selectedItemId)
-          .map((i) => i.id)
-      : []
-    await sunbedEditing.rotateSingle(selectedItemId, selectedItem.rotation ?? 0, delta, partnerIds)
+    // The unit's members are resolved server-side from sunbedGroupId.
+    await sunbedEditing.rotateSingle(selectedItemId, delta)
   }
 
   const handleDeleteSingleItem = async () => {
@@ -763,6 +719,8 @@ export default function InventoryView() {
           onEnsureGroups={handleEnsureGroups}
           onMovedGroup={handleMovedGroup}
             selectedPlace={selectedPlace}
+            ghostModel={ghost.model}
+            ghostFocusKey={ghost.focusKey}
           />
         </div>
 

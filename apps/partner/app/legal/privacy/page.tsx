@@ -8,7 +8,7 @@ export default async function PartnerPrivacyPage() {
       <div className="max-w-3xl mx-auto px-4 py-8 sm:px-6 sm:py-12 text-sm text-gray-700 leading-relaxed break-words">
 
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1">Privacy Policy &mdash; Partner Portal</h1>
-        <p className="text-xs text-gray-400 mb-8">Sunbnb Partner Programme &middot; Last updated: 10 October 2026</p>
+        <p className="text-xs text-gray-400 mb-8">Sunbnb Partner Programme &middot; Last updated: 11 October 2026</p>
 
         <p className="mb-6">
           This policy explains how personal data is handled when you visit the Sunbnb partner portal (partner.sunbnb.app), create a partner account, or manage a venue with us. The privacy policy for guests who book through sunbnb.app is published separately on that site.
@@ -52,19 +52,32 @@ export default async function PartnerPrivacyPage() {
         <section className="mb-8">
           <h2 className="text-base font-semibold text-gray-900 mb-2">4. Service Providers</h2>
           <p>
-            We share data with providers that help us run the service: hosting, email delivery, payment providers you connect (Mollie, Stripe, Viva) and, with your consent, Google (analytics). We require all providers to handle data in line with the GDPR.
+            We share data with providers that help us run the service: hosting, email delivery, payment providers you connect (Mollie, Stripe, Viva) with your consent, Google (analytics), and, if you use the AI assistant, Anthropic (see section 5). We require all providers to handle data in line with the GDPR.
           </p>
         </section>
 
         <section className="mb-8">
-          <h2 className="text-base font-semibold text-gray-900 mb-2">5. Retention</h2>
+          <h2 className="text-base font-semibold text-gray-900 mb-2">5. AI Assistant, Documents and Photos</h2>
+          <p>
+            The partner portal includes an AI assistant. To answer you, the text of your conversation and the details of the venue you have open (for example prices, opening hours and inventory) are sent to <strong>Anthropic</strong> (Anthropic, PBC, United States), our sub-processor for the assistant, which processes them only to generate the reply. Anthropic does not use this data to train its models under its commercial terms. The transfer outside the EEA relies on the safeguards Anthropic provides (such as standard contractual clauses).
+          </p>
+          <p className="mt-2">
+            You may also upload company documents (PDF, Word) or photos so the assistant can read them. An uploaded file is stored privately with our hosting provider, is visible only to your account, and is sent to Anthropic when you ask the assistant to read it. We delete uploaded files automatically <strong>30 days</strong> after upload. Please do not upload bank details, identity documents or other personal data you do not need us to read; the assistant is built never to enter bank account numbers, payment credentials, tax-authority credentials or personal ID numbers, and you must enter those yourself in your account settings. The assistant only prepares changes: nothing is saved to your venue until you review it and press Apply.
+          </p>
+          <p className="mt-2">
+            Assistant proposals are kept for 90 days and conversations for 12 months so you can review what was changed, and are then deleted.
+          </p>
+        </section>
+
+        <section className="mb-8">
+          <h2 className="text-base font-semibold text-gray-900 mb-2">6. Retention</h2>
           <p>
             We keep data only as long as needed for the purposes above or as required by law (invoicing and tax records are retained for the legally required period), and then delete or anonymise it.
           </p>
         </section>
 
         <section className="mb-8">
-          <h2 className="text-base font-semibold text-gray-900 mb-2">6. Your Rights</h2>
+          <h2 className="text-base font-semibold text-gray-900 mb-2">7. Your Rights</h2>
           <p>
             You may request access to, correction, erasure, restriction or portability of your personal data, object to processing based on legitimate interests, and withdraw consent at any time. Contact us at {co.contactEmail ?? 'partners@sunbnb.app'}. You may also lodge a complaint with a supervisory authority in your EU member state.
           </p>

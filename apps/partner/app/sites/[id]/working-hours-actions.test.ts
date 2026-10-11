@@ -264,3 +264,30 @@ describe('deleteWorkingHours', () => {
     expect('workingHours' in res && res.workingHours).toEqual([])
   })
 })
+
+// ─── Sudo bypass (track 030 S3: the assistant applies as the owner OR a sudo) ──
+
+describe('sudo bypass on slot-scoped actions', () => {
+  function actAs(userId: string, sudo: boolean) {
+    mockAuth.mockResolvedValue({ user: { id: userId } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo } as any)
+    vi.mocked(prisma.siteWorkingHours.findUnique).mockResolvedValue({ siteId: SITE_ID, site: { userId: OWNER_ID } } as any)
+    vi.mocked(prisma.siteWorkingHours.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.siteWorkingHours.delete).mockResolvedValue({} as any)
+    vi.mocked(prisma.siteWorkingHours.findMany).mockResolvedValue(WH_LIST as any)
+  }
+
+  it('a sudo who does not own the site may update and delete a slot', async () => {
+    actAs('admin-1', true)
+    expect((await updateWorkingHours(WH_ID, { openTime: '09:00', closeTime: '17:00' })).status).toBe('ok')
+    expect((await deleteWorkingHours(WH_ID)).status).toBe('ok')
+  })
+
+  it('a non-owner non-sudo is still rejected', async () => {
+    actAs(OTHER_ID, false)
+    expect((await updateWorkingHours(WH_ID, { openTime: '09:00', closeTime: '17:00' })).errors).toContain('Not authorized')
+    expect((await deleteWorkingHours(WH_ID)).errors).toContain('Not authorized')
+    expect(prisma.siteWorkingHours.update).not.toHaveBeenCalled()
+    expect(prisma.siteWorkingHours.delete).not.toHaveBeenCalled()
+  })
+})

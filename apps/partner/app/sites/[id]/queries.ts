@@ -4,6 +4,7 @@ import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { resolveSiteFees } from '@repo/data/payment'
 import { INVENTORY_ITEM_SELECT } from './item-select'
+import { isOwnerOrSudo } from '@/lib/owner-or-sudo'
 
 // ─── Scoped Item Refresh ────────────────────────────────────────────────────
 
@@ -98,5 +99,24 @@ export async function getSite(siteId: string) {
     ])
   }
 
+  return site
+}
+
+// ─── Light site refresh (assistant resync) ──────────────────────────────────
+
+/**
+ * The site's own columns + working hours, WITHOUT seats, layout elements or products. The assistant
+ * writes only these, so the SiteContext merges this over its copy after an Apply/Undo
+ * (`router.refresh()` never reaches the provider's `useState`). Owner or sudo, like the page.
+ */
+export async function getSiteScalars(siteId: string) {
+  const session = await auth()
+  if (!session?.user?.id) return null
+
+  const site = await prisma.site.findFirst({
+    where: { id: siteId },
+    include: { workingHours: true },
+  })
+  if (!site || !(await isOwnerOrSudo(site.userId, session.user.id))) return null
   return site
 }
