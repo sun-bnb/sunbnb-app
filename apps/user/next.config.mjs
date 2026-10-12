@@ -43,31 +43,15 @@ const nextConfig = {
           { key: 'Content-Security-Policy', value: 'frame-ancestors *' },
         ],
       },
-      // /hbd is a static birthday page (public/hbd) that listens for the
-      // viewer blowing out candles, so it is the one path allowed the mic.
+      // Everything except /embed keeps the strict no-framing posture.
       {
-        source: '/hbd/:path*',
-        headers: [
-          { key: 'X-Frame-Options', value: 'DENY' },
-          ...baseSecurity.map((h) =>
-            h.key === 'Permissions-Policy' ? { ...h, value: 'camera=(), microphone=(self), geolocation=(self)' } : h
-          ),
-        ],
-      },
-      // Everything except /embed and /hbd keeps the strict no-framing posture.
-      {
-        source: '/((?!embed|hbd).*)',
+        source: '/((?!embed).*)',
         headers: [
           { key: 'X-Frame-Options', value: 'DENY' },
           ...baseSecurity,
         ],
       },
     ]
-  },
-  async rewrites() {
-    // Static pages in public/ are only served at their file path; map the
-    // bare /hbd URL onto its index.html.
-    return [{ source: '/hbd', destination: '/hbd/index.html' }]
   },
 };
 
