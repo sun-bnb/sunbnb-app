@@ -49,7 +49,7 @@ landmines). Before composing non-trivial queries:
 2. **Status vocabulary:** `packages/data/src/reservation-status.ts` — status fields are plain
    strings; use these **exact** values, never invent or guess casing.
 3. **Domain context:** the relevant `.claude/wiki/entities/*` page (reservation, order,
-   invoice, settlement, service-fee, table-reservation) and `packages/data/CLAUDE.md` for the
+   invoice, service-fee, table-reservation) and `packages/data/CLAUDE.md` for the
    model / payment / invoice layer.
 
 ## Schema landmines for raw SQL (Prisma naming is NOT uniform)
@@ -128,14 +128,6 @@ WHERE site_id = '<siteId>' AND status IN ('complete', 'paid-in-cash')
 GROUP BY 1 ORDER BY 1 DESC;
 ```
 
-Settlement coverage for a period (does a draft already exist?):
-```sql
-SELECT id, period_start, period_end, gross_revenue, commission, net_payout, currency
-FROM "Settlement"
-WHERE account_id = '<accountId>' AND site_id = '<siteId>'
-ORDER BY period_start DESC;
-```
-
 ## Fixing data (test / production) — never raw, never improvised
 
 MCP can't write, and that's the right default. When a genuine data fix is warranted:
@@ -143,10 +135,10 @@ MCP can't write, and that's the right default. When a genuine data fix is warran
 1. **Diagnose first** with read-only queries here. Write up the exact rows and the intended
    change before touching anything.
 2. **Prefer the model layer over raw SQL.** A fix routed through a `@repo/data` function or a
-   server action keeps the invariants intact — invoice idempotency + hash chain, settlement
-   aggregation, VAT / fee cascade, status-transition rules. A bare `UPDATE` can silently break
-   the invoice hash chain or orphan a settlement roll-up.
-3. **Name the blast radius** before any write: which invoices, settlements, or aggregates
+   server action keeps the invariants intact — invoice idempotency + hash chain,
+   VAT / fee cascade, status-transition rules. A bare `UPDATE` can silently break
+   the invoice hash chain.
+3. **Name the blast radius** before any write: which invoices or aggregates
    depend on this row? Cross-reference `.claude/rules/payments.md` and `data-access.md`.
 4. **Execution path (all human-gated, none through MCP):** Prisma Studio
    (`cd packages/data && source .env.local && npx prisma studio`) for a one-off field on

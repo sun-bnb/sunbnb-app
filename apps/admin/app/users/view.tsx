@@ -691,7 +691,7 @@ export default function UsersView({ initialUsers }: { initialUsers: AdminUser[] 
               )}
               <li className="flex items-center gap-2">
                 <span className="w-1 h-1 rounded-full bg-gray-600" />
-                All connected settlements, invoices &amp; sessions
+                All connected invoices &amp; sessions
               </li>
             </ul>
 

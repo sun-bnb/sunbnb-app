@@ -28,9 +28,6 @@ export default async function PartnersPage() {
         where: { accountId: { not: null } },
         select: { id: true, accountId: true },
       },
-      _count: {
-        select: { settlements: true },
-      },
     },
     orderBy: { company: 'asc' },
   })

@@ -85,7 +85,7 @@ function AdminHealthPanel() {
 
 function SignInContent() {
   const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get('callbackUrl') || '/settlements'
+  const callbackUrl = searchParams.get('callbackUrl') || '/partners'
   // NextAuth v5 puts custom error codes in ?code=, default is 'credentials'
   const codeParam = searchParams.get('code')
   const errorParam = codeParam && codeParam !== 'credentials' ? codeParam : searchParams.get('error')

@@ -299,7 +299,8 @@ export async function deleteUser(userId: string) {
   const siteIds = user.sites.map((s) => s.id)
   const partnerAccountId = user.partnerAccount?.userId
 
-  // 1. Delete Settlements (no cascade from PartnerAccount or Site)
+  // 1. Delete legacy Settlement rows (no cascade from PartnerAccount or Site). The settlement
+  //    feature is retired (track 032); this cleanup goes when the table is dropped.
   if (partnerAccountId) {
     await prisma.settlement.deleteMany({ where: { accountId: partnerAccountId } })
   }

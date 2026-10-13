@@ -869,6 +869,9 @@ model Invoice {
   @@index([creditsInvoiceId])
 }
 
+// LEGACY (track 032): the platform-payout settlement feature is retired — consumer payments are
+// direct charges to the partner. Unused since step 1; dropped with Invoice.settlementBatchId in a
+// later contract migration. Do not build on it.
 model Settlement {
   id            String           @id @default(cuid())
   accountId     String           @map("account_id")

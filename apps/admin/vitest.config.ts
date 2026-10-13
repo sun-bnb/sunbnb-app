@@ -21,7 +21,6 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname),
       '@repo/data/PrismaCient': path.resolve(__dirname, '__mocks__/@repo/data/PrismaCient'),
-      '@repo/data/settlement': path.resolve(__dirname, '__mocks__/@repo/data/settlement'),
       '@repo/data/password-reset': path.resolve(__dirname, '__mocks__/@repo/data/password-reset'),
       '@repo/data/rate-limit': path.resolve(__dirname, '__mocks__/@repo/data/rate-limit'),
       '@repo/data/auth': path.resolve(__dirname, '__mocks__/@repo/data/auth'),

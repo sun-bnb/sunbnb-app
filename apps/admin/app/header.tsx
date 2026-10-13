@@ -8,7 +8,6 @@ import { usePathname } from 'next/navigation'
 import { useState, useRef, useEffect } from 'react'
 
 const navItems = [
-  { label: 'Settlements', href: '/settlements' },
   { label: 'Partners', href: '/partners' },
   { label: 'Leads', href: '/leads' },
   { label: 'Sites', href: '/sites' },
