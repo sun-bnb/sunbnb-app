@@ -1,9 +1,9 @@
 ---
 id: 018-reservation-state-machine
 title: Reservation state machine — explicit model, conservation contracts, matrix enforcement
-status: active
+status: done
 created: 2026-08-11
-updated: 2026-08-11
+updated: 2026-10-13
 worktree: null
 ---
 
@@ -32,6 +32,7 @@ must-reject cells). Known logical errors become red cells first, then fixes.
 
 ## Resume here
 
+- **DONE 2026-10-13** (track 031 status pass) — state machine P0–P4 shipped and ingested into wiki `subsystems/reservation-state-machine.md` (2026-08-11).
 - **Next action:** commit P4 slice (g) — docs/wiki sync (awaiting founder's word).
   That closes the track's built scope: P0–P3 done, P4 slices 1/2/3/e/f/g done,
   browser-verified.
@@ -450,6 +451,7 @@ deletable rule; D13 grouping kept; kind derived not persisted; no new status str
   `paymentAmount` but not TillEntry/receipt-invoice linkage; B2/B3 carried over from the
   2026-08-11 unreserve-vs-depart analysis. Plan: extract → design (founder gate) →
   encode → matrix tests → migrate. Fable 5 session.
+- **2026-10-13** — Status → done (track 031 status pass, founder-approved): state machine P0–P4 shipped and ingested into wiki `subsystems/reservation-state-machine.md` (2026-08-11).
 
 ## Links
 

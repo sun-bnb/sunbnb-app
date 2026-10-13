@@ -1,9 +1,9 @@
 ---
 id: 002-table-reservations
 title: Table Reservations
-status: active
+status: paused
 created: 2026-05-21
-updated: 2026-07-19
+updated: 2026-10-13
 worktree: null
 ---
 
@@ -62,6 +62,7 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
 
 ## Resume here
 
+- **PAUSED 2026-10-13** (track 031 status pass) — core and dine-in tabs v2 shipped; remaining follow-ups wait for a new product ask.
 - **✅ SHIPPED (2026-07-25): Dine-in tabs v2 — the standalone-restaurant rail (decoupling
   from Site).** Founder-decided reversal of v1's fork (2): dine-in no longer rides the site
   Order/Product rails. Six commits on `main` (`e528758` → `bee7e45`): expand migration
@@ -1085,6 +1086,7 @@ integration — moved to the Roadmap backlog. (2) Restaurant management moves to
 — site-linked create from a Site page *and* standalone create from `/restaurants/create` — both
 backed by one `createRestaurant({ siteId? })` action; the difference is only which UI surfaces it
 and whether `siteId` is supplied.)_
+- **2026-10-13** — Status → paused (track 031 status pass, founder-approved): core and dine-in tabs v2 shipped; remaining follow-ups wait for a new product ask.
 
 ## Links
 

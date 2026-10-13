@@ -6,19 +6,18 @@ sources:
   - packages/data/prisma/schema.prisma#model-RentalItem
   - packages/data/prisma/schema.prisma#model-RentalBooking
   - apps/user/app/sites/[id]/actions.ts#saveRentalBooking
-  - apps/partner/app/sites/[id]/rentals/actions.ts
-  - apps/partner/app/sites/[id]/manage/actions.ts#markRentalPickedUp
-  - apps/partner/app/sites/[id]/manage/actions.ts#markRentalReturned
-  - apps/partner/app/sites/[id]/manage/actions.ts#createWalkInRental
+  - packages/data/src/reservations.ts#createRentalBookingsWithGuard
+  - apps/user/app/api/payment/mollie/create-rental-payment/route.ts
   - packages/data/src/payment.ts#processConfirmedRentalBooking
-  - packages/data/src/reservation-status.ts
+  - apps/partner/app/sites/[id]/manage/actions.ts
+  - apps/partner/app/sites/[id]/rentals/actions.ts
 related:
   - entity:reservation
   - entity:invoice
   - entity:service-fee
   - flow:reservation-payment
   - flow:walk-in
-last_verified: 2026-05-26
+last_verified: 2026-10-13
 ---
 
 # Flow: Rental Booking
@@ -27,42 +26,41 @@ Equipment rental (surfboards, paddleboards, kayaks, etc.) — hourly or daily. D
 
 ## Pre-conditions
 
-- Site has `"rentals"` in its `features[]` array (toggle via `apps/partner/app/sites/[id]/rentals/actions.ts#toggleSiteFeature`).
-- At least one `RentalItem` exists for the site with at least one of `pricePerHour` / `pricePerDay` set.
-- User authenticated (anonymous flow exists for partner-side walk-in rentals via the manage page).
+- Site has `"rentals"` in its `features[]` (partner toggles via `apps/partner/app/sites/[id]/rentals/actions.ts#toggleSiteFeature`; the consumer UI gates on it — `saveRentalBooking` itself does not re-check).
+- At least one `active` `RentalItem` for the site with `pricePerHour` and/or `pricePerDay`.
+- Consumer: session user, or `anonId` (booking `userId` = site owner to satisfy the FK).
 
 ## Trigger paths
 
 | Path | Where |
 |---|---|
-| Consumer self-serve | `apps/user/app/sites/[id]` → switch to equipment tab → select item + duration |
+| Consumer self-serve | `apps/user/app/sites/[id]` → equipment tab → cart of items + duration |
 | Walk-in (partner on-site) | `apps/partner/app/sites/[id]/manage` → "Create Walk-in Rental" |
 
 ## Sequence — Consumer self-serve
 
-1. **Availability check** — `apps/user/app/sites/[id]/actions.ts#saveRentalBooking`
-   - Sum the `quantity` of existing `RentalBooking` rows that:
-     - Match `rentalItemId`
-     - Overlap the requested `from`/`to` window (`existing.from < requested.to AND existing.to > requested.from`)
-     - Are NOT in `returned` / `canceled` operational status
-   - Reject if `sum + requested.quantity > rentalItem.totalQuantity`
-2. **Create booking** — `RentalBooking` insert with:
-   - `durationType` (`"hours"` or `"days"`)
-   - `quantity` (default 1)
-   - `totalPrice` calculated server-side from `pricePerHour × hours` or `pricePerDay × days` × `quantity`
-   - `status: pending`, `operationalStatus: reserved`
-3. **Payment** — follows the same Mollie / Demo paths as `[[flow:reservation-payment]]`
-   - On confirmation → `processConfirmedRentalBooking(paymentRef)` — note: groups bookings by `paymentRef` (a single payment can cover multiple booking rows)
-4. **Invoice** — same as reservations: PARTNER invoice booked gross (full price), and a separate PLATFORM commission invoice billed to the partner.
+1. **Create bookings** — `apps/user/app/sites/[id]/actions.ts#saveRentalBooking`
+   - Validates ids, `durationType` (`hours` | `days`), quantities, `from < to`
+   - Loads `RentalItem`s scoped to the site with `active: true`; prices from DB: `pricePerHour × ceil(hours) × qty` or `pricePerDay × days × qty` (falls back to whichever price exists)
+   - `status`: `pending` when the site's `rentalPaymentType ?? type` is `paid`, else `complete` (off-platform billing); `operationalStatus: reserved`; `paymentAmount = totalPrice`
+   - **Availability + create in one transaction** — `createRentalBookingsWithGuard` (`packages/data/src/reservations.ts`): `SELECT … FOR UPDATE` on the RentalItem rows, then per booking sums overlapping `quantity` (`from < to' AND to > from'`, excluding `operationalStatus` `returned` / `canceled`) against `totalQuantity`; all-or-nothing.
+2. **Payment** (paid sites) — one payment covers all booking rows (shared `paymentRef`):
+   - Mollie: `apps/user/app/api/payment/mollie/create-rental-payment/route.ts` → `createRentalBookingMolliePayment` (`packages/data/src/rental-payment.ts`)
+   - Stripe Connect / Viva: `/api/payment/create` with `kind: 'rental'` → `createOnlineCheckout`
+   - Demo: `initiateDemoRentalPayment`
+   - Provider and fee mechanics: `[[subsystem:payments]]`
+3. **Verify / webhook** — `apps/user/app/api/rental-bookings/[id]/route.ts` polls `getPaymentStatus`; webhooks route `rental-booking` events via `_lib/payment-events.ts`.
+4. **Invoice** — `processConfirmedRentalBooking(paymentRef)`: idempotent on `paymentRef` (invoices carry it — rentals have no Invoice FK); PARTNER invoice with one `equipment-rental` line per booking (gross), PLATFORM commission via `serviceFeeForUnits` (fixed fee per booking line). Fires `sendRentalConfirmationEmail` (`packages/data/src/rental-emails.ts`) for the first booking.
 
 ## Sequence — Walk-in rental (partner)
 
-1. **Partner opens manage page** — `/sites/[id]/manage` with `accessKey` token
+1. **Manage page** — `/sites/[id]/manage` (session owner, or `accessKey` token)
 2. **Create walk-in rental** — `apps/partner/app/sites/[id]/manage/actions.ts#createWalkInRental`
-   - Token-gated (validates `SecurityToken` row, expiry, and `resources` includes `'all'` or `'manage_site'`)
-   - Quick-pick duration: 1h, 2h, 3h, all day
-   - Availability checked the same way as consumer path
-   - Creates `RentalBooking` directly (no payment intent — assumed paid in cash on-site or settled separately)
+   - `verifySiteOwnership(siteId, accessKey)`; ≤ 20 items, qty 1–100, hours 1–24 or venue-anchored days
+   - `paymentType`: `cash` → `status: paid-in-cash`; `free` → `complete` (amount 0)
+   - Same `createRentalBookingsWithGuard` availability + create
+   - Genuine cash (`recordCashSettlement`): a `TillEntry` per booking + PARTNER-only receipt via `processCashRentalBooking` (keyed `cash-rental-<bookingId>`, non-blocking)
+   - Card on the spot: bookings created as `paid-in-cash`, then `collectRentalPayment` (QR / terminal); invoiced by `processConfirmedRentalBooking` when the provider settles — no till entry at create (would double-count)
 
 ## Operational lifecycle (after creation)
 
@@ -70,37 +68,36 @@ Equipment rental (surfboards, paddleboards, kayaks, etc.) — hourly or daily. D
 reserved → picked-up → returned
 ```
 
-Transitions:
-- `markRentalPickedUp` — partner records the customer picked up the equipment (`pickedUpAt` set)
-- `markRentalReturned` — partner records return (`returnedAt` set; booking becomes terminal)
+- `markRentalPickedUp` — requires `reserved`; sets `picked-up`, `pickedUpAt`
+- `markRentalReturned` — requires `picked-up`; sets `returned`, `returnedAt` (frees quantity)
 
-Overdue indicator: hourly bookings past their `to` time without being marked returned show as overdue in `RentalBookingCard`.
+Overdue indicator: hourly bookings past `to` and not returned show as overdue in the manage UI.
 
 ## Side effects
 
-- DB writes: `RentalBooking` (insert + status updates), `Invoice` (×2 on confirmation), `InvoiceLine` (multiple).
-- Email: confirmation per `reservation-emails.ts` — verify rental-specific template exists before claiming.
+- DB writes: `RentalBooking` rows, `Invoice` (PARTNER + PLATFORM online; PARTNER-only cash), `InvoiceLine`, `TillEntry` (cash walk-in).
+- Email: rental confirmation on online confirmation; due reminders via `sendRentalDueReminders`.
 
 ## Failure modes
 
 | Failure | Detection | Recovery |
 |---|---|---|
-| Overlap conflict on insert | Availability re-check fails | `{ status: 'error', errors: [...] }` |
-| Site lacks `"rentals"` feature | Action rejects | Partner must enable via `toggleSiteFeature` |
-| RentalItem missing price for selected duration type | Action rejects | UI should not have offered the option |
+| Quantity exhausted | Guard returns `outcome: 'unavailable'` | `{ status: 'error', errors: ['Not enough "<item>" available…'] }` |
+| Inactive / foreign `RentalItem` | Lookup count mismatch | `'Some items are not available'` |
+| Cash receipt fails | Logged, non-blocking | Sale stands; re-run `processCashRentalBooking` (idempotent) |
 
 ## Related
 
 - `[[entity:reservation]]` — sibling entity (sunbed bookings)
 - `[[entity:invoice]]` — invoices created on confirmation
 - `[[entity:service-fee]]` — fees apply
-- `[[flow:reservation-payment]]` — payment paths are shared (Mollie/Demo)
+- `[[flow:reservation-payment]]` — payment paths are shared (Mollie / Stripe Connect / Viva / demo)
 - `[[flow:walk-in]]` — manage page lifecycle (sunbed side)
 
 ## Common pitfalls
 
-- **Availability check that ignores `quantity`.** Rentals are quantity-bearing — must sum, not just count overlaps.
+- **Availability check that ignores `quantity`, or runs outside the guard.** Rentals are quantity-bearing — sum inside `createRentalBookingsWithGuard`'s locked transaction.
 - **Status field collisions with sunbed reservations.** Different operational statuses: `reserved/picked-up/returned`, not `expected/checked-in/departed`. Use `OP_*` constants from `reservation-status.ts`.
 - **Hours vs days price mismatch.** `RentalItem` may have only one of `pricePerHour`/`pricePerDay` set. Match the booking's `durationType`.
-- **Walk-in rentals bypassing availability.** They don't — the action runs the same check.
-- **Treating `returned` as a payment status.** It's operational. Payment status remains `complete` (or whatever it was).
+- **Looking for a rental's invoice by FK.** There is none; match `Invoice.paymentRef` (online ref, or `cash-rental-<bookingId>`).
+- **Treating `returned` as a payment status.** It's operational. Payment status remains `complete` / `paid-in-cash`.

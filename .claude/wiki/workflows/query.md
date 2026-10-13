@@ -5,10 +5,12 @@ status: stable
 sources:
   - .claude/wiki/README.md
   - .claude/wiki/index.md
+  - .claude/scripts/knowledge-recall.mjs
+  - .claude/commands/recall.md
 related:
   - workflow:ingest
   - workflow:debugging
-last_verified: 2026-05-20
+last_verified: 2026-10-13
 ---
 
 # Workflow: Query
@@ -19,50 +21,44 @@ When the user asks a question — about the architecture, how a flow works, wher
 
 ### 1. Decompose the question into concepts
 
-"How does an order get paid?" → concepts: **order**, **payment**, **mollie/demo**, **invoice**.
+"How does an order get paid?" → **order**, **payment** (provider rails: Mollie, Stripe Connect, Viva, demo), **invoice**.
 
-"Why isn't the partner seeing their commission?" → concepts: **settlement**, **invoice (platform)**, **service-fee**.
+"Why isn't the partner seeing their commission?" → **settlement**, **invoice (platform)**, **service-fee**.
 
-### 2. Scan the index
+### 2. Find candidate pages
 
-`index.md` is intentionally short. Read it top-to-bottom; identify candidate pages by concept.
+Two entry points; use both when the question is fuzzy:
 
-```bash
-grep -i "<concept>" .claude/wiki/index.md
-```
+- **The index** — `index.md` is short; scan it for the concept slugs (`grep -i "<concept>" .claude/wiki/index.md`).
+- **Recall** — `/recall "<question>"` (or `node .claude/scripts/knowledge-recall.mjs "<question>"`). Results come back tiered: **wiki** (canon) → **playbook** (curated) → **track** (intent) → **episodic** (raw past sessions). Wiki hits name the page and `##` section; `--layer wiki` restricts to the wiki, `--surface <agent>` keeps only that agent's playbook in the playbook tier.
 
 ### 3. Read the candidate pages
 
-Read full pages (they're short). Follow `[[…]]` cross-refs that the page suggests are relevant to your question.
+Read the matching pages (they're short) and follow `[[…]]` cross-refs the page marks as relevant. For per-surface detail, the page points at canon — the app/package `CLAUDE.md` and its pulled siblings (`PATTERNS.md`, `HW-API.md`, `ASSISTANT.md`, `EXPORTS.md`, `TESTING.md`, `UI.md`).
 
 ### 4. Check freshness
 
-If a page's `last_verified` is older than 90 days, or its `status` is `draft` / `stale`, treat its claims as **hypotheses**, not facts. Verify against `sources:` before relying on them.
+`last_verified` older than 90 days, or `status` `draft` / `stale` → treat the claims as **hypotheses**; verify against `sources:` before relying on them. Playbook and episodic hits are leads of lower trust — verify those too.
 
 ### 5. Drop down to source when needed
 
-If the wiki page doesn't answer the question fully, or you need a current line number / type signature / actual code:
+If the page doesn't answer fully, or you need a current line / signature / actual code:
 
-- Read the files listed in `sources:`
-- Use `Grep` / `Glob` for symbols the wiki page mentions
-- Prefer `data-dev`, `partner-dev`, `user-dev`, `admin-dev` sub-agents for app-scoped digs
+- read the files in `sources:`; grep for symbols the page names;
+- for DB state, use `/db` (read-only, env-tiered);
+- delegate app-scoped digs to `data-dev`, `partner-dev`, `user-dev`, `admin-dev`.
 
 ### 6. Synthesize the answer with citations
 
-Cite both wiki pages and source files in your answer:
+Cite wiki pages and source files:
 
-> Reservations create two invoices on payment success (see `[[entity:invoice]]` and `packages/data/src/payment.ts#processConfirmedReservation`)…
+> Reservations create a gross PARTNER invoice plus a PLATFORM commission invoice on payment success (see `[[entity:invoice]]` and `packages/data/src/payment.ts#processConfirmedReservation`)…
 
-This lets the user verify and lets future-you find the citation again.
+If a recall hit materially helped, credit it: `node .claude/scripts/knowledge-recall.mjs --credit <id,id>` (feeds `/groom` promotion).
 
 ### 7. If you found a gap, ingest
 
-If you had to do meaningful source reading to answer the question, the wiki has a gap. Either:
-
-- Add the new insight to an existing page (preferred), or
-- Create a new page for it (only if it's reusable; see `[[workflow:ingest]]`)
-
-Update `last_verified` on any page whose claims you re-verified.
+Meaningful source reading to answer the question = the wiki has a gap. Add the insight to an existing page (preferred) or, if reusable and it passes the two-strikes rule, a new page — via `[[workflow:ingest]]`. Bump `last_verified` only on pages whose claims you actually re-verified.
 
 ## Quick patterns
 
@@ -71,12 +67,14 @@ Update `last_verified` on any page whose claims you re-verified.
 | "What is X?" (concept) | `entities/` |
 | "How does X happen end-to-end?" | `flows/` |
 | "How does the X module work?" | `subsystems/` |
-| "Where is X handled?" | the relevant entity/flow page; then `sources:` |
-| "Why does X behave this way?" | the **Invariants** or **Common pitfalls** section of the matching page |
-| "What changed about X recently?" | `git log` first, then `log.md` for wiki-recorded ingests |
+| "Where is X handled?" | the matching entity/flow page, then its `sources:` |
+| "Why does X behave this way?" | the page's **Invariants** / **Common pitfalls** |
+| "Where does effort X stand?" | `.claude/tracks/index.md` (generated) → the track's **Resume here** |
+| "What changed about X recently?" | `git log` first, then `log.md` for wiki-recorded changes |
 
 ## Anti-patterns
 
-- **Quoting the wiki without verifying.** Wiki pages can drift. For anything load-bearing (auth checks, payment math, status logic), verify against `sources:` before claiming current behaviour.
-- **Ignoring the wiki and grepping source for everything.** The wiki exists so you don't have to. Try it first.
-- **Synthesizing an answer that contradicts the wiki without resolving the contradiction.** If you find the wiki wrong, ingest the correction; don't just route around it.
+- **Quoting the wiki without verifying** anything load-bearing (auth checks, payment math, status logic).
+- **Ignoring the wiki and grepping source for everything.** Try the wiki and recall first.
+- **Treating an episodic hit as fact.** It's a lead from a past session; the code may have moved since.
+- **Answering against the wiki without resolving the contradiction.** If the wiki is wrong, ingest the correction.

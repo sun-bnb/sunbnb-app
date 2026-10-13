@@ -6,7 +6,6 @@ sources:
   - packages/data/src/site-day.ts
   - packages/table-reservations-core/src/tz.ts
   - packages/data/src/analytics.ts
-  - packages/data/src/settlement.ts
   - packages/data/src/reservation-emails.ts
   - apps/user/service/siteService.ts
   - packages/data/scripts/backfill-site-timezones.ts
@@ -14,8 +13,6 @@ related:
   - subsystem:employee-till
   - subsystem:table-reservations
   - entity:reservation
-  - entity:settlement
-  - flow:settlement-cycle
 last_verified: 2026-08-15
 ---
 
@@ -58,7 +55,6 @@ NULL rows are populated by `npm run backfill:tz:{local,test,production}[:dry]`
 
 - [[subsystem:employee-till]] — the original venue-day-anchored consumer (two-bucket till windows).
 - [[subsystem:table-reservations]] — the Restaurant-domain wall-clock engine over `tz.ts`.
-- [[flow:settlement-cycle]] / [[entity:settlement]] — settlement periods window on venue civil days via `siteDateBounds`.
 - Track record + open follow-ups: `.claude/tracks/017-venue-timezone-anchoring.md`.
 
 ## Common pitfalls

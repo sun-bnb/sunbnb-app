@@ -1,9 +1,9 @@
 ---
 id: 015-cash-sale-receipts
 title: Cash-sale receipts (invoice every income)
-status: active
+status: done
 created: 2026-07-10
-updated: 2026-07-10
+updated: 2026-10-13
 worktree: null
 ---
 
@@ -29,6 +29,7 @@ yet); the accounting-export UI itself is the FINAL phase (P5), unblocked once ca
 
 ## Resume here
 
+- **DONE 2026-10-13** (track 031 status pass) — cash-sale receipts built, backfilled on test+prod, and shipped; later credit-note work landed with Veri*factu (track 026).
 - **ALL 5 PHASES BUILT & GREEN (P1–P5). Backfill APPLIED to test+prod by the user (38 prod receipts).**
   **The only thing left is a user OPS action: commit + deploy P1–P5, then re-run
   `npm run backfill:cash:production` (idempotent) to sweep cash sales made between the first backfill
@@ -143,6 +144,7 @@ yet); the accounting-export UI itself is the FINAL phase (P5), unblocked once ca
   no schema change. Revisit only if inference proves unreliable.
 - **Cash refund → credit note (P-later).** Out of scope now; an unreserved/refunded cash sale should
   void/credit its receipt. Design when the refund flow is revisited.
+- **2026-10-13** — Status → done (track 031 status pass, founder-approved): cash-sale receipts built, backfilled on test+prod, and shipped; later credit-note work landed with Veri*factu (track 026).
 
 ## Links
 

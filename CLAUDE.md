@@ -8,73 +8,58 @@ Sunbnb is a sunbed reservation SaaS platform — a Turborepo monorepo with:
 - `apps/partner/` — B2B portal for venue operators (port 3001)
 - `apps/user/` — Consumer booking app (port 3002)
 - `apps/admin/` — Platform admin (port 3003)
-- `apps/mobile/` — Expo/React Native floor app for on-site staff (iOS + Android) — scaffolded, building toward v1, see [[track:024]]
-- `packages/data/` — `@repo/data` — Prisma schema, migrations, shared DB client, payment logic, auth, email
-- `packages/agent/` — `@repo/agent` — provider-neutral, Prisma-free AI agent core: model adapter (`claude-model`), tool loop, AI-turn limits, `vision/` descriptors, `geo/` (coastline, beach layout, georef, grid fit) — shared by the marketing agent and the partner assistant ([[track:030]])
-- `packages/floor-core/` — `@repo/floor-core` — floor view-model types + `bed-state`/`grid-helpers`, shared by the partner manage grid and the mobile app
-- `packages/ui/` — `@repo/ui` — Shared React components (Button, TextField, Card, Code)
-- `packages/eslint-config/` — `@repo/eslint-config`
-- `packages/typescript-config/` — `@repo/typescript-config`
+- `apps/marketing/` — try.sunbnb.app landing page + beach-mockup lead agent (port 3004, [[track:027]])
+- `apps/mobile/` — Expo/React Native floor app for on-site staff (iOS + Android), see [[track:024]]
+- `packages/data/` — `@repo/data` — Prisma schema, migrations, DB client, payment logic, auth, email
+- `packages/agent/` — `@repo/agent` — provider-neutral, Prisma-free AI agent core (model adapter,
+  tool loop, turn limits, `vision/`, `geo/`) shared by marketing and the partner assistant ([[track:030]])
+- `packages/floor-core/` — `@repo/floor-core` — floor view-model types + `bed-state`/`grid-helpers`
+  (partner manage grid + mobile)
+- `packages/schematic/`, `packages/schematic-editor/` — shared sunbed/table geometry, renderer and
+  editor chrome (wiki `subsystems/schematic-editor.md`)
+- `packages/table-reservations-{core,ui}/` — restaurant/table product (wiki `subsystems/table-reservations.md`)
+- `packages/ui/` — `@repo/ui` — shared React components
+- `packages/eslint-config/`, `packages/typescript-config/` — shared config
 
-## App & Package Details — read the one you're working in
+## Context system — how knowledge reaches a session
 
-These are **pointers, not imports**. Each app/package carries its own `CLAUDE.md`; read the one
-whose code you are touching rather than carrying all five in every session. Auto-loading the whole
-tree cost ~97 KB of context per session regardless of task, which contradicts the pulled-depth
-doctrine the agents below already follow.
+**What loads when.** This file, `.claude/rules/*.md` and the memory index load in every session. A
+directory's `CLAUDE.md` (`apps/<app>/`, `packages/<pkg>/`) loads when a file under it is read.
+Everything else — `TESTING.md`, `UI.md`, the other pulled siblings below, the wiki, playbooks,
+tracks — is pulled on demand. Keep auto-loaded files inside their budgets
+(`.claude/context/budgets.json`); move narrative to a pulled sibling or the wiki.
 
-| Surface | Context | Detail pulled on demand |
+| Surface | Auto-loads with the directory | Pulled on demand |
 |---|---|---|
-| `apps/user/` | `apps/user/CLAUDE.md` | `apps/user/TESTING.md` · `apps/user/UI.md` |
-| `apps/partner/` | `apps/partner/CLAUDE.md` | `apps/partner/TESTING.md` · `apps/partner/UI.md` |
-| `apps/admin/` | `apps/admin/CLAUDE.md` | `apps/admin/UI.md` |
+| `apps/user/` | `apps/user/CLAUDE.md` | `TESTING.md` · `UI.md` · `HW-API.md` · `PATTERNS.md` |
+| `apps/partner/` | `apps/partner/CLAUDE.md` | `TESTING.md` · `UI.md` · `ASSISTANT.md` · `PATTERNS.md` |
+| `apps/admin/` | `apps/admin/CLAUDE.md` | `UI.md` |
 | `apps/mobile/` | `apps/mobile/CLAUDE.md` | [[track:024]] |
-| `packages/data/` | `packages/data/CLAUDE.md` | `packages/data/TESTING.md` |
+| `apps/marketing/` | `apps/marketing/CLAUDE.md` | [[track:027]] |
+| `packages/data/` | `packages/data/CLAUDE.md` | `TESTING.md` · `EXPORTS.md` · `REFERENCE.md` |
+| `packages/agent/` | `packages/agent/CLAUDE.md` | — |
 | `packages/ui/` | `packages/ui/CLAUDE.md` | — |
 
-Cross-cutting rules in `.claude/rules/` stay auto-loaded and apply everywhere. When a question spans
-surfaces, start at `.claude/wiki/index.md` rather than reading several app files end to end.
+**Layers** (each has its own spec; trust rises down the list, authority rises up it):
+- **Canon** — this tree + `.claude/rules/` (declarative rules, always on).
+- **Wiki** `.claude/wiki/` — entity/flow/subsystem synthesis. Start at `index.md` for any
+  "how does X work end-to-end" question; after shipping something non-trivial run `/wiki ingest`.
+- **Tracks** `.claude/tracks/` — multi-session work: goal, roadmap, log, **Resume here**. Check
+  `index.md` (generated) before non-trivial work; run the `handoff` workflow before stopping.
+- **Playbooks** `.claude/knowledge/<agent>.md` — each dev agent's curated lessons; `/groom <agent>`
+  curates them.
+- **Recall** — one pgvector store holding all of the above plus distilled past sessions, tiered by
+  trust: `/recall <query> [--surface <agent>]`; credit hits that helped with `--credit <ids>`.
 
-## LLM Wiki
+**Health.** `context-health.mjs` prints a one-line summary at session start and on every push;
+`/context check` is the full report with a fix command per finding. Nothing blocks — the line nags.
 
-A domain-oriented knowledge layer lives at `.claude/wiki/` — synthesized entity pages, end-to-end flow pages, subsystem pages, and operational workflows. Modelled on Karpathy's three-layer wiki pattern.
-
-- **Schema:** `.claude/wiki/README.md` — conventions, page types, status discipline
-- **Index:** `.claude/wiki/index.md` — start here when researching, debugging, or designing
-- **Log:** `.claude/wiki/log.md` — append-only history of wiki changes
-
-When to consult the wiki: **before** writing code on a non-trivial change, **first** when answering a "how does X work end-to-end" question, and **after** shipping anything non-trivial (run `.claude/wiki/workflows/ingest.md` to fold the change in). The wiki points at canonical sources (this file, the `CLAUDE.md` tree, `.claude/rules/`, the code) — it never replaces them.
-
-## Tracks (long-horizon work)
-
-Durable, resumable units of multi-session work live in `.claude/tracks/` — the **intent layer** of the context system. Each **track** is a goal + status-marked roadmap + append-only log + a "Resume here" contract, persisted so any session (or a parallel agent in a git worktree) can resume exactly where the last one stopped.
-
-- **Spec:** `.claude/tracks/README.md` — what a track is, lifecycle, conventions
-- **Registry:** `.claude/tracks/index.md` — start here to see active tracks and their next action
-- **Workflows:** `.claude/tracks/workflows/` — create · resume · handoff · close
-
-When to use: **before** starting non-trivial multi-session work, check the registry and resume the relevant track. **Before ending** work on a track, run the `handoff` workflow (update roadmap → append log → rewrite "Resume here"). Run parallel tracks in separate git worktrees.
-
-## Agents & protocol
-
-**Two tiers:** per-surface developer generalists (`user-dev`, `partner-dev`, `admin-dev`, `data-dev`)
-for coverage, plus narrow cross-app specialists (e.g. `sunbed-inventory`) for depth. Definitions in
-`.claude/agents/`.
-
-**Lean prompts, pulled depth.** An agent definition carries identity, scope boundary, and *how to
-pull* knowledge — never copied route maps or state machines. At task start it queries the recall
-store (`.claude/scripts/knowledge-recall.mjs`), reads its playbook (`.claude/knowledge/<agent>.md`),
-and consults the live canon. The same doctrine governs this file: see the pointer table above.
-
-**Self-improving.** A produce → curate → promote loop with a trust ladder; agents never edit their
-own definitions. Mechanics: `.claude/knowledge/README.md`.
-
-**Shared protocol** (`kb:` markers, final-report schema): `.claude/agent-protocol.md` — every agent
-follows it. **Shared capabilities** are skills + a wiki page cited by all, not copied per agent:
-`/schematic`, `/ui`, `/db`.
-
-**Architecture is a concern, not an agent** — owned by the orchestrator, governed by
-`.claude/rules/architecture.md`; deep design delegates to the `Plan` agent.
+**Agents.** Per-surface generalists (`user-dev`, `partner-dev`, `admin-dev`, `data-dev`) plus
+specialists (`sunbed-inventory`) in `.claude/agents/`. Lean definitions, pulled depth: one tiered
+recall, the playbook's generated index, then canon. Shared protocol (`kb:` markers, final-report
+schema): `.claude/agent-protocol.md`. Shared capabilities are skills: `/schematic`, `/ui`, `/db`.
+Architecture is an orchestrator concern (`.claude/rules/architecture.md`); deep design goes to `Plan`.
+`AGENTS.md` at the root is turbo-managed (re-added by turbo; opt out via `agentGuidance` in `turbo.json`).
 
 ## Commands
 
@@ -88,6 +73,10 @@ npm run dev
 cd apps/partner && source .env.local && npm run dev   # https://local.sunbnb.app:3001
 cd apps/user    && source .env.local && npm run dev   # https://local.sunbnb.app:3002
 ```
+
+Kill a running dev server before moving or creating files in that app (`lsof -ti:<port> | xargs
+kill`): Turbopack HMR corrupts its route manifest on file moves. Tooling is npm only — no yarn, no
+global installs without asking; prefer the existing scripts.
 
 ### Build & Lint
 
@@ -106,7 +95,7 @@ cd packages/data && npm run test:integration   # integration tests (requires loc
 cd apps/user && npm run test        # unit + API route + server action tests
 ```
 
-**Framework**: Vitest 3 — native TypeScript/ESM, configured per-package with `vitest.config.ts`.
+**Framework**: Vitest 5 — native TypeScript/ESM, configured per-package with `vitest.config.ts`.
 
 **Test DB setup** (for integration tests):
 ```bash
@@ -161,7 +150,7 @@ Vercel-managed via git branches: `main` → preview, `test` → test.sunbnb.app,
 |---|---|
 | Monorepo | Turborepo + npm workspaces |
 | Framework | Next.js 16 (App Router, Turbopack) · React 19 |
-| Language | TypeScript 5 |
+| Language | TypeScript 6 |
 | Database | PostgreSQL + PostGIS (spatial queries, GiST index on geometry) |
 | ORM | Prisma 7 with `@prisma/adapter-pg` driver adapter |
 | Auth | NextAuth v5 (beta) — JWT strategy |
@@ -173,37 +162,30 @@ Vercel-managed via git branches: `main` → preview, `test` → test.sunbnb.app,
 | PDF | @react-pdf/renderer |
 | Blob storage | Vercel Blob |
 | Email | Resend API |
-| Testing | Vitest 3 |
+| Testing | Vitest 5 |
 
 ## Key Environment Variables
 
-- `POSTGRES_URL` — Database connection string
-- `STRIPE_SECRET_KEY` — Stripe credentials for **partner subscriptions**
-- `STRIPE_CONNECT_SECRET_KEY` — Stripe Connect platform key (consumer direct charges, onboarding, Terminal; restricted key scopes in [[track:028]])
-- `NEXT_PUBLIC_STRIPE_CONNECT_PUBLIC_KEY` — publishable key for embedded Connect components (partner app)
-- `STRIPE_CONNECT_WEBHOOK_SECRET` — Connect payment webhook (`/api/webhooks/stripe-connect`, user app)
-- `STRIPE_CONNECT_ACCOUNT_WEBHOOK_SECRET` — Connect `account.updated` webhook (`/api/stripe-connect/webhook`, partner app)
-- `STRIPE_SUBSCRIPTION_WEBHOOK_SECRET` — signature verification for the subscription webhook (`/api/subscription/webhook`, partner app)
-- `MOLLIE_CLIENT_ID`, `MOLLIE_CLIENT_SECRET`, `MOLLIE_REDIRECT_URI` — Mollie OAuth (partner app)
-- `VIVA_MODE` (`stub`|`http`), `VIVA_CHECKOUT_SOURCE_CODE`, `VIVA_CHECKOUT_COLOR` — Viva Smart Checkout (online)
-- `VIVA_WEBHOOK_VERIFICATION_KEY` — Viva webhook URL-verification handshake (`GET /api/webhooks/viva`, user app)
-- `GOOGLE_MAPS_API_KEY` — Server-side Maps + Places API proxy
-- `NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY` — Client-side Maps (HTTP-referrer-restricted; falls back to `GOOGLE_MAPS_API_KEY`)
-- `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` — NextAuth
-- `AUTH_FACEBOOK_ID`, `AUTH_FACEBOOK_SECRET` — Facebook OAuth (user app only)
-- `BLOB_READ_WRITE_TOKEN` — Vercel Blob storage
-- `RECONCILIATION_SECRET` — Protects `/api/reconcile` endpoint (required; 503 if unset)
-- `ALLOWED_ORIGINS` — Comma-separated origins for password reset email links
-- `RESEND_API_KEY` — Resend email service
-- `CRON_SECRET` — Protects `/api/cron/send-reminders` (Vercel Cron sends as `Authorization: Bearer`)
-- `NEXT_PUBLIC_GA4_ID` — GA4 measurement id (`G-…`) per app and environment, read via `@repo/ui/google-analytics` (consent-gated; unset = no tag). User app → property "Sunbnb – sunbnb.app"; partner app → the try.sunbnb.app property (one B2B funnel); previews → the matching "(test)" property
-- `NEXT_PUBLIC_DEMO_MODE` — Enables demo payment mode (server-controlled)
-- `ANTHROPIC_API_KEY` — Claude API key (marketing agent; partner assistant — its presence is half of the partner kill switch)
-- `PARTNER_ASSISTANT_ENABLED` — partner AI assistant kill switch (`1`/`true` + `ANTHROPIC_API_KEY` required; else 503), on top of the account flag `assistant`
-- `PARTNER_ASSISTANT_MODEL`, `PARTNER_ASSISTANT_EXTRACTION_MODEL` — optional model-id overrides (defaults `claude-sonnet-5-5` chat, `claude-opus-5-5` plan/aerial vision)
-- `PARTNER_AI_DAILY_TURNS` — global daily assistant turn budget (default 1000; `0` = AI off); `ASSISTANT_NOTIFY_EMAIL` receives the one budget-tripped email
-- `ASSISTANT_BLOB_READ_WRITE_TOKEN` — PRIVATE Vercel Blob store for assistant uploads (company documents/photos; store connected with prefix `ASSISTANT_BLOB`); unset = falls back to the default store
-- `COASTLINE_POSTGRES_URL` — coastline DB (track 027) — marketing `/api/coastline` and, since track 030, the partner assistant's aerial land check (`@repo/data/coastline-lookup`; unset = check skipped)
+Names and purpose only; per-app detail lives in that app's `CLAUDE.md`.
+
+| Variable(s) | Purpose |
+|---|---|
+| `POSTGRES_URL` | Database connection |
+| `STRIPE_SECRET_KEY`, `STRIPE_SUBSCRIPTION_WEBHOOK_SECRET` | Partner subscriptions (platform-as-merchant) |
+| `STRIPE_CONNECT_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_CONNECT_PUBLIC_KEY` | Stripe Connect: consumer direct charges, onboarding, Terminal ([[track:028]]) |
+| `STRIPE_CONNECT_WEBHOOK_SECRET`, `STRIPE_CONNECT_ACCOUNT_WEBHOOK_SECRET` | Connect payment webhook (user) · `account.updated` webhook (partner) |
+| `MOLLIE_CLIENT_ID`, `MOLLIE_CLIENT_SECRET`, `MOLLIE_REDIRECT_URI` | Mollie OAuth (partner) |
+| `VIVA_MODE`, `VIVA_CHECKOUT_SOURCE_CODE`, `VIVA_CHECKOUT_COLOR`, `VIVA_WEBHOOK_VERIFICATION_KEY` | Viva Smart Checkout (`stub`\|`http`) + webhook handshake |
+| `GOOGLE_MAPS_API_KEY`, `NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY` | Server Maps/Places proxy · referrer-restricted client key |
+| `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_FACEBOOK_*` | NextAuth |
+| `BLOB_READ_WRITE_TOKEN`, `ASSISTANT_BLOB_READ_WRITE_TOKEN` | Vercel Blob · private store for assistant uploads |
+| `RECONCILIATION_SECRET`, `CRON_SECRET` | `/api/reconcile` (503 if unset) · Vercel Cron bearer |
+| `ALLOWED_ORIGINS`, `RESEND_API_KEY` | Password-reset link origins · email |
+| `NEXT_PUBLIC_GA4_ID` | GA4 per app/env via `@repo/ui/google-analytics` (consent-gated) |
+| `NEXT_PUBLIC_DEMO_MODE` | Demo payment mode |
+| `ANTHROPIC_API_KEY`, `PARTNER_ASSISTANT_ENABLED` | Claude API; both required for the partner assistant (else 503) |
+| `PARTNER_ASSISTANT_MODEL`, `PARTNER_ASSISTANT_EXTRACTION_MODEL`, `PARTNER_AI_DAILY_TURNS`, `ASSISTANT_NOTIFY_EMAIL` | Assistant model overrides, daily turn budget, budget alert |
+| `COASTLINE_POSTGRES_URL` | Coastline DB (marketing `/api/coastline`; assistant aerial land check) |
 
 ## Architecture
 
@@ -233,18 +215,25 @@ commission invoice; they do not sum to the consumer total. The rule is canonical
 
 **Card-present** (`apps/mobile`): Viva Cloud Terminal ([[track:024]]) + Stripe Tap to Pay ([[track:028]]).
 
-### Settlement System
+### Settlements (retired)
 
-`Settlement` records aggregate monthly payouts per partner (DRAFT → CLOSED → APPROVED → PAID). `Invoice` and `InvoiceLine` are generated post-payment. The admin app manages settlement approvals.
+Settlements are retired ([[track:032]]): consumer payments are direct charges to the partner's own provider account, so the platform never holds funds to pay out. Partner money reporting is the partner accounting page + invoices. The `Settlement` table remains, unused, until a contract migration drops it.
 
 ## Cross-Cutting Patterns
 
-- **Next 16 conventions** (track 029): `params` / `searchParams` and `cookies()` / `headers()` are Promises — always `await` them (`({ params }: { params: Promise<{ id: string }> })` + `const { id } = await params`); request interception lives in `proxy.ts` (exported `proxy`), not `middleware.ts`; `useActionState` comes from `react` (not `useFormState` from `react-dom`). Dev runs over mkcert HTTPS, so each `next.config.mjs` lists `allowedDevOrigins: ['local.sunbnb.app']`. Turbopack's CSS parser rejects an `@import` placed after other rules — keep imports at the top of a stylesheet
+- **Next 16 conventions** (track 029): `params` / `searchParams` and `cookies()` / `headers()` are
+  Promises — always `await` them; request interception lives in `proxy.ts` (exported `proxy`), not
+  `middleware.ts`; `useActionState` comes from `react`. Dev runs over mkcert HTTPS, so each
+  `next.config.mjs` lists `allowedDevOrigins: ['local.sunbnb.app']`. Turbopack's CSS parser rejects
+  an `@import` after other rules — keep imports at the top of a stylesheet
 - **Auto-save**: Debounced (1.5–2s) field changes trigger server actions → refresh site context
 - **Image upload**: Vercel Blob `put()` in server actions; remote patterns whitelisted in `next.config.mjs`
 - **Error handling**: Server actions return `{ status: 'ok' | 'error', errors?: string[] }`; UI shows auto-dismissing banners
 - **i18n**: `next-intl` with `getRequestConfig()` from `Accept-Language` header. Message files in `messages/{en,es,fi}.json`
-- **Cron jobs**: `/api/reservations-cleanup` (partner, every 15 min) cleans stale bookings; `/api/cron/send-reminders` (user, daily 07:00 UTC) sends reminder emails; `/api/cron/prune-telemetry` (user, daily 03:20 UTC) evicts device telemetry history past the `device-telemetry-retention-days` preference; `/api/cron/purge-assistant-uploads` (partner, daily 03:40 UTC) deletes assistant upload blobs past their 30-day TTL
+- **Cron jobs**: `/api/reservations-cleanup` (partner, 15 min) stale bookings;
+  `/api/cron/send-reminders` (user, 07:00 UTC) reminder emails; `/api/cron/prune-telemetry` (user,
+  03:20 UTC) device telemetry past retention; `/api/cron/purge-assistant-uploads` (partner, 03:40 UTC)
+  assistant blobs past their 30-day TTL
 - **Equipment rentals**: Sites enable via `features[]` array (add `"rentals"`). Supports hourly and daily bookings (`durationType: 'hours' | 'days'`). Availability checked by aggregating booked quantities for overlapping time windows. Categories: surfboard, paddleboard, kayak, pedal boat, snorkel, other
 
 ## Known Quirks

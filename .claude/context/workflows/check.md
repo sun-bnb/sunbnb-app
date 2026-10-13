@@ -11,7 +11,7 @@ related:
   - workflow:lint
   - workflow:ingest
   - workflow:prune
-last_verified: 2026-10-12
+last_verified: 2026-10-13
 ---
 
 # Workflow: /context check — stateless probe
@@ -68,7 +68,7 @@ node .claude/scripts/context-health.mjs --json           # findings + metrics fo
 node .claude/scripts/context-health.mjs --snapshot       # append metrics to .claude/context/health-history.jsonl
 ```
 
-Exits `0` always (warn-only). The report is on stdout. `--snapshot` is run by the curation workflows (`/groom`, `/context sync`, `/wiki prune`), not per session — the history file is how "better over time" is measured.
+Exits `0` always (warn-only). The report is on stdout. `--snapshot` is run by the orchestrator after curation (once after a batch of `/groom` runs — never from inside a groom — and at the end of `/context sync` and `/wiki prune`), not per session — the history file is how "better over time" is measured.
 
 ### 2. Read the report
 

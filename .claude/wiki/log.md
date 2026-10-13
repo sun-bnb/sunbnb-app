@@ -167,7 +167,7 @@ Operations:
 - `last_verified` on entities/reservation.md deliberately NOT bumped: only the row above was re-checked against code, and the page's remaining claims (schema, partner paths) were not. Bumping would have claimed a freshness this pass did not earn. Noted while there: invariant 6 still describes transitions as "use the helpers in manage/actions.ts" with no mention of the track-018 machine — not false (the helpers are still the entry points and raw status writes are still forbidden), but thin; left for a pass that verifies the whole page.
 - by: claude (opus-5)
 
-## 2026-08-29 — canonical-layer compaction (context budget)
+## [2026-08-29] revise | canonical-layer compaction (context budget)
 - mode: split (new subsystems/migrations.md) + index entry
 - changed: new `.claude/wiki/subsystems/migrations.md` (environment topology + laptop-run sequence, moved verbatim out of `.claude/rules/migrations.md`, which breached its 80-line hard cap at 114); `index.md` gains the row.
 - reason: the auto-loaded layer had reached **137 KB per session**. Root `CLAUDE.md` `@`-imported all five app/package files (~97 KB) regardless of task, and the `/update-knowledge` size budgets were measured in LINES — so `apps/user/CLAUDE.md` passed at 175/300 lines while being 34.8 KB, its longest single line a 2,296-byte table cell. Budgets are now in BYTES with a 300 B per-line cap; root is a router; per-app detail moved to on-demand siblings (`TESTING.md` ×3, `packages/data/REFERENCE.md`) mirroring the existing `UI.md` pattern. Result: 137 KB → 35.4 KB always-loaded.
@@ -188,14 +188,14 @@ Operations:
 - by: claude
 
 
-## 2026-10-10 — design-system pitfall: AppRouterCacheProvider
+## [2026-10-10] patch | design-system pitfall: AppRouterCacheProvider
 
 - mode: patch (subsystems/design-system.md § Common pitfalls, last_verified)
 - changed: one pitfall — any MUI-rendering App Router app must wrap its root layout in `AppRouterCacheProvider` (`@mui/material-nextjs/v16-appRouter`), or Emotion's SSR styles render inline and every page fails hydration under Next 16.
 - reason: gate criterion 4 (hard-earned gotcha — admin, partner and user each broke on it during the Next 16 upgrade, track 029). The rest of that upgrade (dep bumps, async request APIs, proxy rename) is a dep bump per the NO list; the conventions an agent must follow went into the root CLAUDE.md Cross-Cutting Patterns instead.
 - by: claude
 
-## 2026-10-10 — Tailwind 4: design-system sources + cascade-layer pitfalls
+## [2026-10-10] patch | Tailwind 4: design-system sources + cascade-layer pitfalls
 
 - mode: patch (subsystems/design-system.md — sources, token locations, shared-package rule, invariant 4, Common pitfalls)
 - changed: token/`content` references moved from `tailwind.config.js` to `globals.css` `@theme` / `@source`; one pitfall on Tailwind 4 + MUI cascade layers (enableCssLayer + layer-order GlobalStyles), never importing pre-compiled Tailwind CSS from a package, and `@theme inline` for next/font variables.
@@ -207,3 +207,44 @@ Operations:
 - changed: new subsystem page — layers (`@repo/agent` / `@repo/data/assistant` / `lib/assistant` / SSE route / apply actions / UI), proposal lifecycle, vision flows, 6 invariants, 5 pitfalls (resync, jsonb key order, gated-action registry, pairing derivation, missing COASTLINE_POSTGRES_URL); schematic-editor cross-links it.
 - reason: gate criterion 2 (new sub-system + new shared package `@repo/agent`) — spans partner app, `packages/data`, `packages/agent` and the marketing agent; surface detail stays canonical in `apps/partner/CLAUDE.md` § AI assistant. Built 2026-10-11, uncommitted at time of writing.
 - by: claude
+
+## [2026-10-13] ingest | track 031 P5 — groom promotions folded into the wiki
+- payments: `syncEffectiveProvider` rewrites every site of an account; the admin per-site provider override is a repair tool, not config
+- schematic-editor: `groupId` is the renderer's only co-move + pair-highlight key; the two drag sites change together; sources 9→8, status stable
+- reservation-state-machine: card-present collect rows (`cardPresent`/`tapToPay`, row order, abandon may stay processing); `bed-state` source moved to floor-core
+- partner-assistant: `diffBasis` sorts (jsonb key order), sudo applies patch the owner's rows, payloads hold names, mocks must copy rows; sources 11→8; canonical surface detail now `apps/partner/ASSISTANT.md`
+- migrations: proper frontmatter, real sources, corrected `.env` wording; new "Prisma in an agent shell" section (backgrounded `migrate dev`, non-interactive refusal, unique-among-active-rows)
+- table-booking: dine-in tab claim/revert rule (`releaseTabClaim` idempotent) and only-terminal-transitions-null-`openTableId`
+
+## [2026-10-13] revise | track 031 P5 — ten pages >90 d re-verified against code
+- entities/invoice: per-issuer series + advisory lock + hash chain (`invoice-series.ts`), N:1 source links, Stripe `processingFee`, full product codes, credit notes
+- entities/order: no `invoiceId`; site/restaurant anchor + tab fields; `paymentAmount` = total (fee resolved at payment creation)
+- entities/reservation: real status set (`paid-in-cash`, `held`, comp), `PAID_STATUSES` = complete, `ReservationDay`, split lineage, `reserveWithConflictGuard`
+- entities/service-fee: percentage is percent/100, tier + product scope, `serviceFeeForUnits`, `chargeableServiceFee` waiver
+- entities/settlement: per partner+site arbitrary period, venue-anchored window, full revert chain incl. PAID; rental/deposit/tab invoices excluded (flagged as a product gap)
+- entities/table-reservation: fixed `table/actions.ts` citation; deposits collected/refunded/invoiced; current partner action names; new `Table` fields
+- flows/order-payment: multi-provider payment step, invoices-based idempotency, tab orders rejected, soldOut/transaction claims corrected
+- flows/rental-booking: sources 9→8, `createRentalBookingsWithGuard`, cash vs card walk-in invoicing, Stripe/Viva rails
+- flows/settlement-cycle: rewritten to the real actions (no DRAFT refresh; PAID→APPROVED revert; delete on DRAFT revert)
+- flows/walk-in: state-machine transitions, collect via QR / Viva card / Tap to Pay, provider-routed refunds, `#OP_EXPECTED` citation
+
+## [2026-10-13] revise | track 031 P5 — canonical compaction (CLAUDE.md tree)
+- apps/user 34.4→12.3 KB (→ `HW-API.md`, `PATTERNS.md`); apps/partner 35.5→13.1 KB (→ `ASSISTANT.md`, `PATTERNS.md`); packages/data 36.5→14.4 KB (→ `EXPORTS.md`); root 17.8→15.2 KB with one loading-model statement; new pointer `CLAUDE.md` for apps/marketing and packages/agent; stale facts fixed against code (partner auth, Vitest 5 / TS 6, invoice numbering, status set, Viva online wired, admin provider override)
+
+## [2026-10-13] add page | subsystem:context-system — the AI-context machinery (track 031 P6)
+- Six layers with writer/curator/loading per layer, trust ladder and promotion direction, tiered recall + credits, the health signal and `budgets.json`, six invariants, cadence, pitfalls. Moved out of index "Planned"; index pointers now list all 8 rules and the pulled siblings; README directory diagram gains `prune`/`review`.
+
+## [2026-10-13] revise | track 031 P6 — maintenance workflows re-verified against the new system
+- ingest: `/groom` outbound promotions as an ingest source; recall-based page finding; context-health verify step
+- lint / prune: mechanical step is `context-health.mjs --scope wiki`; the LLM pass keeps only what the script cannot judge; prune ends with `--snapshot`
+- review: baseline from `--json` + `health-history.jsonl`; recall credits as a usage signal; restated-canon check
+- query: tiered `/recall` as second entry point, `--credit`, `/db`; current payment rails
+- debugging / implementation / feature-design: `payment-refs`, multi-provider webhooks, state-machine `TRANSITIONS`, rules as pointers, dead mock path removed
+- context sync / check: per-developer cursor, ends with `--snapshot`; snapshot is orchestrator-run after a groom batch
+- reservation-state-machine: offline-only per-seat/subset actions and the payment-coupling reason (folded from user memory before deleting it)
+
+## [2026-10-13] patch | flows/table-booking — tab claim rule restated as "keep the claim exactly when a paymentRef is stored"
+- Verification of the suspected route divergence (neutral `no_checkout` releases, Mollie null-URL keeps): both follow the same rule, because reconcile only sweeps pending tabs with a ref and only the Mollie path stores one before finding the URL missing. No code change.
+
+## [2026-10-13] retire | entity:settlement + flow:settlement-cycle — admin settlement feature removed (track 032 step 1)
+- Pages reduced to retirement stubs (status stale; delete after 2026-11-12), listed under index "Retired"; links removed from invoice, reservation, service-fee, auth, employee-till, venue-timezone; debugging symptom row points at invoice/service-fee/payments.

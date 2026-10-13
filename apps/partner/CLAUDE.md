@@ -1,43 +1,63 @@
 # Partner App (apps/partner)
 
-B2B portal for venue operators — site management, inventory editing, order dashboard, accounting, on-site operations.
+B2B portal for venue operators — site management, inventory editing, order dashboard, accounting,
+on-site operations.
 
 Port 3001 (`https://local.sunbnb.app:3001`). Run: `cd apps/partner && source .env.local && npm run dev`
 
+**Pulled on demand** (not auto-loaded — read the one your task touches):
+
+- `apps/partner/TESTING.md` — test inventory, meta-guards, auth-matrix semantics, mocking traps
+- `apps/partner/ASSISTANT.md` — AI assistant surface detail (routes, tools, kinds, sql, limits)
+- `apps/partner/PATTERNS.md` — site codes/QR, seat ids, payload + parcel tiering, inventory
+  revalidation, brand tab, partial group booking, dine-in QR, rentals UI
+- `apps/partner/UI.md` — partner design-system layer (prime with `/ui partner`)
+
 ## Auth Model
 
-Google OAuth only. `app.tsx` checks session; redirects unauthenticated to `/api/auth/signin`. Public routes: `/info`, `/manage`, site-slug pages. `authorizeSite()` / `requireSiteOwner()` helpers verify user owns the site or is a sudo user. `auth.ts` at app root configures NextAuth.
+`app/auth.ts` (NextAuth v5, JWT, 8 h idle `maxAge`). Providers: **Google, Facebook, Credentials**
+(email/password via `validateOrCreateUser`), plus an `impersonation` Credentials provider
+consuming the admin app's single-use token (`consumeImpersonationToken`).
+`app.tsx` redirects unauthenticated visitors to `/api/auth/signin`; public routes: `/info`,
+`/manage`, site-slug pages. `requireSiteOwner()` / `authorizeSite()` verify site ownership (sudo
+bypasses). Detail: `.claude/wiki/subsystems/auth.md`.
 
 ## Route Map
 
 | Route | Purpose | Auth |
 |---|---|---|
 | `/` | Dashboard — KPI cards, revenue chart, upcoming reservations | Auth |
-| `/sites` | Sites listing — grid with status badges, stats, capacity | Auth |
-| `/sites/create` | 4-step site creation wizard (location → settings → content → done) | Auth |
+| `/sites` | Sites listing — status badges, stats, capacity | Auth |
+| `/sites/create` | 4-step creation wizard (location → settings → content → done) | Auth |
 | `/sites/[id]` | Site detail — tabbed layout | Auth |
-| `/sites/[id]/general` | Site settings — name, type, price, VAT, working hours, map location | Auth |
-| `/sites/[id]/content` | Cover photo upload, description, service toggles | Auth |
-| `/sites/[id]/brand` | Brand customization — name, slug, tagline, colors; debounced auto-save via `saveBrand` (it DOES persist — the old "preview only, won't be saved" banner was false and is gone). **Follows the effective render** (track 023 D2): when a bespoke brand page is LIVE the tab states that instead of offering the tokens, and keeps only the slug — the address is not presentation, and a rename is safe because the brand registry keys on `customBrandKey`. The Business-plan gate is skipped for a bespoke site (platform-delivered work, not a plan entitlement — pitching an upgrade for a branded page they already have would also hide the slug control) | Auth |
-| `/sites/[id]/inventory` | Inventory editor — Google Maps with sunbed markers, parcels, bulk ops | Auth |
-| `/sites/[id]/products` | F&B product management — add/edit/delete with images | Auth |
-| `/sites/[id]/accounting` | Monthly accounting — revenue, tax, order/reservation breakdowns | Auth |
-| `/sites/[id]/orders` | Real-time order dashboard — live polling, complete/discard actions; table chip shown for dine-in tab rounds (`Order.tableId`) | Public |
-| `/sites/[id]/manage` | On-site management — token-gated landing (links to sub-routes) | Public |
-| `/sites/[id]/manage/sunbeds` | Sunbed grid — token-gated, walk-ins, check-in/departure, rentals | Public |
-| `/sites/[id]/manage/summary` | Daily summary — admin-token-only, per-employee till totals + close | Public |
-| `/sites/[id]/manage/close` | Day close (cierre de caja) — admin-token-only, day totals + two-step closeDay | Public |
+| `/sites/[id]/general` | Name, type, price, VAT, working hours, map location, reservation rules | Auth |
+| `/sites/[id]/content` | Cover photo, description, service toggles | Auth |
+| `/sites/[id]/brand` | Brand name/slug/tagline/colors, auto-saved; bespoke-page rules in `PATTERNS.md` | Auth |
+| `/sites/[id]/inventory` | Inventory editor — Google Maps, sunbed markers, parcels, bulk ops | Auth |
+| `/sites/[id]/products` | F&B product management with images | Auth |
+| `/sites/[id]/accounting` | Monthly accounting — revenue, tax, breakdowns, staff till card | Auth |
+| `/sites/[id]/orders` | Live order dashboard; table chip for dine-in rounds (`Order.tableId`) | Public |
+| `/sites/[id]/manage` | On-site management — token-gated landing | Public |
+| `/sites/[id]/manage/sunbeds` | Sunbed grid — walk-ins, check-in/departure, rentals | Public |
+| `/sites/[id]/manage/summary` | Daily summary — admin token, per-employee till totals | Public |
+| `/sites/[id]/manage/close` | Day close (cierre de caja) — admin token, two-step `closeDay` | Public |
 | `/sites/[id]/rentals` | Equipment rental item CRUD | Auth |
-| `/calendar` | Monthly reservation calendar — site selector, day detail panel | Auth |
-| `/account` | Partner account settings — personal info, company, billing (IBAN) | Auth |
-| `/account/payments` | Payment-provider hub (track 028) — one card per provider available in the account's country (`availableProviders`); `selectPaymentProvider` stores the SELECTED provider on `PartnerAccount.paymentProvider`. **Select-then-connect**: the sites' EFFECTIVE provider (`Site.paymentProvider`) flips only once the selected provider is ready (`syncEffectiveProvider`); a banner shows while selected ≠ effective | Auth |
-| `/account/stripe` | Stripe Connect onboarding — **own-form wizard** over the Accounts API (`requirement_collection: 'application'`; steps business type → details → bank → terms → status, `steps.ts`), then Stripe **embedded components** (account management / payouts / balances / notification banner) for management once details are submitted | Auth |
-| `/account/staff` | Staff roster — per-account `Employee` CRUD (current-worker chip source) | Auth |
-| `/account/invoices` | Commission invoices Sunbnb issues to the partner — month picker, list (`issuerType: 'PLATFORM'`; the accounting page's `getInvoicesByMonth` deliberately shows only `PARTNER`) | Auth |
-| `/account/invoices/[id]` | One commission invoice as a printable `F1` document — both parties, reverse-charge declaration, AEAT QR + `VERI*FACTU` legend. Ownership enforced inside `buildCommissionInvoice`, which returns null for "not yours" and "no such invoice" alike | Auth |
-| `/security` | API token management — create, list, delete | Auth |
-| `/reservations/[id]` | Individual reservation detail | Auth |
-| `/info` | Marketing landing page with animated chapters | Public |
+| `/calendar` | Monthly reservation calendar, day detail panel | Auth |
+| `/account` | Personal info, company, billing (IBAN) | Auth |
+| `/account/payments` | Provider hub (track 028) — select-then-connect; banner while selected ≠ effective | Auth |
+| `/account/stripe` | Stripe Connect own-form wizard (`steps.ts`), then embedded components | Auth |
+| `/account/staff` | Per-account `Employee` roster (current-worker chip source) | Auth |
+| `/account/invoices` | PLATFORM commission invoices to the partner, by month | Auth |
+| `/account/invoices/[id]` | Printable `F1` commission invoice (AEAT QR, `VERI*FACTU`) | Auth |
+| `/security` | API token (SecurityToken) management | Auth |
+| `/reservations/[id]` | Reservation detail | Auth |
+| `/frontdesk` | Front-desk search + check-in/depart/no-show/cancel | Auth |
+| `/devices` | Device fleet — per-device power-policy badge + editor (track 025) | Auth |
+| `/restaurants/[id]/…` | Restaurant tabs, tables + dine-in QR, kitchen `orders` (token-or-session) | Auth |
+| `/info` | Marketing landing page | Public |
+
+`/account/invoices` lists `issuerType: 'PLATFORM'` only; the accounting page's `getInvoicesByMonth`
+shows only `PARTNER`. `buildCommissionInvoice` returns null for both "not yours" and "no such invoice".
 
 ## API Routes
 
@@ -45,36 +65,67 @@ Google OAuth only. `app.tsx` checks session; redirects unauthenticated to `/api/
 |---|---|---|
 | `/api/auth/[...nextauth]` | GET, POST | NextAuth handlers |
 | `/api/reservations/[siteId]` | GET | Day reservations (`?date=`) or monthly counts (`?month=&year=`) |
-| `/api/reservations-cleanup` | GET | Cron (every 15 min) — cleans stale pending/processing reservations |
-| `/api/onboarding-status` | GET | Payment onboarding poll — live-syncs Mollie / Viva / (incomplete) Stripe state, then runs `syncEffectiveProviderSafe`. Track 028 neutral fields: `provider` (effective), `selected`, `readiness` / `selectedReadiness` (`providerReadiness`), `selectedDiffersFromEffective`; the Mollie-era fields stay one release |
-| `/api/assistant` | POST, GET | AI assistant SSE turn / transcript — see § AI assistant |
-| `/api/assistant/uploads/[id]`, `/api/assistant/uploads/[id]/image` | GET | Owner-only upload stream / aerial alignment frame (track 030) |
-| `/api/assistant/aerial/[uploadId]/extract` | POST | Aerial photo vision extraction (track 030 S7) |
-| `/api/cron/purge-assistant-uploads` | GET | Cron (daily 03:40 UTC) — deletes expired assistant upload blobs |
-| `/api/stripe-connect/account-session` | POST | Client secret for the embedded Connect components (`createAccountSession`); 400 until Stripe details are submitted |
-| `/api/stripe-connect/webhook` | POST | Connect account webhook — `account.updated` / `capability.updated`, verified with `STRIPE_CONNECT_ACCOUNT_WEBHOOK_SECRET` (503 unset); writes `snapshotToColumns(snapshotFromAccount(…))` onto `PartnerAccount` then `syncEffectiveProviderSafe` |
+| `/api/reservations-cleanup` | GET | Cron (15 min) — stale pending/processing/hold cleanup |
+| `/api/onboarding-status` | GET | Live-syncs Mollie/Viva/Stripe state → `syncEffectiveProviderSafe` |
+| `/api/stripe-connect/account-session` | POST | Embedded Connect client secret; 400 until details submitted |
+| `/api/stripe-connect/webhook` | POST | `account.updated`/`capability.updated` → `PartnerAccount` columns → sync |
+| `/api/assistant` (+ `uploads/[id]`, `aerial/[uploadId]/extract`) | POST, GET | AI assistant — `ASSISTANT.md` |
+| `/api/cron/purge-assistant-uploads` | GET | Cron (daily 03:40 UTC) — expired assistant blobs |
+
+`/api/onboarding-status` returns the neutral fields `provider` (effective), `selected`,
+`readiness`/`selectedReadiness`, `selectedDiffersFromEffective`; Mollie-era fields stay one
+release. The Connect webhook verifies `STRIPE_CONNECT_ACCOUNT_WEBHOOK_SECRET` (503 unset).
 
 ## Server Actions
 
-- **`sites/[id]/site-actions.ts`**: `saveGeneral`, `submitForm`, `deleteSite`, `setSiteStatus`, `setPaymentProvider` (**retired** — a pointer to `/account/payments`; provider is per account since track 028), `setPartialGroupBooking` (the site's booking-granularity policy — see below), `saveBrand` (REJECTS token writes while a bespoke page is live — a hidden form still posts), `saveSlug` (the address alone, always allowed: splitting it out is what stops a token rejection taking the slug with it), `checkSlug`, `generateSlug`, `getBrand`
-- **`sites/[id]/content-actions.ts`**: `saveContentFields`, `uploadContentImage`
-- **`sites/[id]/inventory-actions.ts`**: `createInventoryItem`, `deleteInventoryItem`, `deleteInventoryItems` (bulk — one transaction + one label recompute), `saveInventoryItemLocation`, `saveInventoryItemProperties`, `deleteItemsByGroup`
-- **`sites/[id]/working-hours-actions.ts`**: `addWorkingHours`, `deleteWorkingHours`
-- **`sites/[id]/queries.ts`**: `getSite` (exported), `getInventoryItems` (scoped item refresh — merged client-side instead of a full-site re-download after rotate/spacing, track 020), `resolveServiceFees` (private helper). Companion PLAIN modules (not `'use server'` — a `'use server'` file may export async functions only): `item-select.ts` (`INVENTORY_ITEM_SELECT`, the shared narrow seat projection) and `item-counts.ts` (`getSiteItemCounts`, `todayReservationsWindow`)
-- **`restaurants/[id]/queries.ts`**: `getRestaurant`, `getRestaurantLayout`, `getRestaurantMenu`, `getRestaurantShifts`, `getRestaurantCombinations`, `getRestaurantWaitlist`, `getTablesList` (active tables for dine-in QR printing)
-- **`sites/[id]/manage/actions.ts`**: `reserveItem`, `unreserveItem`, `checkInReservation`, `resumeWalkIn`, `undoDepartWalkIn` (same-day depart undo — server action only; floor surface via the Guests sheet pending, track 018), `markDeparted`, `markNoShow`, `updateReservationNotes`, `moveReservation`, `blockBed`, `unblockBed`, `holdBed`, `compBed`, `convertHoldToWalkIn`, `markRentalPickedUp`, `markRentalReturned`, `createWalkInRental`, `collectReservationPayment`/`getCollectStatus`/`cancelCollection` (QR collect; `collectReservationPayment(…, {method:'tap-to-pay'})` starts a Stripe Tap to Pay PaymentIntent — gated on effective provider `stripe` + `cardPresent: 'tap-to-pay'`, returns the client secret to the floor app), `getStripeConnectionToken` (Stripe Terminal connection token for the floor app; both in the manage RPC registry), `getTillStatus`/`closeTill` (per-worker till) (all token-or-session). On-site create actions take an optional trailing `employeeId` (current-worker attribution), validated against the account via `resolveEmployeeId`; cash walk-ins record `paymentAmount` for the till. **Reservation state transitions delegate to the state machine** (`@repo/data/reservation-machine-apply` — track 018): guards, day-row atomicity, till partitioning, credit notes, and refund-vs-delete are table-driven; actions name events and map outcomes (same for `frontdesk/actions.ts` and `reservations/[id]/actions.ts`).
-- **`sites/[id]/rentals/actions.ts`**: `getRentalItems`, `createRentalItem`, `updateRentalItem`, `deleteRentalItem`, `toggleSiteFeature`
-- **`sites/[id]/accounting/actions.ts`**: `getPaidItemsByMonth` (returns `{ orders, reservations, tabs }` — dine-in tab PARTNER invoices via `tableTabId` now included in `tabs`), `getInvoicesByMonth`, `getRevenueTrend`/`getOccupancyTrend`/`getRevenueCsv` (track 007 analytics), `getStaffTill` (per-employee monthly cash breakdown) — session + site-owner
-- **`account/payments/actions.ts`**: `selectPaymentProvider` — validates against the country's available providers, stores the selection, syncs effective (track 028)
-- **`account/stripe/actions.ts`**: `startStripeOnboarding`, `submitStripeBusinessProfile`, `submitStripeBankAccount`, `acceptStripeTerms`, `refreshStripeStatus`, `disconnectStripe` — return `StripeActionResult` (next step + due requirements); every connection-state write ends in `syncEffectiveProviderSafe`
-- **`account/staff/actions.ts`**: `getEmployees`, `createEmployee`, `renameEmployee`, `setEmployeeActive`, `deleteEmployee` — per-account `Employee` roster (session-scoped, `accountId === session.user.id`)
-- **`assistant/actions.ts`** / **`upload-actions.ts`** / **`aerial-actions.ts`**: `applyAssistantAction`, `rejectAssistantAction`, `undoAssistantAction`, `uploadAssistantFile`, `saveUploadGeoref` — see § AI assistant
-- **`sites/[id]/inventory/parcel-ops.ts`**: `rotateParcel`, `applyParcelConfig`, `rotateUnit`, `setSeatsStatus` — server compositions used by BOTH the map editor and the assistant (track 030 S1); pure geometry in `inventory/geometry.ts`
-- **`security/actions.ts`**: `getTokens`, `getOwnedSites`, `createToken`, `deleteToken` — SecurityToken (access-key) management (session-scoped)
+| File (under `app/`) | Actions |
+|---|---|
+| `sites/[id]/site-actions.ts` | `saveGeneral`, `submitForm`, `deleteSite`, `setSiteStatus`, `setPartialGroupBooking`, `saveBrand`, `saveSlug`, `checkSlug`, `generateSlug`, `getBrand`, `setPaymentProvider` (retired → `/account/payments`) |
+| `sites/[id]/content-actions.ts` | `saveContentFields`, `uploadContentImage` |
+| `sites/[id]/inventory-actions.ts` | `createInventoryItem`, `deleteInventoryItem`, `deleteInventoryItems` (bulk, one txn), `saveInventoryItemLocation`, `saveInventoryItemProperties`, `deleteItemsByGroup` |
+| `sites/[id]/inventory/actions.ts` | `moveParcel`, `moveItems`, `rotateSelection`, `adjustItemSpacing`, `reverseParcel*`, group ops, `syncChairsWithLayout` |
+| `sites/[id]/inventory/parcel-ops.ts` | `rotateParcel`, `applyParcelConfig`, `rotateUnit`, `setSeatsStatus` — shared by editor + assistant |
+| `sites/[id]/working-hours-actions.ts` | `addWorkingHours`, `deleteWorkingHours` |
+| `sites/[id]/queries.ts` | `getSite`, `getInventoryItems` (scoped refresh), private `resolveServiceFees` |
+| `restaurants/[id]/queries.ts` | `getRestaurant`, `getRestaurantLayout`, `getRestaurantMenu`, `getRestaurantShifts`, `getRestaurantCombinations`, `getRestaurantWaitlist`, `getTablesList` |
+| `sites/[id]/manage/actions.ts` | Floor ops (token-or-session) — see below |
+| `sites/[id]/rentals/actions.ts` | `getRentalItems`, `createRentalItem`, `updateRentalItem`, `deleteRentalItem`, `toggleSiteFeature` |
+| `sites/[id]/accounting/actions.ts` | `getPaidItemsByMonth` (`{ orders, reservations, tabs }`), `getInvoicesByMonth`, `getRevenueTrend`, `getOccupancyTrend`, `getRevenueCsv`, `getStaffTill` |
+| `account/payments/actions.ts` | `selectPaymentProvider` — validates country availability, then syncs effective |
+| `account/stripe/actions.ts` | `startStripeOnboarding`, `submitStripeBusinessProfile`, `submitStripeBankAccount`, `acceptStripeTerms`, `refreshStripeStatus`, `disconnectStripe` |
+| `account/staff/actions.ts` | `getEmployees`, `createEmployee`, `renameEmployee`, `setEmployeeActive`, `deleteEmployee` |
+| `assistant/{actions,upload-actions,aerial-actions}.ts` | `apply/reject/undoAssistantAction`, `uploadAssistantFile`, `saveUploadGeoref` |
+| `security/actions.ts` | `getTokens`, `getOwnedSites`, `createToken`, `deleteToken` |
+
+Notes:
+
+- `sites/[id]/queries.ts` companions are PLAIN modules (a `'use server'` file may export async
+  functions only): `item-select.ts` (`INVENTORY_ITEM_SELECT`), `item-counts.ts`
+  (`getSiteItemCounts`, `todayReservationsWindow`).
+- `saveBrand` rejects token writes while a bespoke page is live; `saveSlug` is always allowed.
+- Stripe actions return `StripeActionResult` (next step + due requirements); every
+  connection-state write ends in `syncEffectiveProviderSafe`.
+- Staff actions are session-scoped (`accountId === session.user.id`).
+- **Manage actions**: `reserveItem`, `unreserveItem`, `checkInReservation`, `resumeWalkIn`,
+  `undoDepartWalkIn`, `markDeparted`, `markNoShow`, `updateReservationNotes`, `moveReservation`,
+  `blockBed`, `unblockBed`, `holdBed`, `compBed`, `convertHoldToWalkIn`, rental ops
+  (`markRentalPickedUp`, `markRentalReturned`, `createWalkInRental`), QR collect
+  (`collectReservationPayment`, `getCollectStatus`, `cancelCollection`), `getStripeConnectionToken`,
+  till (`getTillStatus`, `closeTill`).
+- `collectReservationPayment(…, {method:'tap-to-pay'})` starts a Stripe Tap to Pay
+  PaymentIntent (effective provider `stripe` + `cardPresent: 'tap-to-pay'`); it and
+  `getStripeConnectionToken` are in the manage RPC registry for the floor app.
+- On-site creates take an optional trailing `employeeId`, validated via `resolveEmployeeId`;
+  cash walk-ins record `paymentAmount` for the till.
+- **Inventory revalidation is deliberate**: `inventory/actions.ts` bulk ops do NOT
+  `revalidatePath` — the client merges `refreshItems()` (track 020); `inventory-actions.ts` and
+  `parcel-ops.ts` do. New actions choose one on purpose (`PATTERNS.md`).
 
 ## State Management
 
-Redux slices: `reservationsSlice` (key-value store). RTK Query (`apiSlice`): `getReservations`, `getReservationsByDay`, `getReservationsByMonth`. Context: `SiteContext` provides `site`, `setSite`, `apiKey`, `nonce` to site sub-routes.
+Redux slices: `reservationsSlice` (key-value store). RTK Query (`apiSlice`): `getReservations`,
+`getReservationsByDay`, `getReservationsByMonth`. `SiteContext` provides `site`, `setSite`
+(accepts an updater), `apiKey`, `nonce` to site sub-routes and merges fresh server props.
 
 ## Testing
 
@@ -85,65 +136,51 @@ npm run test:coverage
 npm run test:integration  # real sunbnb_test DB
 ```
 
-The suite has four **meta-guards** that enforce architecture invariants — auth matrix over every
-gated action, gated-action registry completeness, mock-drift contract, and a no-inline-money check.
-Adding a gated server action without registering it fails the build.
-
-Full per-file inventory, the meta-guard detail and mocking patterns: **`apps/partner/TESTING.md`**.
+Meta-guards in `app/test/` enforce architecture invariants: auth matrix over every gated action,
+gated-action registry completeness, mock-drift contract, no inline money, no hardcoded tier
+pricing, no `pairId` writes. Adding a gated server action without registering it fails the build.
+No React component tests (no jsdom) — `.tsx` is verified by `tsc`. Detail: **`TESTING.md`**.
 
 ## Key Patterns
 
-- **Reservation state machine (track 018)**: transitions run through `applyTransition` (`@repo/data/reservation-machine-apply`); the grid derives state via the same `deriveState` (`bed-state.ts` is a presentation shell). A single-writer ratchet in `packages/data/src/reservation-machine-guard.test.ts` fails the build on any new direct reservation state write. Add transitions by editing the TABLE, not by writing guards in actions.
-- **Site codes** (track 022): every site carries `Site.code` (`S-` + 6 Crockford symbols) — the site half of the printed QR URL (`/q/S-K7M2X9/1-1-1`). **Both** creation paths (the `sites/create` wizard and `site-actions.ts` `submitForm`) go through `lib/site-create.ts` `createSiteWithCode`, which mints inside a retry loop and rethrows anything that is not a `code` collision. Existing rows: `npm run backfill:site-codes:*` in `packages/data`. Format rules live in `@repo/data/site-code`. **The printed QR card carries the short URL** — `inventory/qr-url.ts` `qrCardUrl` builds `{appUrl}/q/{code}/{parcel}-{row}-{seq}` by unpacking the item's `seatLabel` (no extra payload — the label already carries the address), and **falls back to the legacy long URL** when the site has no code or the seat no label, rather than refusing to print: the legacy URL redirects to the short form as soon as both halves exist. The QR names the UNIT; the card's visible label still names the BED, so a pair's two cards differ on the page and share a target.
-- **Payment providers (track 028)**: one provider per `PartnerAccount` (`mollie` | `viva` | `stripe`); `Site.paymentProvider` is the derived EFFECTIVE value, never written directly. Every connection-state write (Mollie callback / readiness-check / actions, Viva actions, Stripe actions + webhook, `/api/onboarding-status`) calls `syncEffectiveProviderSafe` (`app/api/_lib/sync-effective-provider.ts`, best-effort — never fails the request). **Readiness is centralised on `providerReadiness`** (`@repo/data/payment-providers/readiness`): `PaymentsBanner`, the sites list, the readiness checklist, the site payload's `paymentReadiness` / `cardPresent`, and the General-tab provider card all read it rather than provider-specific columns. `CardTerminalsCard` renders only when `cardPresent === 'terminal-app'` (Viva). Manage context (`/api/manage/context`) also returns `paymentProvider` + `cardPresent` for the floor app's card rails
-- Site ownership: all mutations go through `requireSiteOwner()` or `verifySiteOwnership()` which check `session.user.id === site.userId` (sudo users bypass)
-- Auto-save: debounced (1.5–2s) field changes trigger server actions → `revalidatePath` refreshes site context
-- Manage page: token-gated (no auth, uses site-specific `accessKey` from SecurityToken table). All manage server actions accept optional `accessKey` parameter — validates token expiry and resource permissions (`'all'` or `'manage_site'`). Supports walk-in reservations, check-in/departure, bed blocking, hourly/daily rental operations
-- Floor-staff attribution & till (tracks 008/013/016): a per-`PartnerAccount` `Employee` roster (`/account/staff`) feeds a current-worker chip in `ManageToolbar` (localStorage `sunbnb-manage-worker-${site.id}`, server-fetched roster passed from `manage/page.tsx`). On-site create actions auto-stamp the chosen `employeeId` (no per-transaction input; cross-account/stale ids drop to null via `resolveEmployeeId`); cash walk-ins record `paymentAmount`. The till is **day-anchored** (track 016): every till action computes venue-local `dayStart` (`siteTodayBounds`) and the open till splits into `today` (since `max(lastClose, dayStart)`) + `carryOver` (unclosed cash from prior days, amber-surfaced) — a close sweeps both via the shared `closeEmployeeTill` writer (snapshot records `carryOverAmount`/`carryOverCount`). The worker's till (`getTillStatus`/`closeTill`, day-first "Today" lead + carry-over banner) lives in `TillSheet`; the admin daily summary (`/manage/summary`, `DailySummaryView.tsx`, admin-token-gated via `verifySiteAdmin`) leads with **daily accumulation** (`getTillDayReport` for today — close-independent) with "still uncounted / handed in today" reconciliation lines, per-worker drawers + itemized rows underneath; day close (`/manage/close`, `closeDay` → `closeAllOpenTills`, returns `carryOverClosed`) is cash-up-only. The manager's monthly per-worker cash roll-up (`getStaffTill` → `getTillByEmployee`, `EmployeeCashTotal[]`) is a card on the accounting page. Till aggregation in `@repo/data/till` (unit tests alias it to `__mocks__/@repo/data/till.ts`). Attribution is orthogonal to the `accessKey` gate.
-- Inventory: items have `status` (new/active/inactive), coordinates for map placement, optional pairing (double sunbeds). Parcels (grouped items) support drag-and-drop repositioning on the map — dragging any item in a group moves the entire parcel via `moveParcel()` server action. Physical sunbed size: 2.1m (must match `getScaledSize()` in InventoryMap, InventoryField, and `generateChairs()` in chair-util)
-- **Seat ids** (track 021): every surface that shows a seat renders `{parcel}-{row}-{seq}-{member}` (`1-1-1-2`) via `formatSeatId` (`@repo/data/seat-label`), which UNPACKS the stored `seatLabel` — inventory editor, schematic canvas, manage grid + bed detail, and the QR cards — storage packs row and unit ordinal into one segment (`1-101-2`), hiding the unit address that a device is assigned to. **Display only**: `seatLabel` is untouched, so devices still resolve as before. Applies to the printed QR cards too (`qr-print-button.tsx`) — those are the one place a label leaves the screen and lands on a bed, so cards printed before this change show the old packed form and should be reprinted if both are in circulation. Parsing rather than shipping the unit's `parcel`/`row`/`seq` columns keeps the C2 payload cut intact (the label already carries all four numbers). Pinned by a test that unpacks every generated label back to the independently-computed unit address, so the id on screen and the address a device answers for cannot drift.
-- **Partial group booking**: `Site.partialGroupBookingEnabled` (General tab → "Reservation rules", off by default, `setPartialGroupBooking`) decides whether a guest may book PART of a sunbed unit or only whole units. A dedicated column rather than a `features[]` entry — `features` says what a site SELLS, this is a booking policy. Consumed by the user app's seat selection (`apps/user/app/sites/[id]/seat-selection.ts`); the venue (manage grid) and POS flows do not read it yet.
-- Equipment rentals: `RentalItem` supports `pricePerHour` and `pricePerDay`. Walk-in rentals via `CreateRentalModal` with quick-pick duration (1h, 2h, 3h, all day). `RentalBookingCard` shows time range and overdue status for hourly bookings
-- Dine-in tab QR codes: `restaurants/[id]/tables/DineInQRButton.tsx` (client, jsPDF + qrcode) generates a PDF of per-table QR cards linking to `/tables/<tableId>` (dine-in v2 canonical route — table id is globally unique, no `siteId` needed); lives in `apps/partner` ONLY (the URL encodes `CONSUMER_APP_URL` from the server — not `@repo/table-reservations-ui`). Rendered whenever the restaurant has active tables — standalone and site-linked restaurants alike (`tables/page.tsx` fetches unconditionally). `Restaurant.dineInEnabled` (toggle on the restaurant General tab, `RestaurantSettingsForm`) is the actual dine-in ordering gate consumed by the `/tables/[tableId]` consumer route — printing a QR doesn't require it to be on. Orders dashboard shows a table chip (violet pill) when `Order.tableId` is set — `page.tsx` fetches the table map via `prisma.table.findMany` after orders are loaded. Restaurant-scoped kitchen dashboard: `/restaurants/[id]/orders` (token-or-session, `verifyRestaurantAccess`) mirrors the site orders dashboard via a shared `scope` prop on the `Orders` view (`sites/[id]/orders/view.tsx`); minimal restaurant accounting (`/restaurants/[id]/accounting`, session-only) shows dine-in tab invoices for the month, no charts.
-- **Site payload tiering (track 020 C2)**: `site-page.tsx` wraps all eight site tabs, but only the two EDITOR tabs (`inventory`, `schematic`) receive seat rows — everything else gets `inventoryItems: []` plus the server-computed scalars `itemCount` / `activeItemCount` / `availableTodayCount` (`getSiteItemCounts`), which the brand stats and the readiness checklist read (array fallbacks retained). Editor rows use the shared narrow `INVENTORY_ITEM_SELECT` — no `notes`/`image`/`userId`/timestamps, and `pair`/`pairedBy` as `{ id }` stubs, not whole rows. `getSite` and `getInventoryItems` project the SAME shape (pinned by a merge-compatibility test) because the scoped refresh merges rows into the context by id. Measured on the 4,436-item dev site: inventory RSC 5,487KB → 2,117KB, count-only tabs → 83KB.
-- **Inventory editor parcel tier (track 020 C2 slice 2)**: the inventory tab payload carries `ParcelSummary` rows (`parcels.ts` → `getParcelSummaries`: per-parcel seat count + the ItemGroup geometry `parcelFootprint` needs) **plus only the ungrouped seats** — a grouped seat is not shipped until its parcel is opened or scrolls into the seat-zoom viewport, when `getItemsByGroups` streams it and it is merged into the SAME site context (so every existing `inventory`-reading consumer is unchanged; a parcel is simply absent until loaded). Overview boxes are drawn from summary geometry; a summary box drag targets the **ItemGroup anchor** (`moveParcel` without an anchor item) since no seat exists client-side. Aggregates (header totals, parcel-bar chip counts, complete-parcel checks, next parcel number) read summaries via `parcelSeatCount` — reading them off the loaded array renders `(0)`, a regression only the browser caught. `SiteContext.setSite` accepts an updater because seat loads can overlap. Measured on the 4,436-item dev site: inventory RSC **5,487KB → 87KB**.
-- **Per-device power policy** (`/devices`, track 025): each device row carries a compact badge
-  showing what that device is actually served on its next poll (`Deep · 60s`) — muted when it
-  inherits the venue default, outlined when the device overrides it — which opens a one-line
-  editor (mode select + seconds + Save + *Use venue default*). The pair is written together by
-  `setDevicePowerPolicy` / `clearDevicePowerPolicy`, validated as you type with the PURE
-  `validateDevicePolicy`/`validatePollInterval` (`@repo/data/device-power`, client-safe) against
-  the mode selected **in the form**, so switching the mode immediately refuses a cadence it
-  cannot keep instead of silently re-fitting it. The effective policy is resolved SERVER-side in
-  `queries.ts` with the same `resolveDevicePolicyForDevice` the HW poll route uses — a badge that
-  can disagree with the device is worse than no badge. Unlike every other device action it does
-  **not** queue an `identify`: a cadence is not visible on the bar, and on a deep-sleep device
-  the command would usually expire before the next poll. All three modes are offered, so the
-  editor states the battery cost of each — continuous at 1 s is a legal choice here and should be
-  an informed one.
-- Image upload: Vercel Blob `put()` in server actions; remote patterns whitelisted in `next.config.mjs`
-- UI / design system: see **`apps/partner/UI.md`** (partner design-system layer) + the general **`.claude/rules/ui.md`**; prime UI work with `/ui partner`.
+- **Reservation transitions** go through the state machine (`@repo/data/reservation-machine-apply`,
+  track 018) from manage, `frontdesk/actions.ts` and `reservations/[id]/actions.ts`; add
+  transitions by editing the TABLE, not guards in actions. → `.claude/wiki/subsystems/reservation-state-machine.md`
+- **Payment providers** (track 028): `Site.paymentProvider` is derived, never written; every
+  connection-state write calls `syncEffectiveProviderSafe` (`app/api/_lib/sync-effective-provider.ts`,
+  best-effort). → `.claude/wiki/subsystems/payments.md`
+- Partner readiness UI (`PaymentsBanner`, sites list, readiness checklist, site payload
+  `paymentReadiness`/`cardPresent`, General-tab card) reads `providerReadiness` only;
+  `CardTerminalsCard` renders only for `cardPresent === 'terminal-app'`.
+- **Ownership & manage tokens**: site mutations use `requireSiteOwner()`/`verifySiteOwnership()`;
+  manage actions take an optional `accessKey` (scope `'all'`/`'manage_site'`; admin tier via
+  `verifySiteAdmin`). → `.claude/wiki/subsystems/auth.md`, `.claude/rules/auth.md`
+- **Floor staff & till** (tracks 008/013/016): roster, current-worker chip, day-anchored till,
+  daily summary, day close, monthly roll-up. → `.claude/wiki/subsystems/employee-till.md`
+- **Device power policy** (`/devices`, track 025): `setDevicePowerPolicy`/`clearDevicePowerPolicy`,
+  resolved server-side with `resolveDevicePolicyForDevice`, no `identify`.
+  → `.claude/tracks/025-device-power-modes.md`
+- **Inventory, site codes, seat ids, payload tiering**: → `apps/partner/PATTERNS.md`
+- Restaurants / dine-in tables: → `.claude/wiki/subsystems/table-reservations.md` + `PATTERNS.md`
+- UI: `apps/partner/UI.md` + `.claude/rules/ui.md`; prime with `/ui partner`.
 
 ## AI assistant (track 030)
 
-Right-side drawer in the site shell (`site-view.tsx`; full-screen sheet below `lg`) that answers questions and **makes changes (with Undo)** across every site tab, with depth on inventory/schematic. Principle: **the model never writes and never draws** — tools return structured intent, deterministic server code produces geometry, and every write is an `AssistantAction`. **Act-immediately (D2 superseded 2026-10-11 by the founder):** a `propose_*` tool (name kept, historical) stores the action AND applies it in the same call via `proposals/act.ts` `createAndApply` → the lifecycle's `applyProposal(id, { note: false })` (same re-auth, stale check, snapshot; no parallel write path), then emits the `proposal` SSE card with `status: 'applied'` (a done card: summary + short change list + Undo). **Exceptions that stay `proposed`:** any diff with `deletes` (typed `DELETE` confirm, not undoable). `MAX_ACTIONS_PER_TURN = 5` (`ctx.applied`; the 6th write is refused so the model reports). Relative moves under 0.5 m are refused in `inventory-sim.ts` (`MIN_MOVE_M`, whole-batch-of-moves only) so the model states the current state instead. Track: `.claude/tracks/030-partner-ai-assistant.md`; wiki: `.claude/wiki/subsystems/partner-assistant.md`.
-
-- **Gates**: account flag `assistant` (sudo always on) + kill switch `assistantAvailable()` (`lib/assistant/config.ts`: `PARTNER_ASSISTANT_ENABLED=1|true` **and** `ANTHROPIC_API_KEY`; 503 otherwise). Models: `PARTNER_ASSISTANT_MODEL` (chat, default `claude-sonnet-5-5`), `PARTNER_ASSISTANT_EXTRACTION_MODEL` (plan/aerial vision, default `claude-opus-5-5`). `siteId` is bound by the route, never taken from the model; every tool re-runs `requireSiteOwner`; model-facing handles are parcel numbers / seat labels / names, never cuids.
-- **Routes**: `POST /api/assistant` (SSE: `conversation`, `text`, `tool_start`, `tool_result`, `proposal`, `qr_print`, `align_photo`, `error`, `done`; `maxDuration` 60) + `GET` (transcript for the site owner's conversation) · `GET /api/assistant/uploads/[id]` (streams an upload back to its own account — thumbnails; foreign/expired/purged = 404) · `GET /api/assistant/uploads/[id]/image` (aerial frame: EXIF-oriented, ≤2000 px JPEG, `X-Image-Size`) · `POST /api/assistant/aerial/[uploadId]/extract` (Opus vision, `maxDuration` 300, CAS-claimed, descriptor cached on the upload) · cron `GET /api/cron/purge-assistant-uploads` (daily 03:40 UTC, `CRON_SECRET`).
-- **Actions** (`app/assistant/`): `actions.ts` `applyAssistantAction` / `rejectAssistantAction` / `undoAssistantAction` (re-authorised, account-scoped CAS transitions via `@repo/data/assistant`) · `upload-actions.ts` `uploadAssistantFile` (magic-byte sniff, ≤20 MB, 30/day) · `aerial-actions.ts` `saveUploadGeoref`. All registered in `app/test/gated-actions.ts`.
-- **Proposal kinds** — `lib/assistant/proposals/registry.ts` `HANDLERS` (one `KindHandler` per kind: validate → diff/preview → execute → snapshot/restore): `site_fields`, `working_hours`, `brand`, `slug`, `products`, `rental_items`, `account_fields`, `inventory_batch` (ops simulated in `inventory-sim.ts`, applied through `inventory/parcel-ops.ts` + inventory actions), `layout_elements`, `layout_canvas`, `place_image`. Handlers WRAP the existing server actions — never re-implement business rules (`validator-parity.test.ts` pins propose-time bounds to the actions'). Pending proposals (deletes only, since act-immediately) expire after 1 h; undo within 24 h, refused when rows changed since apply (order-independent compare — jsonb loses key order); deletes need a typed confirm and are not undoable.
-- **Tool families** (`lib/assistant/tools/index.ts`): reads (`get_site_overview`, `list_parcels`, `get_parcel`, `find_seats`, `list_layout_elements`, `list_products`, `list_rental_items`, `get_working_hours`, `get_brand`, `get_content`, `get_account_profile`, accounting summary/trend) · `explain_feature` (knowledge docs `lib/assistant/knowledge/{inventory,schematic,site-tabs}.md`) · tab writes `propose_{site_fields,working_hours,brand,slug,products,rental_items,account_fields,place_image}` · inventory `propose_{create_parcel,edit_parcel,rotate,spacing,move,set_status,reverse,delete}` + `request_qr_print` · schematic `propose_layout_elements`, `propose_canvas_size` · vision `extract_schematic_from_plan`, `request_photo_alignment`, `propose_layout_from_photo`.
-- **Data questions — `sql` tool (D2, replaces the G1 PGlite snapshot)** (`tools/sql.ts`, `lib/assistant/sql-schema.ts`, `data-access.ts`): model SQL runs against the REAL DB as role `assistant_reader` via `runAssistantSql` (`@repo/data/assistant-claim`, track 030 D1; see `packages/data/CLAUDE.md`). **Postgres is the tenant boundary**: RLS on an HMAC-signed claim the tool mints from the route-bound `ctx.siteId`/`ctx.accountId` (never model input), column-level grants, READ ONLY txn, 3 s statement timeout, `search_path = assistant, public` (so bare view names work; `assistant.<view>` too). Views: `site, parcel, unit, sunbed, layout_element, product, rental_item, working_hours, reservation, reservation_seat, food_order, food_order_item, invoice`. `sql-schema.ts` is the STATIC DOCS of those views (columns + meaning; feeds the tool description and `inspect:data`); `sql.integration.test.ts` fails if it drifts from the live views, and `DENIED_COLUMN` bars sensitive names. `checkSql` stays as a second layer (one SELECT/WITH, no comments/`;`/`$`/quoted identifiers, no `INTO`/`FOR UPDATE`/recursive, no `pg_*`/`set_config`/xml/file functions; PostGIS `ST_*` allowed) plus 200 rows / 30 KB caps (`totalRows` from a count when truncated). Postgres errors are mapped (`42501` → `column_not_available`, `57014`/`55P03` → `query_too_slow`). Kill switch: `ASSISTANT_DB_URL` or `ASSISTANT_DB_CLAIM_SECRET` unset → `{ ok:false, reason:'data_access_not_configured' }` (also in `inspect:catalog`/`data`, and `run_js` data tables come back empty with a note). `run_js` `data.<view>` rows come from `readAssistantTables` (`SELECT * FROM assistant.<view> LIMIT 5000`). To expose a column: migration in `packages/data` (view + grant) then `sql-schema.ts`.
-- **System inspector — `inspect` tool (G3)** (`tools/inspect.ts`, providers `lib/assistant/inspect/<aspect>.ts`, registry `inspect/index.ts`): one read-only `inspect({ aspect, topic? })` so the model can discover the system instead of asking: `catalog` (aspects + which tool answers what; only lists registered tools, so `run_js` appears when registered) · `data` (ER model GENERATED from `sql-schema.ts`; hand-written `RELATIONSHIPS` with example SQL that `sql.integration.test.ts` executes against the real `assistant.*` views) · `editor` (GENERATED from registered `propose_*` tool schemas — types/ranges/units — plus the one `OP_META` table: preconditions, undoable, QR-reprint impact, manual UI path; a new propose tool appears automatically but a test requires its `OP_META` entry) · `space` (frame conventions; topic `sea` via `loadSeaModel`) · `features` (plan, entitlements + which plan unlocks, flags, site `features[]`) · `readiness` (mirrors `readiness-checklist.tsx`; selected vs effective provider) · `money` (fee cascade + VAT + worked example via `@repo/data` helpers only). Site/account come from ctx (schema has no id field; extra keys are rejected), output is capped at 8 KB by `inspect/fit.ts` (halves the longest list, says so in `_truncated`). To add an aspect: new provider + one line in `inspect/index.ts`.
-- **Limits** (`lib/assistant/limits.ts`, shared DB counter via `@repo/agent/limits`): per account 30 turns/10 min + 150/day; global `PARTNER_AI_DAILY_TURNS` (default 1000, `0` = off, one team email when tripped to `ASSISTANT_NOTIFY_EMAIL`); 10 extraction jobs/day (attachment turns, plan extraction, aerial), aerial sub-cap 3/day (only a real model call counts). 8 model steps/turn; ≤5 attachments/turn. Usage is recorded on the conversation (+ `aerial.usage` on the upload) — the €2/day cost cap is **not** enforced yet.
-- **Uploads** (`lib/assistant/uploads.ts`): Blob key `assistant/{accountId}/{uuid}/{name}` in the PRIVATE store (`ASSISTANT_BLOB_READ_WRITE_TOKEN`; without it falls back to the default store). Documents: PDF → document block, images, DOCX → text (mammoth); HEIC likely unsupported by the model. `AssistantUpload.expiresAt` = 30 days; the purge cron deletes the blob and stamps `deletedAt`. Never written from a document: IBAN, payment provider, KYC, Verifactu, personal IDs.
-- **Image placement** (`place_image`, targets cover / product / rental_item / brand_logo / brand_background / schematic_underlay by NAME): apply **copies** the upload to a public blob at the deterministic `sites/{siteId}/assistant/{uploadId}.{ext}` (re-encoded ≤2400 px, EXIF stripped — `lib/assistant/image-process.ts`), so a site image never points at a purgeable upload. Brand logo/bg have no Brand-tab UI yet.
-- **Plan → schematic** (`tools/extract-plan.ts` + pure `lib/assistant/plan-extraction.ts`): drawn/printed plan → canvas size, elements and parcels in schematic metres as separate ordered cards (canvas → elements → parcels → optional underlay); asks for a real dimension when the plan has no scale.
-- **Aerial photo → map parcels** (`lib/assistant/aerial/*`, pure core in `@repo/agent/{vision,geo}`): `request_photo_alignment` → SSE `align_photo` opens `PhotoAlignLayer`/`PhotoAlignToolbar` on `InventoryMap` (seed from DJI XMP / EXIF FOV / site centre + bed-size scale; drag/rotate/scale, opacity) while extraction runs in parallel → confirm saves the georef (`saveUploadGeoref`) → `propose_layout_from_photo` fits the cached descriptor (`fitAerialDescriptor`) into `inventory_batch` `create_parcel` ops (`aerial/plan.ts`: numbers from max+1, drop < 0.4 confidence, overlap + land warnings, split >1200 seats). Land check uses `shoreAround` (`@repo/data/coastline-lookup`) and is skipped without `COASTLINE_POSTGRES_URL`. Satellite tiles are never fed to the model (D9). Map-layout sites only.
-- **Previews**: ghost overlays (`inventory/GhostLayer.tsx`, `components/assistant/useGhostPreview.ts`, pure `geometry-preview.ts` / `layout-overlay.ts`) now exist ONLY for pending delete proposals (`selectActivePreview` requires `hasRemovals`); applied cards have no PreviewChip / "Show on map". A moved group draws ONE connector (centroid → centroid), not an arrow per seat (that was the "long streak" bug).
-- **Resync**: `router.refresh()` never resets client `useState`, so Apply/Undo — and an auto-applied SSE card (`assistant-store.ts` dispatches with `auto: true`; `AssistantDrawer` then `router.refresh()`es) — dispatches `assistant:applied` (`components/assistant/proposal-events.ts`) and each tab holding a client copy subscribes with `useAssistantResync(kinds, refetch)`; `lib/resync.ts` `reconcileFields` resets a field only when the server value moved AND the user has not edited it; `concerns()` routes `place_image:<target>` to the one tab showing that slot. `SiteContext` merges fresh server props instead of reading them once.
-- **Privacy**: Anthropic named as sub-processor in `/legal/privacy` §5 (wording pending founder review). Consent version on first use is not recorded yet.
+Site-shell drawer that answers questions and makes changes with Undo across every tab. The model
+never writes: `propose_*` tools act immediately via `proposals/act.ts` `createAndApply` (deletes
+stay proposed behind a typed confirm). Gates: account flag `assistant` + `assistantAvailable()`
+kill switch; `siteId` is route-bound and every tool re-runs `requireSiteOwner`. Data questions run
+SQL on the real DB as `assistant_reader` (RLS). Detail: **`ASSISTANT.md`**; model:
+`.claude/wiki/subsystems/partner-assistant.md`.
 
 ## Analytics (GA4)
 
-`NEXT_PUBLIC_GA4_ID` (shared property with try.sunbnb.app; unset = no tag). `<GoogleAnalytics>` + `<CookieConsent hasAnalytics>` are in `app/layout.tsx`; nothing loads until the visitor accepts. Events go through `trackOnce(onceKey, name, params)` / `<TrackEvent>` in `components/Analytics.tsx` (waits for the late-loading tag, once per key per browser); pure rules in `lib/analytics.ts`. Events: `sign_up`/`login` (stamped in the `jwt` callback in `app/auth.ts`, fired by `<AuthEvents>`), `generate_lead`/`select_content` (landing CTAs), `site_created`, `inventory_saved`, `site_published`, `payments_connected` (provider), `purchase` (subscription Checkout return, `/account/subscription?checkout=success&session_id=`, re-read from Stripe server-side). Never put email/name/user ids in params.
+`NEXT_PUBLIC_GA4_ID` (shared with try.sunbnb.app; unset = no tag). `<GoogleAnalytics>` +
+`<CookieConsent hasAnalytics>` in `app/layout.tsx`; nothing loads until consent. Events go through
+`trackOnce(onceKey, name, params)` / `<TrackEvent>` (`components/Analytics.tsx`); pure rules in
+`lib/analytics.ts`. Never put email/name/user ids in params.
+
+Events: `sign_up`/`login` (stamped in the `jwt` callback in `app/auth.ts`, fired by
+`<AuthEvents>`), `generate_lead`/`select_content` (landing CTAs), `site_created`,
+`inventory_saved`, `site_published`, `payments_connected` (provider), `purchase` (subscription
+Checkout return `/account/subscription?checkout=success&session_id=`, re-read from Stripe).

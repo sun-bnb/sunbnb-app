@@ -36,7 +36,6 @@ Invokable via `/wiki <op>` (see `.claude/commands/wiki.md`).
 - [`entity:order`](entities/order.md) — **stable** — F&B order placed during a reservation
 - [`entity:invoice`](entities/invoice.md) — **stable** — generated post-payment, two-invoice rule, hash chain
 - [`entity:service-fee`](entities/service-fee.md) — **stable** — three-tier cascade, fixed vs percentage
-- [`entity:settlement`](entities/settlement.md) — **stable** — monthly partner payout aggregation, DRAFT→PAID
 - [`entity:restaurant`](entities/restaurant.md) — **stable** — PartnerAccount-owned venue, optional Site soft-link, booking config, ownership
 - [`entity:table-reservation`](entities/table-reservation.md) — **stable** — table booking, dual-status machine, free today, `Table` model
 
@@ -46,7 +45,6 @@ Invokable via `/wiki <op>` (see `.claude/commands/wiki.md`).
 - [`flow:order-payment`](flows/order-payment.md) — **stable** — F&B order placement → payment → invoice (consumer pays listed price; commission parallel)
 - [`flow:rental-booking`](flows/rental-booking.md) — **stable** — equipment rental: availability check → booking → payment → pickup/return
 - [`flow:walk-in`](flows/walk-in.md) — **stable** — partner manage page: occupancy lifecycle (walk-in/hold/comp/block creators vs transitions), `[from,to]` + `until`, two-clock GC, pool seats, QR walk-in payment collection (Mollie + anonId capability + receipt)
-- [`flow:settlement-cycle`](flows/settlement-cycle.md) — **stable** — admin app: generate → close → approve → mark paid
 - [`flow:table-booking`](flows/table-booking.md) — **stable** — availability → slot → guest form → confirm → email; cancel; staff lifecycle (no payment)
 
 ## Subsystems — cross-cutting modules
@@ -60,9 +58,14 @@ Invokable via `/wiki <op>` (see `.claude/commands/wiki.md`).
 - [`subsystem:employee-till`](subsystems/employee-till.md) — **draft** — floor-staff roster (`/account/staff`) + automatic per-worker attribution + per-worker cash till/close (`TillSheet`) + manager monthly breakdown (accounting); `@repo/data/till`. Track 008
 - [`subsystem:migrations`](subsystems/migrations.md) — **stable** — environment topology (`main`+`test` share ONE test DB, production isolated) and the laptop-run migration sequence. The declarative rules stay canonical + auto-loaded in `.claude/rules/migrations.md`; this page holds the narrative you need only when actually running one
 - [`subsystem:partner-assistant`](subsystems/partner-assistant.md) — **draft** — partner AI assistant (track 030): `@repo/agent` core, proposal lifecycle (propose → apply/reject/undo), kind registry, vision flows (documents, plan → schematic, aerial → map), invariants
+- [`subsystem:context-system`](subsystems/context-system.md) — **stable** — the AI-context machinery itself: six layers (canon, pulled siblings, wiki, playbooks, tracks, episodic store), trust ladder, tiered recall + credits, `/groom`, the health check and `budgets.json`. Read before changing any of `.claude/`
 - [`subsystem:venue-timezone`](subsystems/venue-timezone.md) — **stable** — every date boundary anchors to the venue's civil day (track 017): `@repo/data/site-day` primitives (day/month bounds, write anchor, tz derivation) + `tz.ts` wall-clock converters; `Site.timeZone` auto-derived on save + backfill. Never hand-roll day math
 
 ---
+
+## Retired (delete after the date)
+
+- [`entity:settlement`](entities/settlement.md), [`flow:settlement-cycle`](flows/settlement-cycle.md) — admin payout settlements, retired 2026-10-13 ([[track:032]]); delete after 2026-11-12
 
 ## Planned (not yet written)
 
@@ -72,7 +75,7 @@ These are concepts that warrant pages but have not been synthesized. Create them
 
 **Flows:** `pos-anonymous`, `password-reset`, `refund`, `reservation-cancellation`, `parcel-edit`, `subscription-checkout`
 
-**Subsystems:** `context-system` (the six context layers, who writes/curates each, budgets, health check, credit→promotion loop — written in [[track:031-context-system-v2]] P6), `email`, `cron`, `i18n`, `image-upload`, `postgis`, `state-management`, `testing`, `physical-identity` (the external-code family — `Device.code` / `PartnerAccount.code` / `Site.code` — and the unit ADDRESS `{parcel}-{row}-{seq}` that the HW state route and the QR entry route both resolve by. Two consumers now share it, so it has earned a page; **hold until [[track:021]] lands in production**, since its columns are still mid-expand and a page written now would document a moving model)
+**Subsystems:** `email`, `cron`, `i18n`, `image-upload`, `postgis`, `state-management`, `testing`, `physical-identity` (the external-code family — `Device.code` / `PartnerAccount.code` / `Site.code` — and the unit ADDRESS `{parcel}-{row}-{seq}` that the HW state route and the QR entry route both resolve by. Two consumers now share it, so it has earned a page; **hold until [[track:021]] lands in production**, since its columns are still mid-expand and a page written now would document a moving model)
 
 **Apps:** `apps/user`, `apps/partner`, `apps/admin` (deep-dive companions to the per-app `CLAUDE.md`)
 
@@ -87,10 +90,10 @@ The wiki points to these; it does not duplicate them.
 | What | Where |
 |---|---|
 | Architectural overview (system-wide) | `CLAUDE.md`, `PROJECT_CONTEXT.md` |
-| Per-app architecture | `apps/{user,partner,admin}/CLAUDE.md` |
+| Per-surface architecture | `apps/*/CLAUDE.md`, `packages/{data,agent,ui}/CLAUDE.md` + their pulled siblings (root `CLAUDE.md` § Context system) |
 | Data package conventions | `packages/data/CLAUDE.md` |
-| Declarative rules | `.claude/rules/{auth,data-access,payments}.md` |
-| Per-agent past learnings | `.claude/knowledge/<agent>.md` |
+| Declarative rules | `.claude/rules/{architecture,auth,commits,data-access,deploys,migrations,payments,ui}.md` |
+| Per-agent curated playbooks | `.claude/knowledge/<agent>.md` (generated nav index; `/groom`) |
 | Agent profiles | `.claude/agents/<agent>.md` |
 | Slash commands | `.claude/commands/<command>.md` |
 | Architecture deep-dive (human) | `ARCHITECTURE.md` (root, when present) |

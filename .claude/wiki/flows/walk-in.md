@@ -8,12 +8,17 @@ sources:
   - packages/data/src/reservation-payment.ts
   - apps/user/app/api/webhooks/mollie/route.ts
   - packages/data/src/reservation-status.ts
-  - apps/partner/CLAUDE.md
+  - packages/data/src/reservation-machine-apply.ts
+  - packages/data/src/refund.ts
 related:
   - entity:reservation
+  - subsystem:reservation-state-machine
   - subsystem:auth
+  - subsystem:payments
+  - subsystem:employee-till
   - flow:reservation-payment
-last_verified: 2026-06-18
+  - flow:rental-booking
+last_verified: 2026-10-13
 ---
 
 # Flow: Walk-In / On-Site Management
@@ -22,7 +27,7 @@ The partner manage page (`apps/partner/app/sites/[id]/manage`) operates the on-s
 
 ## Trigger
 
-Staff opens `/sites/[id]/manage?accessKey=<token>` (or `/sites/[id]/manage` with a stored token cookie). All server actions on this page accept an optional `accessKey` parameter.
+Staff opens `/sites/[id]/manage?accessKey=<token>` (or `/sites/[id]/manage` with a stored token cookie). All server actions on this page accept an optional `accessKey` parameter (the same actions back the mobile floor app's manage RPC registry).
 
 ## Pre-conditions
 
@@ -60,6 +65,8 @@ All four auto-include the bed's SunbedGroup/pair siblings and run through `reser
 
 ### Transitions — mutate the existing row (no new row)
 
+Most transitions are rows of the reservation state machine, executed via `applyTransition` (`staff.checkIn`, `staff.depart`, `staff.noShow`, `staff.resume`, `staff.unreserve.*`, `collect.*`, `split.subset`); the guard column below summarises the table — the table in `[[subsystem:reservation-state-machine]]` is authoritative. Departing a subset of a multi-seat walk-in first peels the seats into a lineage row (`split.subset`, also exposed as `splitWalkInSeat`).
+
 | Action | Effect | Guard |
 |---|---|---|
 | `checkInReservation` | `expected` → `checked-in` (+`checkedInAt`) | from `expected` only |
@@ -68,25 +75,25 @@ All four auto-include the bed's SunbedGroup/pair siblings and run through `reser
 | `convertHoldToWalkIn(…,until?)` | held row → `paid-in-cash`/`walked-in` **in place**; optional `until` extend (race-safe) | finds the `held` row |
 | `moveReservation` / `moveReservationToSeats` | re-point items to new beds — **same `id`**, clock/payment/invoice preserved | not `departed`/`no-show` |
 | `updateReservationNotes` | edit `internalNotes` | — |
-| `refundReservation` | stamp `refundedAt`, **bed stays occupied**; idempotent | online `complete` only |
+| `refundReservation` | provider refund via `issueReservationRefund` (`packages/data/src/refund.ts`, routed by `providerFromRef`), then stamp `refundedAt`; **bed stays occupied**; idempotent on `refundedAt` | has a paid `paymentRef` |
 | `cancelReservation` | `complete` → `canceled` (or `refunded` if `refundedAt`), **keeps row for audit**, frees bed | idempotent on terminal |
-| `collectReservationPayment` / `getCollectStatus` / `cancelCollection` | take an online QR payment for a walk-in → `complete` (see § Collecting a walk-in payment) | walk-in / `paid-in-cash` |
+| `collectReservationPayment` / `getCollectStatus` / `cancelCollection` | take a QR / card-terminal / Tap to Pay payment for a walk-in → `complete` (see § Collecting a walk-in payment) | unsettled walk-in (machine `collect.start`) |
 
 ### Deleters — remove the row, free the bed
 
 `unreserveItem` (walk-in), `releaseHold` (hold), `uncompBed` (comp), `unblockBed` (block) delete the floor row (no invoice trail). `removeFailedReservation` deletes a `payment_failed` row only (guarded so it can never touch a paid/held/active booking). Pair-mode deletes the whole reservation; single-seat mode disconnects just one item when >1 remain.
 
-## Collecting a walk-in payment (QR → Mollie)
+## Collecting a walk-in payment
 
-A cash walk-in can be upgraded to a real online sale on the floor. `BedDetail.tsx` shows a **Collect payment** button on a `walked-in` bed (paid sites only); `collectReservationPayment`:
+An unsettled cash walk-in can be upgraded to a card sale on the floor. `collectReservationPayment(…, opts?)` runs the machine's `collect.start`, which prices from **DB chair prices** (`item.price ?? site.price` × days — never client-supplied) and starts one of three methods:
 
-1. Computes the amount from **DB chair prices** (`item.price ?? site.price` × days — never client-supplied), persists it.
-2. Mints an **`anonId` capability** on the partner-created walk-in (it has none) so the beachgoer's browser can later claim *this one* reservation — same bearer model as an anonymous POS booking.
-3. Creates a Mollie payment on the partner's account (platform fee via `applicationFee`) through the shared `createReservationMolliePayment` in `packages/data/src/reservation-payment.ts` — the **same** primitive the consumer online flow uses (extracted like `[[entity:invoice]]`'s refund). Metadata carries `collect:true`.
+- **QR (default)** — mints an **`anonId` capability** on the walk-in (it has none) so the beachgoer's browser can claim *this one* reservation, then creates a Mollie checkout on the partner's account via the shared `createReservationMolliePayment` (`packages/data/src/reservation-payment.ts`); metadata carries `collect:true`. Requires `CONSUMER_APP_URL`; the guest lands on `/payment/complete?reservationId=&anonId=` → `/reservations/[id]`.
+- **`method: 'card'`** + `terminalId` — Viva Cloud Terminal (card-present, no guest redirect).
+- **`method: 'tap-to-pay'`** — Stripe Tap to Pay; only when the site's effective provider is `stripe` and the country supports it (`getStripeConnectionToken` serves the floor app).
 
-`status` goes `paid-in-cash → processing` while `operationalStatus` **stays `walked-in`** (the bed never frees). The operator screen polls `getCollectStatus`; the QR encodes the Mollie checkout URL. On **paid** (webhook `[[flow:reservation-payment]]`, or the poll's `reverifyAndFinalizeReservation` fallback → `processConfirmedReservation`): `status → complete`, invoices created, BedDetail swaps the button for a paid badge. The beachgoer is redirected to the standard `/payment/complete?reservationId=&anonId=` → `/reservations/[id]` (PDF receipt + a self-serve "email me a receipt" via `sendReceiptEmail`).
+`status` goes `paid-in-cash → processing` while `operationalStatus` **stays `walked-in`** (the bed never frees). The operator screen polls `getCollectStatus`. On **paid** (webhook, or the poll's `reverifyAndFinalizeReservation` fallback → `processConfirmedReservation`): `status → complete`, invoices created. Provider specifics: `[[subsystem:payments]]`.
 
-**A failed/expired/abandoned collection reverts to `paid-in-cash`** (never `payment_failed`) so the occupied bed survives — handled on three paths: `cancelCollection` (operator closes the QR), `getCollectStatus` (poll sees failure), and the Mollie webhook (the `collect` metadata branch). Demo mode (`NEXT_PUBLIC_DEMO_MODE`) skips the provider: a `pi_demo_` ref settles as paid on the next poll.
+**A failed/expired/abandoned collection reverts to `paid-in-cash`** (never `payment_failed`) so the occupied bed survives — via `cancelCollection` (`collect.abandon`), the `getCollectStatus` poll, and the webhook `collect` branch. Demo mode (`NEXT_PUBLIC_DEMO_MODE`) settles a `pi_demo_` ref as paid on the next poll.
 
 ## Operational state machines
 
@@ -95,14 +102,14 @@ online booking:  expected → checked-in → departed
                          ↘ no-show
 walk-in:         walked-in → departed
                           ↘ no-show            (already present — no check-in step)
-                 walked-in → (collect QR) processing → complete (paid online)
+                 walked-in → (collect) processing → complete (paid by card)
                                         ↘ failed → back to paid-in-cash
 hold:            expected → convertHoldToWalkIn → walked-in → …
                          ↘ no-show / releaseHold
 block, comp:     single-state; cleared by unblock / uncomp
 ```
 
-Transitions are **event-driven, never timed**. `Site.noShowDeadlineMinutes` only gates *eligibility* in the UI; nothing auto-fires a transition. Constants: `packages/data/src/reservation-status.ts#OP_`.
+Transitions are **event-driven, never timed**. `Site.noShowDeadlineMinutes` only gates *eligibility* in the UI; nothing auto-fires a transition. Constants: `packages/data/src/reservation-status.ts#OP_EXPECTED` and siblings.
 
 ## Lifespan: two independent clocks
 
@@ -126,7 +133,7 @@ The only period control in `/manage` (the calendar toggle in `BedDetail.tsx`), f
 
 ## Side effects
 
-- DB writes: `Reservation` (inserts for creators; status/operational updates for transitions), `RentalBooking`, `InventoryItem` (pool seats). `refundReservation` calls Mollie via `issueReservationRefund`.
+- DB writes: `Reservation` (inserts for creators; state updates for transitions, which also upsert the per-day `ReservationDay` row), `TillEntry` (cash settlement evidence — `[[subsystem:employee-till]]`), `RentalBooking`, `InventoryItem` (pool seats). `refundReservation` calls the payment's provider via `issueReservationRefund`.
 - No email on operational transitions — partner-side state only.
 
 ## Failure modes
@@ -136,7 +143,7 @@ The only period control in `/manage` (the calendar toggle in `BedDetail.tsx`), f
 | Invalid / expired `accessKey` | Action returns auth error | Fresh token from `/security` |
 | Token scope mismatch | Auth error | Token needs `'all'` or `'manage_site'` |
 | Conflicting create (item or sibling already booked in range) | `reserveWithConflictGuard` `outcome:'conflict'` | `{ status:'error', errors:[…] }` |
-| Refund fails (Mollie permission/403) | `refundReservation` returns `needsReconnect:true` | UI offers Mollie re-consent; cancel can still proceed. Staff usually **cannot** complete it: the "Enable refunds" link targets `/api/mollie/authorize`, which needs an owner session and 401s on a token-gated `?key=` manage session. The owner is warned separately at partner-app sign-in (`[[subsystem:payments]]` § granted scopes), so the fix normally comes from them, not from whoever hit the failure |
+| Refund fails (Mollie permission/403) — Mollie refs only | `refundReservation` returns `needsReconnect:true` | UI offers Mollie re-consent; cancel can still proceed. Staff usually **cannot** complete it: the "Enable refunds" link targets `/api/mollie/authorize`, which needs an owner session and 401s on a token-gated `?key=` manage session. The owner is warned separately at partner-app sign-in (`[[subsystem:payments]]` § granted scopes), so the fix normally comes from them, not from whoever hit the failure |
 | Extend-via-`until` races a concurrent booking | `convertHoldToWalkIn` re-checks in a `FOR UPDATE` tx | `outcome:'conflict'` |
 
 ## Related

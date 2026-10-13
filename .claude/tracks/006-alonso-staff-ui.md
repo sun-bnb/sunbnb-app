@@ -1,9 +1,9 @@
 ---
 id: 006-alonso-staff-ui
 title: Alonso → Staff UI Migration
-status: active
+status: paused
 created: 2026-06-17
-updated: 2026-07-09
+updated: 2026-10-13
 worktree: null
 ---
 
@@ -163,6 +163,7 @@ branching the expected lane by payment class.
 
 ## Resume here
 
+- **PAUSED 2026-10-13** (track 031 status pass) — floor-state parity done; three reporting-presentation gaps from the 2026-07-09 customer feedback remain, waiting for prioritisation.
 - **⚠ REOPENED 2026-07-09 — customer "literal parity" feedback.** The operator sent four Alonso
   screenshots (WhatsApp, forwarded) and said parity was meant *literally*. Analysis (2026-07-09,
   code-verified) found the **floor-state half is at parity**, but **three reporting/attribution
@@ -750,6 +751,7 @@ branching the expected lane by payment class.
 - **Hold vs reservation overlap (P6).** Does the lightweight hold reuse the `expected` operational
   status with a "no payment" marker, or get its own status? Affects the cleanup cron and the
   reservation status machine.
+- **2026-10-13** — Status → paused (track 031 status pass, founder-approved): floor-state parity done; three reporting-presentation gaps from the 2026-07-09 customer feedback remain, waiting for prioritisation.
 
 ## Links
 

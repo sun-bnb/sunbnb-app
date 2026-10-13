@@ -7,14 +7,14 @@ sources:
   - packages/data/src/reservation-machine-apply.ts
   - packages/data/src/reservation-machine-guard.test.ts
   - apps/partner/app/sites/[id]/manage/state-machine-matrix.integration.test.ts
-  - apps/partner/app/sites/[id]/manage/bed-state.ts
+  - packages/floor-core/src/bed-state.ts
   - .claude/tracks/018-state-machine-intended.md
   - .claude/tracks/018-state-machine-defacto.md
 related:
   - subsystem:payments
   - subsystem:employee-till
   - entity:reservation
-last_verified: 2026-08-11
+last_verified: 2026-10-13
 ---
 
 # Subsystem: Reservation State Machine
@@ -43,8 +43,8 @@ LLM-analyzability**: state questions are table lookups, never code-path simulati
 
 ## The four determinism pillars
 
-1. **Reified state** — `deriveState` is the only derivation; the partner grid's
-   `bed-state.ts` is a presentation shell over it.
+1. **Reified state** — `deriveState` is the only derivation; `@repo/floor-core`'s
+   `bed-state.ts` (partner manage grid + mobile floor app) is a presentation shell over it.
 2. **Single writer** — `applyTransition` (`reservation-machine-apply.ts`, server-only)
    is the only state writer; `reservation-machine-guard.test.ts` scans ALL apps and
    fails the build on bypasses (exact-equality, shrink-only allowlist; residue: the
@@ -92,6 +92,28 @@ LLM-analyzability**: state questions are table lookups, never code-path simulati
   land as an orphaned charge).
 - Kind stays derived (no column); no new status strings (cash refund reuses `refunded`,
   `paymentRef == null` ⇒ cash).
+- Per-seat / subset actions (split, peel, convert, free one seat of a group) are gated to
+  OFFLINE reservations only — `paid-in-cash` walk-ins and `held`. Online `complete` bookings and
+  QR-`collected` walk-ins act whole-reservation: their invoice lines ARE the seat contract, so
+  reshaping them would break the booking↔money binding (`split.subset` guards on this).
+
+## Card-present collect rows (tracks 024 / 028)
+
+A walk-in can be collected three ways, routed **by row order alone**: `resolveTransition` takes
+the first full match, so the `collect.start` / `collect.abandon` rows with `when: ['tapToPay']`
+(effects `stripeTerminalIntent` / `stripeTerminalCancel`) and `when: ['cardPresent']` (Viva Cloud
+Terminal — `vivaSale` / `vivaAbort`) sit **above** the unconditioned QR/Mollie rows. Both
+conditions are interpreter facts (`computeConditions`): `opts.collect.method` on start, the
+`paymentRef` prefix (`viva_` / `stripe_pi_`) on abandon. A new rail is a new conditioned row
+above the QR row, never a branch inside an executor.
+
+**Abandon may "stay processing"** — the deliberate divergence from Mollie, whose cancel is
+synchronous and always resolves. A Viva abort works only before the card is read; when it errors,
+races the read, or `cashRegisterId` can't be resolved, `runCollectAbandonCard` polls the session
+and, if still unresolved, returns `paymentStatus: 'processing'` with **no DB write** — reverting a
+possibly-authorised card would strand a charge the bank approved. Approved → finalize via
+`reverifyAndFinalizeReservation`; declined/aborted → revert. Stripe Tap to Pay follows the same
+"never revert a possibly-captured tap" rule.
 
 ## Extending it
 

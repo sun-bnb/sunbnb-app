@@ -1,9 +1,9 @@
 ---
 id: 022-short-qr-urls
 title: Short QR URLs — address-keyed POS entry
-status: active
+status: done
 created: 2026-08-20
-updated: 2026-08-20
+updated: 2026-10-13
 worktree: null
 ---
 
@@ -32,6 +32,7 @@ string — and it can be read aloud and typed.
 
 ## Resume here
 
+- **DONE 2026-10-13** (track 031 status pass) — short QR URLs shipped (`20260820101055_add_site_code`); the address-keyed entry is live and documented in `apps/user/PATTERNS.md`.
 - **▶ NEXT ACTION: nothing for an agent — the track is waiting on USER OPS.** All build
   phases (P1–P4) and P5's documentation are done and green; nothing is committed yet.
   1. `npm run migrate:test` (the pre-push hook blocks a `main` push while
@@ -296,6 +297,7 @@ ride the same expand wave rather than open a second one.
     that its invariant 6 still describes transitions without mentioning the track-018
     machine — thin rather than false; left for a pass that verifies the whole page.
   - The demo QR URLs stay legacy (see P5). They keep working through the redirect.
+- **2026-10-13** — Status → done (track 031 status pass, founder-approved): short QR URLs shipped (`20260820101055_add_site_code`); the address-keyed entry is live and documented in `apps/user/PATTERNS.md`.
 
 ## Links
 

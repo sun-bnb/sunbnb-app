@@ -5,125 +5,93 @@ status: stable
 sources:
   - .claude/context/state.json
   - .claude/scripts/context-health.mjs
+  - .claude/commands/context.md
   - .claude/commands/wiki.md
   - .claude/commands/update-knowledge.md
+  - .claude/commands/groom.md
 related:
   - workflow:context-check
   - workflow:ingest
-last_verified: 2026-05-20
+last_verified: 2026-10-13
 ---
 
 # Workflow: /context sync — stateful change tracker
 
-Reads a persistent cursor (`.claude/context/state.json`) to know **what git state the AI context metadata was last synced to**, then walks every commit since and decides what should be folded into the wiki and canonical layers. Plan-first: surfaces a proposal, asks before executing, advances the cursor only on success.
+Reads a per-developer cursor to know **which commit the AI-context layers were last synced to**, walks every commit since, and decides what should be folded into canon and the wiki. Plan-first: it proposes, asks, executes accepted items through the per-layer commands, advances the cursor only on full success, and ends with a health snapshot.
 
-This is the "follow-up after work" tool — invoked when you've stopped coding for a while and want to bring the metadata up to date with everything that's landed since you last synced.
+It is the "follow-up after work" tool — run when you've stopped coding for a while and want the context current with everything that landed since your last sync. `/context check` (`[[workflow:context-check]]`) is the stateless counterpart: check often, sync when there's a batch to roll in.
 
 ## How it serves the five qualities
 
-Sync's gain side: by walking *every* commit since the cursor (not just what you remember), agents stay *informed* on what changed in code. By applying the wiki-worthiness gate per commit, it adds only what makes them more *effective* or *reliable*. By advancing the cursor only on success, it stays *deterministic* — re-runs pick up cleanly from where the last successful run left off. Bound-checked by the gate so the act of syncing doesn't sacrifice *concise* through bulk updates.
+Walking *every* commit since the cursor (not just what you remember) keeps agents *informed*; dispatching each change through the per-layer gates adds only what makes them more *effective* or *reliable*; advancing the cursor only on success keeps re-runs *deterministic*; the gate stops bulk syncing from costing *concise*. Gate: `.claude/wiki/README.md` § Maintenance discipline.
 
-## State file shape
+## The cursor
 
-`.claude/context/state.json` (gitignored — per-developer cursor):
-
-```json
-{
-  "lastSyncedSha": "abc123def456...",
-  "timestamp": "2026-05-20T14:00:00Z",
-  "branch": "main",
-  "by": "vhalme"
-}
-```
-
-Empty / missing state file = "never synced." First run treats `HEAD~20` (or branch divergence from `main`, whichever is shorter) as the implicit cursor to bound the initial window.
+`.claude/context/state.json` — **gitignored, one per developer and checkout** (it is never shared; a worktree or a fresh clone starts unsynced). Fields: `lastSyncedSha`, `timestamp`, `branch`, `by`; `null` values (or a missing file) mean "never synced". `/context status` pretty-prints it. It is a convenience marker, not authoritative state — the canon and wiki files are the truth.
 
 ## Procedure
 
-### 1. Read the cursor
+### 1. Read the cursor and compute the window
 
 ```sh
-test -f .claude/context/state.json && cat .claude/context/state.json
-```
-
-If missing: this is a first run. Use `HEAD~20` or `main..HEAD` (whichever is fewer commits) as the implicit baseline. Surface this to the user so they know the window.
-
-### 2. Compute the change window
-
-```sh
-LAST="$(jq -r .lastSyncedSha .claude/context/state.json 2>/dev/null)"
-git log "${LAST:-HEAD~20}..HEAD" --oneline
+LAST="$(jq -r '.lastSyncedSha // empty' .claude/context/state.json 2>/dev/null)"
+git log  "${LAST:-HEAD~20}..HEAD" --oneline
 git diff "${LAST:-HEAD~20}...HEAD" --stat
 ```
 
-If the window has zero commits → report "already in sync" and exit. Do not write to state file (already current).
+Never synced → use `HEAD~20` or `main..HEAD`, whichever is fewer commits, and tell the user the window. A cursor SHA that is no longer an ancestor of `HEAD` (rebased away) → say so and fall back the same way. Zero commits in the window → report "already in sync" and stop; don't touch the state file.
 
-### 3. Walk the commits and classify
+### 2. Read the mechanical signal
 
-For each commit (or for the aggregate diff, depending on size), apply the **wiki-worthiness gate** (see `.claude/wiki/README.md` § Maintenance discipline):
+```sh
+node .claude/scripts/context-health.mjs --summary
+```
 
-> *"Will an agent doing typical project work be more informed, effective, reliable, concise, or deterministic after this update — without becoming less of any of these?"*
+Findings that the window explains (a moved source, a stale page whose code changed) become plan items in step 3. Unrelated findings are listed in the plan as context, with the fix command the script prints (e.g. `/groom <agent>` for a playbook over budget, `node .claude/scripts/tracks-index.mjs` for a stale track registry) — sync doesn't fix them unless the user accepts that item.
 
-Classify each change into one bucket:
+### 3. Classify each change
 
-| Bucket | Target command | Notes |
+Per concept (not per commit size), apply the gate:
+
+| Bucket | Dispatched to | Typical trigger |
 |---|---|---|
-| `canonical-ingest` | `/update-knowledge <scope>` | Rule/convention change; route/action contract change; new app or package |
-| `wiki-ingest` | `/wiki ingest <pages>` | New entity, flow, subsystem; new gotcha worth recording; invariant change |
-| `both` | both, in order: canonical first, then wiki | Cross-layer changes |
-| `skip` | (none) | Fails the gate: bug fix without gotcha, pure refactor, formatting, dep bump, WIP |
+| `canonical` | `/update-knowledge <scope>` (budgets from `.claude/context/budgets.json`) | Rule/convention change; route or action contract change; new app or package |
+| `wiki` | `/wiki ingest <pages>` | New entity/flow/subsystem; invariant change; gotcha worth recording; moved source |
+| `both` | canonical first, then wiki | Cross-layer change |
+| `skip` | — | Bug fix without a gotcha, pure refactor, formatting, dep bump, WIP |
 
-### 4. Produce the plan
+Playbooks and tracks are not sync targets: agents write playbook entries via `kb:` markers and `/groom` curates them; tracks are updated by their `handoff` workflow.
 
-Output a structured plan (do NOT execute yet):
+### 4. Produce the plan — do not execute yet
 
 ```
 /context sync — plan
-Cursor: abc123 (2026-05-15) → HEAD (2026-05-20), 12 commits in window.
-
-Proposed actions:
-  [canonical-ingest] commits a1b2..d4e5 — added requireFoo() guard on partner site mutations
-    → /update-knowledge partner
-
-  [wiki-ingest]      commit f6a7 — new "subscription cancellation" flow landed
-    → /wiki ingest flows/subscription-cancellation.md (new page)
-
-  [both]             commit b8c9 — Settlement DRAFT→PAID lifecycle gained a HOLD state
-    → /update-knowledge data, then /wiki ingest entities/settlement.md
-
-  [skip × 9] formatting (2), dep bumps (3), bug fixes without gotchas (4)
-
-Apply all? Per-item? Modify scope? Skip?
+Cursor: abc123 (2026-10-01) → HEAD def456, 12 commits.
+Health: context-health: 0 broken · 2 warn (wiki 1 warn, playbooks 1 warn)
+  [canonical] a1b2..d4e5 — new requireFoo() guard on partner site mutations → /update-knowledge apps/partner/CLAUDE.md
+  [wiki]      f6a7 — subscription cancellation flow landed → /wiki ingest flows/subscription-cancellation.md (new)
+  [both]      b8c9 — settlement gained a HOLD state → /update-knowledge packages/data/CLAUDE.md, then /wiki ingest entities/settlement.md
+  [skip × 9]  formatting (2), dep bumps (3), bug fixes without gotchas (4)
+  [unrelated] playbooks/partner-dev.md over soft budget → /groom partner-dev
+Apply all? Per item? Change scope? Skip?
 ```
 
-### 5. Wait for user decision
+### 5. Wait for the user's decision
 
-The user can: apply all, accept a subset, refine a scope, or skip entirely. **Do not write to any wiki / canonical / state file until the user confirms.**
+Apply all, a subset, a refined scope, or nothing. **No write to canon, wiki or the state file before confirmation.**
 
 ### 6. Execute the accepted items
 
-For each accepted item, dispatch to the matching command — these enforce their own per-layer worthiness gates as a second check. Do not bypass them.
-
-Execute in deterministic order: canonical first (so wiki ingests cite up-to-date sources), wiki second.
-
-If any dispatched command fails → halt. Do not advance the cursor. The user can retry after fixing.
+Dispatch each to its command — those enforce their own per-layer gates as a second check; don't bypass or re-implement them. Order: canonical first (so wiki ingests cite current canon), wiki second. If any dispatched command fails → halt; the cursor stays put.
 
 ### 7. Advance the cursor
 
-**Only after all accepted items executed successfully:**
+Only after every accepted item succeeded:
 
 ```sh
-NEW_SHA="$(git rev-parse HEAD)"
-NEW_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-cat > .claude/context/state.json <<EOF
-{
-  "lastSyncedSha": "$NEW_SHA",
-  "timestamp": "$NOW",
-  "branch": "$NEW_BRANCH",
-  "by": "$(git config user.name)"
-}
-EOF
+jq -n --arg sha "$(git rev-parse HEAD)" --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      --arg br "$(git rev-parse --abbrev-ref HEAD)" --arg by "$(git config user.name)" \
+      '{lastSyncedSha:$sha, timestamp:$ts, branch:$br, by:$by}' > .claude/context/state.json
 ```
 
 ### 8. Log it
@@ -131,31 +99,27 @@ EOF
 Append to `.claude/wiki/log.md`:
 
 ```
-## [YYYY-MM-DD] sync | cursor advanced abc123 → def456
-- mode: sync
-- changed: <wiki + canonical files touched, summarized>
-- reason: rolled in N commits worth of accepted changes; M skipped per worthiness gate
-- by: <user>
+## [YYYY-MM-DD] sync | cursor abc123 → def456
+- changed: <canon + wiki files touched>
+- skipped: <M changes, by reason>
 ```
 
-### 9. Report
+### 9. Snapshot and report
 
-Brief summary back to the user: what was done, what was skipped (with reasons), new cursor SHA, suggested next action (often: nothing — you're in sync).
+Finish with `node .claude/scripts/context-health.mjs --snapshot` — it appends that run's metrics to `.claude/context/health-history.jsonl` (committed), the series that shows whether the context gets better over time. Then report: what was done, what was skipped and why, the new cursor SHA, any follow-up (often none).
 
 ## When to run
 
-- **After a stretch of coding without syncing** — e.g., end of week, end of feature
-- **After pulling teammate's changes** — your local cursor hasn't advanced for their commits
-- **Before opening a non-trivial PR** — bring metadata current so the PR review sees an aligned wiki
-- **On demand** — `/context sync`
-
-Per `[[workflow:context-check]]` cadence: check often (cheap); sync when there's a meaningful batch to roll in.
+- After a stretch of coding without syncing — end of a feature, end of week
+- After pulling others' commits — your cursor hasn't seen them
+- Before opening a non-trivial PR, so review sees an aligned wiki
+- On demand — `/context sync`
 
 ## Anti-patterns
 
-- **Auto-executing without showing the plan.** Always plan-first. Surprises in metadata writes erode trust.
-- **Advancing the cursor on partial failure.** Cursor advances only on full success; failed runs are re-tryable.
-- **Skipping the wiki-worthiness gate because "the commit was big".** Big commits often contain mostly skip-worthy changes (refactors, formatting bundled with one real change). Gate applies per concept, not per commit size.
-- **Re-implementing `/wiki ingest` or `/update-knowledge` logic in sync.** Sync dispatches; those commands own their per-layer discipline.
-- **Bypassing the cursor by manually running `/wiki ingest` between syncs.** Fine to do, but the next `/context sync` will re-walk the same window — its worthiness gate will skip what's already current, but you waste a planning pass. Better: let `/context sync` own the cadence.
-- **Treating the cursor as authoritative state.** It's a per-developer convenience marker, gitignored. The wiki + canonical files are the truth.
+- **Executing without showing the plan.** Surprises in context writes erode trust.
+- **Advancing the cursor on partial failure.** Failed runs must be re-tryable from the same point.
+- **Skipping the gate because "the commit was big".** Big commits are often mostly skip-worthy.
+- **Re-implementing `/wiki ingest` or `/update-knowledge` in sync.** Sync dispatches.
+- **Committing `state.json`** or treating it as shared state — it is per developer by design.
+- **Manual `/wiki ingest` between syncs is fine**, but the next sync re-walks that window; its gate will skip what's already current.

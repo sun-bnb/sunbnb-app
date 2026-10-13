@@ -12,7 +12,6 @@ sources:
   - apps/partner/app/api/_lib/mollie-permissions.ts
 related:
   - entity:reservation
-  - entity:settlement
   - flow:walk-in
   - flow:reservation-payment
   - subsystem:payments
@@ -128,7 +127,6 @@ Env vars:
 ## Related
 
 - `[[entity:reservation]]` — ownership is the most common gate
-- `[[entity:settlement]]` — sudo-only
 - `[[flow:walk-in]]` — the token-gated path
 - `[[flow:reservation-payment]]` — ownership checks on payment-verification polling
 

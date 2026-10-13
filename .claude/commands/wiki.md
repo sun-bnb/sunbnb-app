@@ -1,3 +1,7 @@
+---
+description: LLM wiki maintenance — ingest, lint, prune, review
+argument-hint: [ingest|lint [--quick]|prune|review] [scope]
+---
 # /wiki — LLM wiki maintenance
 
 Invoke a wiki workflow. The wiki lives at `.claude/wiki/`; workflows are the canonical procedures under `.claude/wiki/workflows/`.

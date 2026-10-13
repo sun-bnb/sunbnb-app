@@ -10,7 +10,7 @@ whose history matters (why a column exists, what replaced it, what is mid-retire
 
 Prisma schema at `packages/data/prisma/schema.prisma`. 70+ migrations. Uses `@prisma/adapter-pg` driver adapter. PostGIS extension for spatial queries (`geometry` type with GiST index).
 
-Key models: User, PartnerAccount, Site, InventoryItem, Reservation, Order, OrderItem, RentalItem, RentalBooking, Invoice, InvoiceLine, Settlement, ServiceFee, Settings, PasswordResetToken, Product.
+Key models: User, PartnerAccount, Site, InventoryItem, Reservation, Order, OrderItem, RentalItem, RentalBooking, Invoice, InvoiceLine, Settlement (legacy, unused — track 032), ServiceFee, Settings, PasswordResetToken, Product.
 
 **`Device`** (track 019 P2 / 021) — the parasol-mounted HW devices served by the user app's `/api/hw/{code}/*`. `Device.code` is a PUBLIC 6-char Crockford-base32 identifier printed on the device's sticker; there is deliberately **no token/secret column** (Q9 — the endpoint is gated by a soft `User-Agent` client filter, not auth, because the data behind it is public occupancy). A device is placed by an **assigned ADDRESS** (`assignedSiteId`/`assignedParcel`/`assignedRow`/`assignedSeq`) set in the partner fleet UI, and answers for whatever unit occupies that address today — so a parcel rebuilt at the same spot needs no re-assignment. `status`: `provisioned → active → retired`.
 

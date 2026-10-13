@@ -2,45 +2,130 @@
   "_doc": "Single source of size/freshness budgets for every AI-context layer. Read by .claude/scripts/context-health.mjs and quoted by /update-knowledge, the wiki README and the playbook spec. Bytes unless stated. soft = WARN, hard = BROKEN.",
   "canonical": {
     "files": {
-      "CLAUDE.md": { "soft": 12288, "hard": 16384 },
-      "apps/*/CLAUDE.md": { "soft": 12288, "hard": 22528 },
-      "packages/data/CLAUDE.md": { "soft": 12288, "hard": 22528 },
-      "packages/*/CLAUDE.md": { "soft": 4096, "hard": 8192 },
-      ".claude/rules/*.md": { "soft": 3072, "hard": 5120 }
+      "CLAUDE.md": {
+        "soft": 12288,
+        "hard": 16384
+      },
+      "apps/*/CLAUDE.md": {
+        "soft": 12288,
+        "hard": 22528
+      },
+      "packages/data/CLAUDE.md": {
+        "soft": 12288,
+        "hard": 22528
+      },
+      "packages/*/CLAUDE.md": {
+        "soft": 4096,
+        "hard": 8192
+      },
+      ".claude/rules/*.md": {
+        "soft": 3072,
+        "hard": 5120
+      }
     },
-    "lineBytes": { "soft": 300, "hard": 500 },
-    "optionalWorkspaces": ["e2e", "packages/eslint-config", "packages/typescript-config"],
+    "lineBytes": {
+      "soft": 300,
+      "hard": 500
+    },
+    "optionalWorkspaces": [
+      "e2e",
+      "packages/eslint-config",
+      "packages/typescript-config",
+      "packages/floor-core",
+      "packages/schematic",
+      "packages/schematic-editor",
+      "packages/table-reservations-core",
+      "packages/table-reservations-ui"
+    ],
     "versionClaims": {
       "_doc": "Root CLAUDE.md tech-stack rows checked against the installed majors. label = regex on the row text; dep = package name; from = workspace package.json that declares it.",
       "checks": [
-        { "label": "Next\\.js (\\d+)", "dep": "next", "from": "apps/user/package.json" },
-        { "label": "React (\\d+)", "dep": "react", "from": "apps/user/package.json" },
-        { "label": "TypeScript (\\d+)", "dep": "typescript", "from": "package.json" },
-        { "label": "Prisma (\\d+)", "dep": "prisma", "from": "packages/data/package.json" },
-        { "label": "Tailwind CSS (\\d+)", "dep": "tailwindcss", "from": "apps/user/package.json" },
-        { "label": "Vitest (\\d+)", "dep": "vitest", "from": "packages/data/package.json" }
+        {
+          "label": "Next\\.js (\\d+)",
+          "dep": "next",
+          "from": "apps/user/package.json"
+        },
+        {
+          "label": "React (\\d+)",
+          "dep": "react",
+          "from": "apps/user/package.json"
+        },
+        {
+          "label": "TypeScript (\\d+)",
+          "dep": "typescript",
+          "from": "package.json"
+        },
+        {
+          "label": "Prisma (\\d+)",
+          "dep": "prisma",
+          "from": "packages/data/package.json"
+        },
+        {
+          "label": "Tailwind CSS (\\d+)",
+          "dep": "tailwindcss",
+          "from": "apps/user/package.json"
+        },
+        {
+          "label": "Vitest (\\d+)",
+          "dep": "vitest",
+          "from": "packages/data/package.json"
+        }
       ]
-    }
+    },
+    "_optionalWorkspaces": "workspaces that need no CLAUDE.md: config packages, and libraries whose canon is a wiki subsystem page (schematic-editor, table-reservations) or a sibling's CLAUDE.md (floor-core → apps/partner + apps/mobile)"
   },
   "wiki": {
-    "statusVocabulary": ["stable", "draft", "stub", "stale"],
+    "statusVocabulary": [
+      "stable",
+      "draft",
+      "stub",
+      "stale"
+    ],
     "stableMaxAgeDays": 30,
     "staleAfterDays": 90,
     "lines": {
-      "entity": { "soft": 200, "hard": 300 },
-      "flow": { "soft": 300, "hard": 400 },
-      "subsystem": { "soft": 200, "hard": 300 },
-      "workflow": { "soft": 250, "hard": 350 }
+      "entity": {
+        "soft": 200,
+        "hard": 300
+      },
+      "flow": {
+        "soft": 300,
+        "hard": 400
+      },
+      "subsystem": {
+        "soft": 200,
+        "hard": 300
+      },
+      "workflow": {
+        "soft": 250,
+        "hard": 350
+      }
     },
     "indexMaxLines": 200,
-    "listMax": { "sources": 8, "related": 8 }
+    "listMax": {
+      "sources": 8,
+      "related": 8
+    }
   },
   "playbooks": {
-    "bytes": { "soft": 30720, "hard": 40960 },
-    "entries": { "soft": 40, "hard": 60 }
+    "bytes": {
+      "soft": 30720,
+      "hard": 40960
+    },
+    "entries": {
+      "soft": 40,
+      "hard": 60
+    }
   },
   "tracks": {
-    "statusVocabulary": ["proposed", "active", "blocked", "paused", "done", "abandoned"],
+    "statusVocabulary": [
+      "proposed",
+      "active",
+      "blocked",
+      "paused",
+      "done",
+      "abandoned"
+    ],
     "activeStaleDays": 45,
     "nextActionMaxChars": 220
   },
@@ -48,11 +133,22 @@
     "maxTurns": 80,
     "_surfaces": "path prefixes per agent; knowledge-recall.mjs --candidates uses them to pick episodic records on that agent's surface",
     "surfaces": {
-      "partner-dev": ["apps/partner/"],
-      "user-dev": ["apps/user/"],
-      "admin-dev": ["apps/admin/"],
-      "data-dev": ["packages/data/"],
-      "sunbed-inventory": ["apps/partner/app/sites/[id]/inventory", "packages/schematic"]
+      "partner-dev": [
+        "apps/partner/"
+      ],
+      "user-dev": [
+        "apps/user/"
+      ],
+      "admin-dev": [
+        "apps/admin/"
+      ],
+      "data-dev": [
+        "packages/data/"
+      ],
+      "sunbed-inventory": [
+        "apps/partner/app/sites/[id]/inventory",
+        "packages/schematic"
+      ]
     }
   }
 }

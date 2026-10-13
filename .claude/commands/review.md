@@ -1,3 +1,7 @@
+---
+description: Pre-push code review of the current diff against project rules
+argument-hint: [scope]
+---
 # /review — Pre-push code review
 
 Review staged/unstaged changes against project rules and conventions before pushing.

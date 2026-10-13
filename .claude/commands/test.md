@@ -1,3 +1,7 @@
+---
+description: Smart test runner — maps a change scope to the right unit/integration suites
+argument-hint: [app|package|path]
+---
 # /test — Smart test runner
 
 Run tests intelligently based on what's specified or what changed.

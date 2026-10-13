@@ -1,14 +1,17 @@
 ---
-title: Migrations
 type: subsystem
-status: current
+slug: migrations
+status: stable
 sources:
   - .claude/rules/migrations.md
-  - packages/data/prisma/
+  - packages/data/package.json
+  - packages/data/scripts/with-db-url.sh
+  - .githooks/pre-push
   - promote-to-test.sh
   - deploy-to-production.sh
 related:
-  - subsystems/payments.md
+  - subsystem:payments
+last_verified: 2026-10-13
 ---
 
 # Migrations — environment topology and the laptop-run sequence
@@ -44,8 +47,9 @@ type (below).
 
 `.env.local` in `packages/data` holds all three DB URLs (`POSTGRES_URL` = local,
 `POSTGRES_URL_TEST`, `POSTGRES_URL_PRODUCTION`). Commands point Prisma at one of them
-via an inline `POSTGRES_URL` override (`scripts/with-db-url.sh`) — `.env` is never
-rewritten, so prod creds never linger in `.env`.
+via an inline `POSTGRES_URL` override (`scripts/with-db-url.sh`), so `.env`'s `POSTGRES_URL`
+always stays local (`migrate:local` refreshes `.env` from `.env.local`; nothing writes a remote URL
+into it).
 
 1. Edit `packages/data/prisma/schema.prisma`.
 2. `npm run migrate:local` — `migrate dev` on the local DB **and** `migrate deploy` to
@@ -67,3 +71,21 @@ rewritten, so prod creds never linger in `.env`.
 A schema or payment-core change is always an architecture pass (see `architecture.md`,
 `data-access.md`, `payments.md`).
 
+
+## Prisma in an agent shell
+
+The rule (`.claude/rules/migrations.md` § Guardrails) is the short form; this is why.
+
+- **Never background `migrate dev`.** It takes the Postgres advisory lock, then waits on its
+  migration-name prompt; a backgrounded run never answers it, and every later Prisma command fails
+  `P1002`. Recover with `pkill -f "prisma migrate dev"`, then run in the foreground with
+  `echo "<name>" | npx prisma migrate dev`.
+- **When Prisma would warn, it refuses a non-interactive shell** (data loss, `@unique` on a
+  populated column) even with `--name` or piped stdin. Generate the SQL with
+  `npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` into
+  a timestamped `prisma/migrations/<ts>_<name>/migration.sql`, check it is additive, then
+  `migrate deploy` locally → `generate` → `npm run migrate:integration` → `npm run migrate:check`
+  (must say "No difference detected").
+- **"Unique among active rows"** cannot be a partial index: Prisma Schema can't express one, so a
+  hand-written index leaves `migrate:check` permanently red. Use a nullable `@unique` column that
+  every closing path sets to NULL — `TableTab.openTableId` (`packages/data/prisma/schema.prisma`).

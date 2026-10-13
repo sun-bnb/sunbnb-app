@@ -1,6 +1,15 @@
 # Data Package (packages/data)
 
-`@repo/data` — shared Prisma schema, DB client, payment logic, auth helpers, email, and business utilities. This is the single source of truth for all database access and core business logic.
+`@repo/data` — shared Prisma schema, DB client, payment logic, auth helpers, email, and business
+utilities. The single source of truth for all database access and core business logic.
+
+**Pulled on demand** (not auto-loaded — read the one that matches your task):
+
+- `packages/data/EXPORTS.md` — per-module detail: payment providers, state machine, printed codes,
+  invoicing documents, preferences/devices, assistant SQL sandbox
+- `packages/data/REFERENCE.md` — model histories, identifier conventions, in-flight retirements
+- `packages/data/TESTING.md` — test inventory, config split, scale harness, shared-DB etiquette
+- Wiki: `.claude/wiki/subsystems/{payments,reservation-state-machine,employee-till,migrations}.md`
 
 ## Commands
 
@@ -10,423 +19,182 @@ npm run migrate:local        # local Docker DB — prisma migrate dev + generate
 npm run migrate:test         # Neon test DB — POSTGRES_URL_TEST via scripts/with-db-url.sh, prisma migrate deploy
 npm run migrate:production   # Neon prod DB — POSTGRES_URL_PRODUCTION via scripts/with-db-url.sh, prisma migrate deploy
 npm run migrate:check        # fails (exit 2) if schema.prisma has changes no committed migration captures
-npm run migrate:status:local        # pending / failed / checksum-drift status per environment
-npm run migrate:status:test         #   (test)
-npm run migrate:status:production   #   (production)
+npm run migrate:status:{local,test,production}   # pending / failed / checksum-drift per environment
 source .env.local && npx prisma studio   # Prisma Studio
 source .env.local && ./sync-local-db.sh  # Sync local DB from test
 ```
 
 `migrate:test`/`:production`/`:status:*`/`:check` route the right DB URL from `.env.local`
 through `scripts/with-db-url.sh` as an **inline `POSTGRES_URL` override** — `.env` is never
-rewritten, so prod/test creds never linger in `.env`. Migration workflow doctrine
-(immutable applied migrations, expand/contract, migrate-before-deploy) lives in
-`.claude/rules/migrations.md`; the `./promote-to-test.sh` / `./deploy-to-production.sh`
-scripts enforce migrate-before-deploy.
+rewritten, so prod/test creds never linger in `.env`. Doctrine: `.claude/rules/migrations.md`
+(rules) · `.claude/wiki/subsystems/migrations.md` (topology + sequence); the
+`./promote-to-test.sh` / `./deploy-to-production.sh` scripts enforce migrate-before-deploy.
 
 ## Schema
 
-Prisma schema at `packages/data/prisma/schema.prisma` — 70+ migrations, `@prisma/adapter-pg` driver
-adapter, PostGIS (`geometry` + GiST index) for spatial queries.
+`packages/data/prisma/schema.prisma` — 70+ migrations, `@prisma/adapter-pg` driver adapter, PostGIS (`geometry` +
+GiST index) for spatial queries.
 
 Core models: User, PartnerAccount, Site, InventoryItem, SunbedGroup, Reservation, ReservationDay,
 Order, OrderItem, RentalItem, RentalBooking, Restaurant, Table, TableTab, MenuItem, Invoice,
 InvoiceLine, Settlement, ServiceFee, Settings, Employee, TillEntry, TillClose, Device,
 PlatformPreference, FeatureFlag, SecurityToken, PasswordResetToken, Product.
 
-**Model histories, identifier conventions and in-flight retirements** — why `Site.code` exists and
-is never rewritten, the `SunbedGroup` address (`parcel`/`row_idx`/`seq`) and its single writer, the
-three-step `InventoryItem.pairId` retirement, `Device` placement by address, brand-manifest gating,
-`PlatformPreference` vs `FeatureFlag`, and the shared `unit-address` helpers: **`packages/data/REFERENCE.md`**.
-Read it before touching any of those — several carry constraints that are not visible in the schema.
-
-Migration doctrine: `.claude/rules/migrations.md` (rules) · `.claude/wiki/subsystems/migrations.md`
-(topology + sequence).
+**Read `REFERENCE.md` before touching** `Site.code`, the `SunbedGroup` address
+(`parcel`/`row_idx`/`seq`), `InventoryItem.pairId`, `Device` placement, brand manifests,
+`PlatformPreference` vs `FeatureFlag`, or the `unit-address` helpers — several carry constraints
+not visible in the schema.
 
 ## Payment Service (`src/payment.ts`)
 
-### Pure Functions (no DB, no side effects)
+### Pure functions (no DB, no side effects)
 - `round(amount)` — financial rounding to 2 decimals
 - `computeVatAndBaseAmounts(gross, vatRate)` — reverse VAT: `base = round(gross / (1 + rate/100))`
 - `resolveServiceFee(siteFees, accountFees, settingsFees, serviceCode, tier?)` — three-tier cascade, first match wins
 - `calculateServiceFeeAmount(fee, referenceAmount)` — fixed (`feeAmount`) or percentage calculation
-- `serviceFeeForUnits(fee, { total, units })` — THE commission rule for every charge-time fee (Mollie `applicationFee`, Stripe `application_fee_amount`, Viva `isvAmount`) AND every PLATFORM invoice, so collected === invoiced. Fixed fee: per unit (bed / rental booking line); percentage: once on the total paid. Reservation units = items, rental units = bookings. Orders/tabs/deposits still use `calculateServiceFeeAmount` (single unit, identical result). Pinned by `payment.commission-parity.integration.test.ts`.
-- `computeInvoiceHash(number, date, amount, vatNumber, previousHash)` — SHA-256 chain for invoice integrity
+- `serviceFeeForUnits(fee, { total, units })` — THE commission rule for every charge-time fee
+  (Mollie `applicationFee`, Stripe `application_fee_amount`, Viva `isvAmount`) AND every PLATFORM
+  invoice, so collected === invoiced. Fixed fee: per unit (bed / rental booking line); percentage:
+  once on the total paid. Reservation units = items, rental units = bookings. Orders/tabs/deposits
+  use `calculateServiceFeeAmount` (single unit, identical result). Pinned by
+  `payment.commission-parity.integration.test.ts`.
+- `computeInvoiceHash({ seriesKey, invoiceNumber, invoicedAt, totalAmount, issuerVatNumber,
+  previousHash })` — versioned SHA-256 chain (`invoice-series.ts`); `seriesKey` binds a record to its issuer's chain
 
-### DB-Dependent Functions
-- `loadFeeContext(siteId, serviceCode)` — loads site + partnerAccount + settings fees; bootstraps default Settings if missing (bootstrap shared with the restaurant loader via a private `ensureSettingsAndFee`)
-- `loadRestaurantFeeContext(restaurantId, serviceCode)` — dine-in v2: partner resolved directly via `Restaurant.partnerAccountId` (a User.id), EMPTY site tier — cascade is partnerAccount → settings. For standalone (no-Site) restaurants
-- `loadTabFeeContext(tab: { siteId, restaurantId }, serviceCode)` — branches: linked tab (siteId set) → `loadFeeContext` (site rail, byte-identical); standalone → `loadRestaurantFeeContext`. Returns `TabFeeContext { siteFees, partnerAccount, settings, tier }`
-- `processConfirmedReservation(id)` — idempotent invoice creation: 2 invoices (partner + platform), per-sunbed lines + fee lines, sequential numbering with FOR UPDATE lock, hash chain, sends confirmation email
-- `processConfirmedOrder(id)` — same pattern but per-item VAT (not site-wide)
-- `processConfirmedRentalBooking(paymentRef)` — groups bookings by paymentRef, creates invoices for the group
+### DB-dependent functions
+- `loadFeeContext(siteId, serviceCode)` — site + partnerAccount + settings fees; bootstraps default
+  Settings if missing (shared with the restaurant loader via private `ensureSettingsAndFee`)
+- `loadRestaurantFeeContext(restaurantId, serviceCode)` — dine-in v2: partner via
+  `Restaurant.partnerAccountId` (a User.id), EMPTY site tier (partnerAccount → settings); standalone restaurants
+- `loadTabFeeContext(tab: { siteId, restaurantId }, serviceCode)` — linked tab → `loadFeeContext`;
+  standalone → `loadRestaurantFeeContext`. Returns `TabFeeContext { siteFees, partnerAccount, settings, tier }`
+- `processConfirmedReservation(id)` — idempotent invoicing: PARTNER + PLATFORM, per-sunbed + fee
+  lines, series numbering (`allocateInvoiceIdentity`), hash chain, confirmation email
+- `processConfirmedOrder(id)` — same pattern, per-item VAT (not site-wide)
+- `processConfirmedRentalBooking(paymentRef)` — groups bookings by paymentRef, invoices the group
 - `calculateOrderServiceFee(orderId)` — read-only fee calculation for orders
-- `issueCashCreditNote(reservationId, {amount?, invoicedAt?})` — credit note against a
-  reservation's PARTNER cash receipt (track 018/015): NEGATIVE-total PARTNER invoice in
-  its own `PARTNER-CN-YYYY-NNNNN` series, same hash chain, `creditsInvoiceId` link, VAT
-  at the receipt's effective rate, partial credits capped at the receipt total.
-  Existing PARTNER revenue aggregations net refunds automatically
-- `calculateTabTotal(tabId)` — dine-in tab payable amount: sum of non-voided rounds — **menu prices only** (the commission is computed in parallel in the result's `serviceFee` for the Mollie applicationFee/PLATFORM invoice, never added to the customer total — uniform with reservations since 2026-07-25); single source for the Mollie/demo charge amount. Site-agnostic since dine-in v2 (fee context via `loadTabFeeContext`)
-- `processConfirmedTabPayment(tabId, opts?)` — idempotent group invoicing for a dine-in tab across all rounds (per-item VAT). Default: PARTNER + PLATFORM invoices, tab → `paid`. `{ cash: true }` (staff settle-as-cash, track 015 precedent): PARTNER-only receipt, NO commission, no paymentRef, tab → `settled_cash`. Both paths null `openTableId` (mandatory — releases the one-open-tab-per-table guard); both terminal statuses block re-processing by the other path
+- `issueCashCreditNote(reservationId, {amount?, invoicedAt?})` — credit note against a reservation's
+  PARTNER cash receipt (tracks 018/015): NEGATIVE-total PARTNER invoice in its own
+  `PARTNER-CN-YYYY-NNNNN` series, same hash chain, `creditsInvoiceId` link, VAT at the receipt's
+  effective rate, partials capped at the receipt total. PARTNER revenue aggregations net refunds automatically
+- `calculateTabTotal(tabId)` — dine-in tab payable: sum of non-voided rounds, **menu prices only**;
+  the commission rides in parallel in `serviceFee` (Mollie applicationFee / PLATFORM invoice), never
+  added to the customer total. Single source for the Mollie/demo charge amount. Site-agnostic
+- `processConfirmedTabPayment(tabId, opts?)` — idempotent group invoicing across all rounds
+  (per-item VAT). Default: PARTNER + PLATFORM, tab → `paid`. `{ cash: true }`: PARTNER-only receipt,
+  NO commission, no paymentRef, tab → `settled_cash`. Both paths null `openTableId` (mandatory —
+  releases the one-open-tab-per-table guard); each terminal status blocks the other path
 
 ### Tab-order paid-ness rule (analytics)
-Tab orders enter kitchen states at PLACEMENT, before payment — `order.status` does not imply paid-ness when `Order.tabId` is set. Every Order-based revenue/refund aggregation in `analytics.ts` applies: an order with `tabId != null` counts only when its tab is `paid` or `settled_cash` (`TAB_PAID_FILTER`, module-local). Non-tab orders unaffected.
+Tab orders enter kitchen states at PLACEMENT, before payment — `order.status` does not imply
+paid-ness when `Order.tabId` is set. Every Order-based revenue/refund aggregation in `analytics.ts`
+counts a `tabId != null` order only when its tab is `paid` or `settled_cash` (`TAB_PAID_FILTER`).
 
-### Invoice Creation Rules
-- **Agent/marketplace model**: the PARTNER invoice is booked GROSS (the full price the consumer paid); the fee is never netted out of partner revenue or added to the consumer total
-- Two invoices per payment: **PARTNER** (gross consumer sale, partner = merchant of record) and **PLATFORM** (B2B commission billed TO the partner — recipient fields populated; `reverseCharge` + 0 VAT for cross-border EU B2B). They do NOT sum to the consumer payment
-- All prices are VAT-inclusive; reverse calculation to get base amounts
-- `Invoice.processingFee` holds the (VAT-exempt) PSP processing fee. **Written for Stripe refs only**, at confirmation, on the PLATFORM invoice as the processing pass-through (`platformPassThroughFor`, alongside a `payment-processing` line — see Payment providers below). Mollie and Viva refs leave it unpopulated (no fee capture for those rails)
-- Invoice numbers sequential per issuer type, protected by FOR UPDATE lock
-- Hash chain: each invoice's hash includes previous invoice's hash
+### Invoice creation rules
+- **Agent/marketplace model**: PARTNER invoice booked GROSS; the fee is never netted out of partner
+  revenue or added to the consumer total (`.claude/rules/payments.md`)
+- Two invoices per payment: **PARTNER** (gross sale, partner = merchant of record) and **PLATFORM**
+  (B2B commission billed TO the partner; `reverseCharge` + 0 VAT cross-border EU B2B). They do NOT
+  sum to the consumer payment
+- All prices VAT-inclusive; reverse calculation for base amounts
+- `Invoice.processingFee` (VAT-exempt PSP fee) — **Stripe refs only**, on the PLATFORM invoice with a
+  `payment-processing` line (`platformPassThroughFor`). Mollie/Viva leave it empty
+- **Zero commission**: every `processConfirmed*` writes the PLATFORM invoice only when
+  `commission > 0 || passThrough > 0` — a zero-commission Stripe payment still gets a
+  processing-only PLATFORM invoice; zero-commission Mollie/Viva get none (PARTNER invoice only)
+- Invoice numbers: one series per issuer (`seriesKey`, F/R codes, year from `invoicedAt`),
+  serialised by `lockInvoiceSeries` (`pg_advisory_xact_lock`) at the TOP of the invoicing
+  transaction + an `InvoiceSeries` counter row; each hash includes the previous (`InvoiceChain`)
 
 ## Payment providers (track 028)
 
-One consumer rail per `PartnerAccount` (selected), mirrored onto `Site.paymentProvider` (effective).
-The invoicing core (`processConfirmed*`) is provider-neutral; coupling lives in create / confirm /
-refund / connect, all keyed off the ref prefix. **No `Payment` ledger — the prefix is the only
-discriminator.** Design record: `.claude/tracks/028-multi-provider-payments.md`.
+One consumer rail per `PartnerAccount` (selected), mirrored onto `Site.paymentProvider`
+(effective, via `syncEffectiveProvider`). `processConfirmed*` is provider-neutral; coupling lives in
+create / confirm / refund / connect, keyed off the ref prefix. **No `Payment` ledger — the prefix
+is the only discriminator** (`payment-refs.ts`, PURE): `tr_` mollie · `pi_demo_` demo · `viva_`
+viva-terminal · `vso_` viva (online) · `stripe_cs_` stripe · `stripe_pi_` stripe-terminal.
 
-- **`payment-refs.ts`** (PURE, client-safe) — the one prefix vocabulary; every `tr_`/`pi_demo_`
-  check in data, floor-core and the apps imports it. `providerFromRef`, `isDemoPayment`,
-  `isMolliePaymentRef`, `isVivaCheckoutRef`, `isStripeCheckoutRef`, `isStripeTerminalRef`,
-  `isStripeRef`, plus `PaymentState` (`pending|paid|failed|refunded`):
-
-  | Prefix | Provider id | Rail |
-  |---|---|---|
-  | `tr_` | `mollie` | Mollie online |
-  | `pi_demo_` | `demo` | demo mode |
-  | `viva_` | `viva-terminal` | Viva Cloud Terminal (card-present, track 024) |
-  | `vso_` | `viva` | Viva Smart Checkout online (`vso_<orderCode>`) |
-  | `stripe_cs_` | `stripe` | Stripe Checkout Session, direct charge |
-  | `stripe_pi_` | `stripe-terminal` | Stripe Tap to Pay PaymentIntent |
-
-  Namespaced wrappers: no prefix is a prefix of another.
-- **`payment-providers/`** — `types` (PURE adapter contract `OnlineCheckoutAdapter`,
-  `ProviderNotWiredError`/`ProviderNotReadyError`); `index` (`getOnlineAdapter('stripe'|'viva')`);
-  `availability` (PURE, **founder-editable** country matrix → which providers + `cardPresent`
-  kind `none|terminal-app|tap-to-pay`); `readiness` (PURE `providerReadiness`,
-  `effectiveProviderFor`, `READINESS_SELECT`, token-free `toReadinessAccount`); `selection`
-  (`syncEffectiveProvider(userId)` — idempotent, flips sites only when the selected provider is
-  ready); `fee-policy` (PURE, one constant `STRIPE_PROCESSING_ESTIMATE` 1.5% + €0.25 →
-  `stripeApplicationFee` = commission + pass-through); `stripe-adapter` / `viva-adapter`
-  (server-only); `stripe-account` (`stripeAccountForSite`, `getStripeRefStatus`).
-- **`checkout.ts`** — `resolveCheckoutIntent` (amount + commission for the five kinds, same fee
-  loaders as the Mollie paths) and `createOnlineCheckout` (adapter dispatch). Reservation/rental
-  ref writes go through the sanctioned `markReservationCheckoutStarted/Failed` and
-  `markRentalCheckoutStarted/Failed` writers (single-writer ratchet). Mollie keeps its own routes.
-- **`stripe/`** (server-only; the `stripe` SDK lives here now) — `client`: `getStripeClient()` =
-  partner **subscriptions** (`STRIPE_SECRET_KEY`), `getStripeConnectClient()` = **Connect
-  platform** (`STRIPE_CONNECT_SECRET_KEY`, falls back to the former); `connect`: `CONNECT_CONTROLLER`
-  (`requirement_collection/losses.payments/fees.payer: 'application'`, `stripe_dashboard: 'none'`),
-  own-form onboarding helpers, `snapshotFromAccount`/`snapshotToColumns`, `createAccountSession`;
-  `checkout`: direct-charge Checkout Sessions (`{ stripeAccount }`, `application_fee_amount`),
-  state fetch, `refundPaymentIntent` (`refund_application_fee`); `terminal`:
-  `ensureTerminalLocation`, `createConnectionToken`, `createTerminalPaymentIntent`,
-  `cancelTerminalPaymentIntent`. Every consumer call passes `{ stripeAccount }` — never a
-  platform charge (track 003).
-- **`viva/checkout-{types,http,stub}`** — Smart Checkout (online), separate from the Cloud Terminal
-  `VivaClient`. `checkout-http`: **every unverified ISV field lives inside the one `vivaOnlineHttp`
-  builder** (developer.viva.com field names unconfirmed; KYC pending). `checkout-stub`: the store is
-  held on **`globalThis`** — Next dev compiles API routes and RSC pages into separate module graphs,
-  so a module-level map is two maps. `VIVA_MODE` picks stub/http like the other Viva clients.
-- **PLATFORM-invoice pass-through** — for Stripe refs (`stripe_cs_` / `stripe_pi_`), every
-  `processConfirmed*` (reservation, order, rental, tab, **table deposit**) adds a VAT-exempt
-  `payment-processing` line and sets `Invoice.processingFee` (`platformPassThroughFor`). Viva's ISV
-  fee is credited monthly → no pass-through.
-- **State machine** — condition `tapToPay` (from `opts.collect.method` on start, the `stripe_pi_`
-  prefix on abandon) and effects `stripeTerminalIntent` (card_present PaymentIntent on the
-  connected account, writes the ref, returns the client secret) / `stripeTerminalCancel`
-  (reverify-once; a succeeded race finalizes, never reverts a possibly-captured tap);
-  interpreter `runCollectStartTapToPay`.
+Modules: `payment-refs`, `payment-providers/*`, `checkout`, `stripe/*` (server-only, the only
+`stripe` SDK import), `viva/checkout-*`. Module detail → `EXPORTS.md` § Payment providers;
+end-to-end → `.claude/wiki/subsystems/payments.md`.
 
 ## Status Constants (`src/reservation-status.ts`)
 
-Single source of truth. Status fields are plain String columns in Prisma (not enums). Import as `@repo/data/reservation-status`.
+Single source of truth. Status fields are plain String columns (not enums). Import as `@repo/data/reservation-status`.
 
-- **Reservation payment**: PENDING → PROCESSING → COMPLETE (or PAYMENT_FAILED / CANCELED / REFUNDED / PAID_IN_CASH)
-- **Reservation operational**: EXPECTED → CHECKED_IN → DEPARTED (also: WALKED_IN, BLOCKED, NO_SHOW)
+- **Reservation payment**: PENDING → PROCESSING → COMPLETE (or PAYMENT_FAILED / CANCELED / REFUNDED);
+  off-platform: PAID_IN_CASH (`'paid-in-cash'`), HELD (unpaid hold, blocks). `PAID_STATUSES` = complete only
+- **Reservation operational**: EXPECTED → CHECKED_IN → DEPARTED (also: WALKED_IN, NO_SHOW, COMP);
+  `'blocked'` (out of service) is a manage-grid item state, not a constant here
 - **Order**: PENDING → PROCESSING → COMPLETE → ACCEPTED → PREPARING → READY → DELIVERED → COMPLETED (or REJECTED / DISCARDED / CANCELED / REFUNDED)
 - **Rental payment**: PENDING → PROCESSING → COMPLETE (or PAYMENT_FAILED / CANCELED / REFUNDED)
 - **Rental operational**: RESERVED → PICKED_UP → RETURNED
 - Semantic groupings: `BLOCKING_STATUSES`, `PAID_STATUSES`, `TERMINAL_STATUSES`, `RESERVATION_STATUSES`
 
-## Reservation State Machine (`src/reservation-machine.ts` + `-apply.ts`) — track 018
+## Reservation State Machine (track 018)
 
-Reservation state is a COMPOUND (kind × pay-phase × occupancy) derived from storage; the
-machine makes it explicit and is the ONLY sanctioned writer of reservation state fields.
+`reservation-machine.ts` (pure, client-safe: `deriveState`, `TRANSITIONS`, `resolveTransition`) +
+`reservation-machine-apply.ts` (server-only `applyTransition`) — the ONLY sanctioned writer of
+reservation state fields; `reservation-machine-guard.test.ts` is a shrink-only single-writer
+ratchet over all apps. Add behaviour by editing the table, never with a guard inside an action.
+Detail → `EXPORTS.md`; model + invariants I1–I7 → `.claude/wiki/subsystems/reservation-state-machine.md`.
 
-- **`reservation-machine.ts`** (pure, CLIENT-SAFE — no prisma; also backs the partner
-  grid's `bed-state.ts`): `deriveState(input) → { kind, pay, occ, released }` (kinds:
-  online · walkin · hold · comp · block — disambiguates the overloaded `paid-in-cash`);
-  `TRANSITIONS` — the founder-signed transition table as data (events × pre-state →
-  post + named effect keys; anything unmatched is a MUST-REJECT cell);
-  `resolveTransition`, `storageForState`/`opForOcc` (writer = reader's inverse),
-  `partitionAmount` (largest-remainder cents — splits can never create/destroy money).
-- **`reservation-machine-apply.ts`** (server-only interpreter):
-  `applyTransition(reservationId, event, opts)` — load → deriveState → resolveTransition
-  (typed rejection) → effect executors. Conditions (hasFutureDays/sameCivilDay/expired/
-  subset…) are interpreter-computed FACTS; callers pass only intent (`itemIds`, `cash`,
-  `amount`, a `buildRedirectUrl` builder, a `refund` handler). Executors: day-row +
-  parent mirror (atomic), till record/void/PARTITION (splits carry the money with the
-  seats), receipts + credit notes, split lineage (`splitFromId`), collect flow
-  (demo/Mollie/Viva terminal/Stripe Tap to Pay, abandon NEVER frees a bed), providerRefund, I4 delete defense (any
-  till/invoice history — voided included — blocks hard delete).
-- **`reservation-machine-guard.test.ts`** — single-writer ratchet: scans all apps for
-  reservation state writes outside the sanctioned modules; exact-equality shrink-only
-  allowlist (currently: cron sweep 1 — I4-filtered by design — + manage/actions.ts 8).
-- Contract + design record: `.claude/tracks/018-state-machine-intended.md` (invariants
-  I1–I7, decision record); de facto history: `018-state-machine-defacto.md`.
-- Consumers: partner manage/frontdesk/reservation-detail actions, user-app webhook/
-  poll/reconcile/cancel/delete/demo-initiate, partner matrix
-  (`state-machine-matrix.integration.test.ts`) drives real actions against the table.
+## Printed codes (`device-code.ts`, `site-code.ts`, `partner-code.ts`) — tracks 019 / 022
 
-## HW Device Codes (`src/device-code.ts`) — track 019
-
-Pure, client-safe (no prisma, no env): `DEVICE_CODE_ALPHABET` (Crockford base32 — `0-9A-Z` minus
-`I L O U`; the ambiguous glyphs are out because a human reads a code aloud from a windy beach, `U`
-so a sticker can't mint an obscenity), `DEVICE_CODE_LENGTH` (6 ≈ 1.07e9), `generateDeviceCode`
-(CSPRNG + 5-bit mask — 256 is a multiple of 32, so no modulo bias; random NEVER sequential, which
-would leak fleet size), `normalizeDeviceCode` (uppercase, `I`/`L`→`1`, `O`→`0`), `isValidDeviceCode`.
-
-**The route re-exports `normalizeDeviceCode` rather than re-implementing it** (`hw-filter.ts`
-`normalizeCode`): minting and lookup sit on opposite sides of a sticker glued to a potted device,
-so a code minted under different folding rules than the route normalises by is permanently
-unreachable. The round trip (`normalize(generate()) === generate()`) is the load-bearing test.
-
-### Provisioning script (`scripts/provision-device.ts`) — track 019 P3
-
-```bash
-npm run device:provision -- --partner <partnerAccountId>   # local; :test / :production are env-tiered
-```
-Mints the `Device` row and prints the code for the sticker. It does **not** place the device:
-position is an address assigned in the partner fleet UI once the unit is on a pole. It used to
-require `--seats <itemId,itemId>` and write `DeviceSeat` rows — but nothing read those once
-resolution moved to addresses, and it left the assigned address null, so every device it
-provisioned was declined on its first poll until someone assigned it anyway. The flag was pure
-ceremony and is gone; it also matches the model, since whoever runs this at a bench has no
-business knowing which parasol a unit ends up under. Flags: `--partner` (whose fleet list it
-appears in — without it nobody can see it to assign it), `--code` (reuse a code on a board swap),
-`--mac`, `--dry-run`. Retries on the `code` unique collision, except when `--code` was explicit
-(retrying would mint a code that differs from the sticker). There is no secret to hand over (Q9),
-which is why this is short.
-
-## Site Codes (`src/site-code.ts`) — track 022
-
-Pure, client-safe (no prisma, no env): the **site half of the printed QR URL**
-(`/q/S-K7M2X9/1-1-1`). `SITE_CODE_PREFIX` (`S-`, so a site, partner (`P-`) and device
-(bare) code can't be confused in a support call), `SITE_CODE_BODY_LENGTH` (6 = 32^6 ≈
-1.07e9), `generateSiteCode` (CSPRNG + 5-bit mask over `DEVICE_CODE_ALPHABET`, random never
-sequential), `normalizeSiteCode` (uppercase, `I`/`L`→`1`, `O`→`0`, `U`→`V`, prefix restored
-whether given or not — so a hand-typed lowercase URL still resolves), `isValidSiteCode`,
-`isSiteCodeCollision` (P2002 attributed to `code` — every writer mints optimistically and
-retries, and must NOT swallow the other unique constraints on `Site`).
-
-Why a site needs an external id: `Site.id` is a 25-char cuid — half of the old 80-char POS
-URL, and therefore half of the card's QR-density problem. **Not `slug`**: partner-editable
-(a rename kills every printed card), variable-length, no uniqueness constraint.
-
-The **round trip** (`normalize(generate()) === generate()`) is the load-bearing test, for the
-same reason as the device code: minting and lookup sit on opposite sides of a card glued to
-a lounger. `SITE_CODE_BODY_LENGTH` is deliberately its own constant, not a reuse of
-`DEVICE_CODE_LENGTH` — the 4 characters of slack under the QR version-3 cap are reserved
-for a longer unit ADDRESS (a venue past parcel 99), not for the fleet to spend.
-
-**Minting**: `apps/partner/lib/site-create.ts` `createSiteWithCode` — both partner creation
-paths (the wizard and `submitForm`) route through it. Backfill for existing rows:
-`npm run backfill:site-codes:{local,test,production}[:dry]` (fills NULLs only — never
-rewrites a code, which would orphan every card already printed for that venue).
+Pure, client-safe Crockford-base32 identifiers (`S-` site, `P-` partner, bare device), CSPRNG,
+never sequential. The load-bearing test is the round trip `normalize(generate()) === generate()` —
+mint and lookup sit on opposite sides of a printed sticker/card, so apps import the `normalize*`
+helpers, never re-implement them. `Site.code` is never rewritten once assigned. Minting,
+provisioning script (`npm run device:provision`), backfill → `EXPORTS.md`.
 
 ## Password Reset (`src/password-reset.ts`)
 
 - `requestPasswordReset(email, appBaseUrl)` — SHA-256 hashed token, validates origin against `ALLOWED_ORIGINS`, max 3/hour per email, invalidates previous tokens, sends via Resend
 - `resetPassword(token, password)` — verifies hashed token, checks expiry, enforces password strength (8+ chars, upper+lower+digit), bcrypt update in transaction
-- `hashToken(raw)` — pure SHA-256 helper
-- `passwordResetEmailHtml(url, hours)` — pure HTML template
+- `hashToken(raw)` — pure SHA-256 helper; `passwordResetEmailHtml(url, hours)` — pure HTML template
 
 ## Rate Limiter (`src/rate-limit.ts`)
 
-- `rateLimit(key, { maxAttempts, windowMs })` — in-memory sliding-window, cleanup every 5 min
-- Per-process only (resets on serverless cold start)
+`rateLimit(key, { maxAttempts, windowMs })` — in-memory sliding window, cleanup every 5 min.
+Per-process only (resets on serverless cold start).
 
 ## Till (`src/till.ts`)
 
-Day-anchored per-worker cash till (tracks 008/013/016). `TillEntry` is the cash ledger
-(`recordSettlement` / `voidSettlementsFor*`); `TillClose` rows are irreversible hand-in
-snapshots. The open till is **two-bucketed** against a caller-supplied venue-local
-`dayStart` (module is timezone-agnostic): **today** = non-voided entries since
-`max(lastClose, dayStart)`; **carryOver** = unclosed entries from before today
-(`(lastClose, dayStart]`, `oldestAt` labeled). `total` = today + carryOver = the sweepable
-balance — a close always sweeps both (cash never orphaned). `closeEmployeeTill` is the
-single snapshot writer (records `carryOverAmount`/`carryOverCount` on `TillClose`);
-`closeAllOpenTills` builds on it and returns `carryOverClosed`. Civil-day reports
-(`getTillByEmployee` → `EmployeeCashTotal[]`, `getEmployeeShiftItems`) sum by `settledAt`
-window and are **close-independent** — daily accumulation never changes when tills close.
+Day-anchored per-worker cash till (tracks 008/013/016): `TillEntry` ledger, irreversible `TillClose`
+snapshots, two buckets (today + carry-over) against a caller-supplied venue-local `dayStart`;
+`closeEmployeeTill` is the single snapshot writer. → `.claude/wiki/subsystems/employee-till.md`.
 
-## Other Exports
-- `src/invoice-fiscal.ts` — **the one** builder of the AEAT QR block for any invoice that
-  renders one (track 026 P6a). Resolves the regime through `resolveInvoiceIssuerJurisdiction`,
-  never off `invoice.account`: on a PLATFORM commission invoice `accountId` is the **recipient**,
-  so the old inline version asked the customer's jurisdiction about OUR document — no QR on our
-  invoice to the Finnish partner (art. 20 says there must be one), and a QR on a Spanish
-  partner's that would have vanished had they turned out to be foral. `receipt.ts` and the user
-  app's `qr.png` route both call it now, so a document and its filing cannot disagree about
-  whether an invoice is Spanish
-- `src/commission-invoice.ts` + `src/commission-invoice-model.ts` — OUR OWN commission invoice as
-  a readable document (track 026 P6a; model is PURE/client-safe, loader imports prisma). Before
-  this, a partner could see only a year-to-date aggregate — `getInvoicesByMonth` filters
-  `issuerType: 'PARTNER'` — so the B2B invoices we bill them monthly had no document at all.
-  Deliberately NOT `ReceiptModel`: two identified parties (a *factura completa* `F1`, not a
-  simplified receipt), amounts that sum with nothing under the agent model, and a possible
-  reverse-charge declaration; only the `ReceiptFiscal` furniture is shared. **Ownership is
-  scoped inside the loader**, not left to callers, and null means "not yours" and "no such
-  invoice" indistinguishably so a guessed id cannot confirm another partner's invoice exists
-- `src/reservation-emails.ts` — confirmation, reminder, cancellation emails via Resend
-- `src/settlement.ts` — monthly payout aggregation
-- `src/subscription.ts` — partner subscription tier management
-- `src/email.ts` — shared Resend email sender
-- `src/business-entity.ts` — platform business entity for invoicing
-- `src/preferences.ts` — **platform preferences** (admin app → `/preferences`): registry-driven
-  global tunables. `PREFERENCE_REGISTRY` (key · type · label · group · bounds · default) is the
-  source of truth; resolution is env var (`PREF_<UPPER_SNAKE_KEY>`) → `platform_preference` row →
-  registry default. `getPreference` / `getPreferenceCached` (5-min per-instance cache, for hot
-  paths) / `setPreference` (validates, invalidates the cache) / `getPreferenceAdminRows`.
-  **Values are validated on the way in AND on the way out** — the setter explains a rejection to
-  the admin, the reader silently falls back to the default, because a row can outlive a bounds
-  change or arrive by direct SQL and its consumers are in the field. Types are `number` ·
-  `boolean` · `string` · `enum` (a closed set rendered as a dropdown; the stored value is the
-  WIRE ID, never the label, because the id travels to a potted device). Entries:
-  `device-power-mode` (enum, default `deep_sleep`) and `device-poll-interval-sec` (default 60) —
-  the power policy the user app's `/api/hw/{code}/state` serves as `powerMode` + `pollAfterSec`,
-  both formerly constants in that route.
-  **These two are the one COUPLED pair in an otherwise flat registry**: each mode can only keep
-  its own band of cadences (track 025), so `setPreference` refuses an interval the active mode
-  cannot serve and RE-FITS the stored interval when the mode changes, and
-  `getPreferenceAdminRows` reports the interval a device would actually get rather than the
-  stored one. The coupling lives in this module, not the admin form, so a script obeys it too.
-  `setDevicePolicy(mode, interval, adminId)` is the PAIRED writer the admin form uses: it
-  validates the interval against the mode *being saved* (not the stored one) and upserts both
-  keys in one `$transaction`, so the poll route can never read a switched mode beside the old
-  interval. It REFUSES rather than re-fits, because a caller that can see both values is
-  choosing, not drifting — the silent re-fit stays only on the single-key path, where the
-  caller does not know about the other key. `resetDevicePolicy()` drops both rows together.
-  `getPlatformDevicePolicy()` reads the pair RAW through the cache — the poll route and the
-  partner fleet query both call it, and hand it to `resolveDevicePolicyForDevice` together with
-  the device's own override (`Device.powerMode` / `pollIntervalSec`), so the platform value is
-  now a DEFAULT rather than the fleet's policy. Note the deliberate asymmetry: a platform change
-  reaches a device within the 5-min cache TTL plus one poll, a per-device override on its very
-  next poll (it rides the device row the route already reads) — do not "fix" that by caching the
-  override. Third entry, uncoupled: `device-telemetry-retention-days` (default 365) bounds the
-  `device_telemetry` series and is the ONLY thing that does, so treat it as a storage budget —
-  shortening it DELETES history on the next daily sweep and cannot be undone. Writes are
-  unthrottled, so ~2.2M rows/day at a 1500-unit fleet on a 60 s cadence: shorten it before then
-- `src/device-telemetry.ts` — the retention sweep for `device_telemetry`, the time series behind
-  `Device`'s telemetry columns (track 019 P6). A row is appended per POLL that carries a report,
-  UNTHROTTLED (founder call 2026-09-23) — `reportIsDue` throttles only the `Device` last-value
-  row, which costs nothing since that row is a cache of the latest reading and this table is the
-  record. The poll interval therefore sets the row rate (1440/device/day at 60 s), so retention is
-  load-bearing at fleet scale. `pruneDeviceTelemetry()` deletes past
-  `device-telemetry-retention-days`, oldest first, in bounded chunks: the sweep runs in a
-  serverless invocation against a table that is largest exactly when someone has just shortened
-  the window, so it is RESUMABLE (whatever it commits stands) and capped per run rather than
-  unbounded. Called by the user app's `/api/cron/prune-telemetry` daily. The volume arithmetic
-  is in the module header — read it before raising the default
-- `src/device-wifi.ts` — **PURE** (no Prisma; the admin form imports it): the rules for the Wi-Fi
-  pair a device is given so a unit can be moved to a new AP without a console (track 019, HW
-  `docs/app-requests/2026-09-26-wifi-health-and-provisioning.md`). `SSID_MAX_BYTES` (32 — **bytes**,
-  not characters: 9 beach emoji are 18 code units and 36 bytes), `PSK_MIN_LENGTH`/`PSK_MAX_LENGTH`
-  (8–63, or `''` for an open network), `validateWifiNetwork` (write path, explains itself),
-  `resolveWifiNetwork` (read path, silent, never returns half a pair — the device ignores a lone
-  field, so half would look configured and do nothing). It **refuses rather than repairs**, and the
-  one rule that looks fussy is load-bearing: edge whitespace is rejected because preference reads
-  TRIM, so a password stored with a trailing space would be served without it and the fleet would
-  fail to join a network that looks correct in the admin form.
-  The BROADCAST half is the security posture (Q9 option 2, founder 2026-09-26): credentials are
-  stored but not served, an operator opens a `WIFI_BROADCAST_WINDOW_MS` (30 min) window, and
-  `shouldSendWifi(startedAt, device.wifiSentAt)` serves **each device exactly once** inside it.
-  Comparing against the START — not a stored boolean — is what lets a new broadcast re-arm the whole
-  fleet without touching a device row, which is how a mistyped password is corrected. `isBroadcastOpen`
-  rejects a FUTURE start stamp rather than trusting it, and `parseBroadcastStartedAt` reads anything
-  unparseable as "no broadcast": both fail toward *not* exposing a password on an open endpoint.
-  Writers/readers in `./preferences` (`setDeviceWifiNetwork` — one transaction, `null` password means
-  keep the stored one · `startDeviceWifiBroadcast` / `stopDeviceWifiBroadcast` ·
-  `getDeviceWifiBroadcast`, cached on a **30 s** TTL rather than the policy's 5 min, because a late
-  START is a nuisance while a late STOP keeps a password reachable)
-- `src/device-power.ts` — **PURE** (no Prisma; a client component may import it): the three
-  device power modes, their poll bands (continuous 1–15 s · light sleep 10–45 s · deep
-  sleep 30–300 s — floors from `../sunbnb-hw` exp 005, light sleep's ceiling an operating
-  choice past the 27 s crossover), `clampPollInterval`, `resolveDevicePolicy`, and the
-  person-facing `validatePollInterval` / `describePollBand` / `validateDevicePolicy` (the ONE
-  write-path pair check, called by both the admin preferences writer and the partner per-device
-  writer so a refusal reads the same on both), plus `resolveDevicePolicyForDevice` — the
-  device-over-platform cascade, shaped like `resolveServiceFee`. Its rules are deliberate: a
-  half-set or unreadable override INHERITS the platform pair (half a policy is not one, and an
-  illegal mode leaves no band to clamp against), while an out-of-band interval is CLAMPED inside
-  the device's own mode rather than bounced to the platform — bands have moved once already, and
-  a narrowing that flipped a `deep_sleep`/300 device to a `continuous`/5 platform default would
-  flatten its cell in three days. The bands OVERLAP on purpose —
-  the mode is an explicit field precisely because it cannot be inferred from a cadence in the
-  overlap. Both fallbacks point at `deep_sleep` / the cheap end of a band: a wrong slow value
-  costs response time, a wrong fast one costs the battery in days.
-  **`clampPollInterval` vs `validatePollInterval`** is the same band asked by different
-  callers: a fielded device gets the nearest legal cadence (it cannot read an error), a person
-  choosing one gets a refusal naming the mode and its band. The admin form and `setDevicePolicy`
-  both call the latter, so what the operator reads while typing is what the server would answer
+## Other exports
+
+| Module | Purpose |
+|---|---|
+| `invoice-fiscal` | the one AEAT QR builder — regime via issuer jurisdiction, never `invoice.account` |
+| `commission-invoice(-model)` | our B2B commission invoice as a document; ownership scoped in the loader |
+| `reservation-emails` · `email` | confirmation/reminder/cancellation emails · shared Resend sender |
+| `subscription` · `business-entity` | partner tiers · platform invoicing entity |
+| `preferences` | platform tunables: env `PREF_*` → DB row → registry default; validated in AND out |
+| `device-power` · `device-wifi` · `device-telemetry` | power bands + cascade · Wi-Fi rules + broadcast · retention sweep |
+
+Detail and rationale for each → `EXPORTS.md`.
 
 ## Partner AI assistant (`src/assistant.ts`) — track 030
 
-`@repo/data/assistant` — persistence for the partner assistant (models `AssistantConversation`,
-`AssistantAction`, `AssistantUpload`; migrations `20261011064712_assistant_models` +
-`20261011083109_assistant_upload_aerial_georef` adding `assistant_upload.georef` / `.aerial` jsonb).
-Server-only. **Every reader/writer is ACCOUNT-SCOPED** — `accountId` is always in the predicate, so a
-guessed id from another account behaves like a missing row (null/false).
-- Status constants `ASSISTANT_ACTION_STATUS` (`proposed → applied|rejected|expired|failed`,
-  `applied → undone`, rest terminal); pure `canTransition` **plus** a compare-and-set in each UPDATE
-  (`markApplied`/`markRejected`/`markFailed`/`markUndone`) so two racing requests cannot both apply.
-  Plain strings, not a Prisma enum (data-access rule).
-- TTLs: `ASSISTANT_PROPOSAL_TTL_MS` 1 h (`expireStaleProposals`), `ASSISTANT_UNDO_WINDOW_MS` 24 h,
-  `ASSISTANT_UPLOAD_TTL_MS` 30 days (`listExpiredUploads` / `markUploadDeleted` drive the partner purge cron).
-- Conversations: `createConversation`, `getConversationForAccount`, `appendMessages` (append-only,
-  accumulates `AssistantUsage` via `addUsage`), `recordConsent` (not yet called).
-- Aerial (S7): `setUploadGeoref`, `claimAerialExtraction` (CAS claim; `running` older than
-  `AERIAL_STALE_RUNNING_MS` 10 min is reclaimable; a `done` descriptor is returned cached — no second
-  model call), `saveAerialDescriptor`, `failAerialExtraction`.
+`@repo/data/assistant` — server-only persistence for `AssistantConversation`, `AssistantAction`,
+`AssistantUpload`. **Every reader/writer is ACCOUNT-SCOPED** (`accountId` always in the predicate,
+so another account's id behaves like a missing row). `ASSISTANT_ACTION_STATUS` plain strings, pure
+`canTransition` + compare-and-set in each UPDATE so two racing requests cannot both apply. TTLs,
+conversation and aerial helpers → `EXPORTS.md`.
 
-## Assistant SQL sandbox (`src/assistant-claim.ts`) - track 030 D1
+**SQL sandbox** (`src/assistant-claim.ts`, D1): model-written SQL runs as Postgres role
+`assistant_reader` over allowlisted `assistant.*` views (RLS + column grants + HMAC site claim), so
+isolation holds even if the app's SQL checker is bypassed. `runAssistantSql` is the only runner.
+Views pin base-table columns (`.claude/rules/migrations.md`). Role, views, env, ops → `EXPORTS.md`.
 
-Model-written SQL runs against the REAL database as role `assistant_reader`; Postgres enforces
-isolation even if the app's SQL checker is bypassed. Migration `20261011120000_assistant_reader_role_and_views`.
-- **Role** `assistant_reader`: NOLOGIN in the migration (ops script sets LOGIN/PASSWORD), read-only default,
-  `statement_timeout 3s`, `lock_timeout 2s`, idle-in-txn 10s, CONNECTION LIMIT 5, no CREATE, `search_path = assistant, public`.
-- **Views** in schema `assistant` (all `security_invoker` + `security_barrier`, allowlisted columns only): `site`, `parcel`,
-  `unit`, `sunbed`, `layout_element` (handle = last 6 of id), `product`, `rental_item`, `working_hours`, `reservation`
-  (`paid_via` derived), `reservation_seat` (reservation_id, sunbed_id), `food_order`, `food_order_item`, `invoice`.
-  Real cuids are exposed only where another view joins on them (parcel/unit/sunbed/reservation/food_order/invoice ids).
-  Timestamps are `timestamptz` (stored UTC `timestamp`); the runner sets the site TimeZone.
-- **Base tables**: column-level `GRANT SELECT` on exactly the columns the views read (denied columns fail even directly),
-  RLS ENABLED (not FORCED; owner/app roles bypass) with `assistant_site` policies `TO assistant_reader`.
-  `payment_ref` is NOT granted: `paid_via` comes from SECURITY DEFINER helpers that re-check the site.
-- **Claim**: `signAssistantClaim({siteId, accountId, ttlSec<=300}, secret)` -> `siteId.accountId.exp.hexHmac`, carried in the
-  txn-local GUC `assistant.claim`; `assistant.current_site_id()` (SECURITY DEFINER) verifies HMAC vs `assistant.claim_secret`
-  (reader has no grant) and expiry; anything else -> NULL -> zero rows.
-- **Runner** `runAssistantSql(sql, params, {siteId, accountId, timeZone?, maxRows?})` -> `{columns, rows, truncated}`:
-  separate pg Pool (max 3), `BEGIN READ ONLY`, txn-local pins, wrapped `SELECT * FROM (...) LIMIT $n` (extended protocol, no stacked statements), ROLLBACK, DISCARD ALL.
-- **Env**: `ASSISTANT_DB_URL` (reader URL, may be a read replica), `ASSISTANT_DB_CLAIM_SECRET` (app + DB), `ASSISTANT_DB_PASSWORD` (ops script only).
-- **Ops**: `scripts/setup-assistant-reader.sh <local|integration|test|production>` after the migration (header documents building the URL).
-- **Residual**: PUBLIC-executable pg_catalog functions (e.g. `pg_advisory_lock`) cannot be revoked by a non-superuser; point
-  `ASSISTANT_DB_URL` at a read replica to keep session-lock abuse off the primary. Tests: `assistant-reader.integration.test.ts`.
+## Coastline lookup (`coastline-lookup`, `coastline-overpass`) — track 027 → 030 S7a
 
-## Coastline lookup (`src/coastline-lookup.ts`, `src/coastline-overpass.ts`) — track 027 → 030 S7a
-
-- `@repo/data/coastline-lookup` — `shoreAround(lat, lng, radiusM)`: the DB-then-Overpass shoreline
-  lookup behind marketing `/api/coastline`, shared so the partner assistant's aerial land check reads
-  the same shore. Returns raw shore polylines (water on the right) + water rings; reducing them to a
-  shore frame is `@repo/agent/geo/coastline`. Needs `COASTLINE_POSTGRES_URL` — every call throws
-  without it, and callers fall back to "no shore" (land check skipped).
-- `@repo/data/coastline-overpass` — `fetchCoastTile` / `parseCoastAnswer` / `OVERPASS_URLS` (moved
-  from `apps/marketing/lib/overpass.ts`): instances are raced, and an answer counts only if complete —
-  Overpass reports its own timeouts as HTTP 200 with a `remark`, which must never be cached as "no
-  coast here".
+`shoreAround(lat, lng, radiusM)` — DB-then-Overpass shoreline lookup shared by marketing
+`/api/coastline` and the assistant's aerial land check. Needs `COASTLINE_POSTGRES_URL` (throws
+without it; callers skip the land check). An Overpass answer counts only if complete. → `EXPORTS.md`.
 
 ## Testing
 
@@ -434,12 +202,12 @@ isolation even if the app's SQL checker is bypassed. Migration `20261011120000_a
 npm run test                    # unit — pure logic, no DB, no mocking
 npm run test:integration        # requires local sunbnb_test DB
 npm run test:integration:setup  # prisma migrate deploy against sunbnb_test
+npx tsc --noEmit                # real typecheck gate (tsconfig rootDir "."); no npm script — run with lint
 ```
 
-A separate `sunbnb_scale` DB backs the track-020 benchmark harness (`npm run scale:*`); its target
-guard refuses any non-local host even with `--force`.
-
-Full per-file inventory, config split and the scale harness: **`packages/data/TESTING.md`**.
+The local `sunbnb_test` DB is shared, mutable state across sessions — run integration suites
+serially, one agent at a time (`TESTING.md` § Shared test DB). A separate `sunbnb_scale` DB backs
+the track-020 benchmark (`npm run scale:*`); its guard refuses any non-local host even with `--force`.
 
 ## Known Quirks
 - Exports both Prisma client AND duplicated UI components (TextField, Button) — same components also exist in `@repo/ui`

@@ -7,3 +7,4 @@
 - PostGIS spatial queries use `prisma.$queryRawUnsafe()` with `ST_DistanceSphere`, `ST_MakePoint`, etc. Coordinates stored as `geometry` type with GiST index.
 - Server actions return `{ status: 'ok' | 'error', errors?: string[] }`. Follow this pattern for all new actions.
 - When creating reservations or orders, always wrap availability check + create in the same operation to minimize race condition windows.
+- Prisma `upsert` is SELECT-then-INSERT and races under concurrent RSC prefetch — catch `P2002` and refetch (or retry the transaction).

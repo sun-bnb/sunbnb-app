@@ -1,3 +1,7 @@
+---
+description: Maintain the auto-loaded canonical docs (CLAUDE.md tree + .claude/rules) within budgets.json
+argument-hint: [user|partner|admin|mobile|marketing|data|agent|ui|root|rules]
+---
 # /update-knowledge — Maintain the auto-loaded canonical docs
 
 Update the **CLAUDE.md tree** and **`.claude/rules/`** files to reflect current architecture, conventions, and rules — applying a worthiness gate so the auto-loaded context stays tight, accurate, and not duplicative of the wiki.
@@ -7,12 +11,14 @@ Update the **CLAUDE.md tree** and **`.claude/rules/`** files to reflect current 
 > | Layer | Lives in | Loaded | Owner |
 > |---|---|---|---|
 > | **1. Code** | `apps/`, `packages/` | n/a | humans + LLM edits |
-> | **2. Canonical schema docs** | `CLAUDE.md` tree, `.claude/rules/*.md` | **auto-loaded into every session** | **THIS COMMAND** |
+> | **2. Canonical schema docs** | `CLAUDE.md` tree, `.claude/rules/*.md` | **auto-loaded** (root + rules every session; a directory's `CLAUDE.md` whenever its files are read) | **THIS COMMAND** |
 > | **3. Synthesis wiki** | `.claude/wiki/` (entities, flows, subsystems) | on-demand via `index.md` lookup | `/wiki ingest` |
 >
 > Adjacent artifacts (not owned by this command): `PROJECT_CONTEXT.md` (stable human narrative — leave alone), `.claude/knowledge/<agent>.md` (playbooks — written by the owning agent's retrospective and curated by `/groom <agent>`; promotions to canon arrive here as proposals from a groom).
 >
-> **Key fact:** layer 2 is auto-loaded, so every line costs tokens in every future session. Bloat here is more expensive than bloat in the wiki. Discipline is correspondingly stricter.
+> **What loads when** (the one statement; root `CLAUDE.md` § Context system): root `CLAUDE.md`, `.claude/rules/*.md` and the memory index load in every session; a directory's `CLAUDE.md` loads when a file under it is read; `TESTING.md`, `UI.md` and other siblings, the wiki, playbooks and tracks are pulled on demand.
+>
+> **Key fact:** layer 2 is auto-loaded, so every line costs tokens in every future session that touches it. Bloat here is more expensive than bloat in the wiki. Discipline is correspondingly stricter.
 
 ## Usage
 
@@ -57,11 +63,14 @@ Map `$ARGUMENTS`:
 
 | Arg | Files in scope |
 |---|---|
-| (none) | root `CLAUDE.md` + `apps/{user,partner,admin}/CLAUDE.md` + `packages/{data,ui}/CLAUDE.md` + sweep `.claude/rules/*.md` |
-| `user` | `apps/user/CLAUDE.md` |
-| `partner` | `apps/partner/CLAUDE.md` |
-| `admin` | `apps/admin/CLAUDE.md` |
-| `data` | `packages/data/CLAUDE.md` |
+| (none) | root `CLAUDE.md` + every `apps/*/CLAUDE.md` + `packages/*/CLAUDE.md` + sweep `.claude/rules/*.md` (start from `context-health.mjs --scope canonical`) |
+| `user` | `apps/user/CLAUDE.md` + its pulled siblings (`TESTING.md`, `UI.md`, `HW-API.md`, `PATTERNS.md`) |
+| `partner` | `apps/partner/CLAUDE.md` + siblings (`TESTING.md`, `UI.md`, `ASSISTANT.md`, `PATTERNS.md`) |
+| `admin` | `apps/admin/CLAUDE.md` + `UI.md` |
+| `mobile` | `apps/mobile/CLAUDE.md` |
+| `marketing` | `apps/marketing/CLAUDE.md` |
+| `data` | `packages/data/CLAUDE.md` + siblings (`TESTING.md`, `EXPORTS.md`, `REFERENCE.md`) |
+| `agent` | `packages/agent/CLAUDE.md` |
 | `ui` | `packages/ui/CLAUDE.md` |
 | `root` | root `CLAUDE.md` |
 | `rules` | `.claude/rules/*.md` |
@@ -102,34 +111,24 @@ When editing:
   1,000-byte table cell, which is exactly how this layer reached 137 KB while every file "passed"
   its line target. Check with `wc -c`, not `wc -l`.
 
-  | File | Target | Hard cap |
-  |---|---|---|
-  | Root `CLAUDE.md` | ≤ 12 KB | 16 KB |
-  | `apps/*/CLAUDE.md` | ≤ 12 KB | 22 KB |
-  | `packages/data/CLAUDE.md` | ≤ 12 KB | 22 KB |
-  | `packages/ui/CLAUDE.md` | ≤ 2 KB | 4 KB |
-  | Each `.claude/rules/*.md` | ≤ 3 KB | 5 KB |
-  | **Any single line, all files** | ≤ 300 B | 500 B |
+  The budgets live in **`.claude/context/budgets.json`** (`canonical.files`, `canonical.lineBytes`)
+  — the single table shared with `context-health.mjs`. Today: root 12/16 KB, `apps/*` and
+  `packages/data` 12/22 KB, other `packages/*` 4/8 KB, each rule 3/5 KB, any line 300/500 B
+  (target/hard). Change a budget there, never here.
 
   The per-line cap is the load-bearing one: prose smuggled into a table cell is how the previous
   budget was defeated. Reflowing a long cell into short lines *increases* line count while
   *reducing* bytes — that is a win, not a regression.
 
-  Check the whole layer with:
+  Check the whole layer with `node .claude/scripts/context-health.mjs --scope canonical` (bytes,
+  long lines, stale version claims, workspaces without a `CLAUDE.md`).
 
-  ```bash
-  for f in CLAUDE.md apps/*/CLAUDE.md packages/*/CLAUDE.md .claude/rules/*.md; do
-    printf "%7d B  %5d B longest-line  %s\n" $(wc -c < "$f") \
-      $(awk '{if(length($0)>m)m=length($0)}END{print m}' "$f") "$f"
-  done
-  ```
-
-  Hitting a cap is a smell. Split detail out to an on-demand sibling (`TESTING.md`, `UI.md`,
-  `REFERENCE.md` — pulled by a skill or read when relevant, never auto-loaded), or to the wiki if
+  Hitting a cap is a smell. Split detail out to an on-demand sibling (`TESTING.md`, `UI.md`, `HW-API.md`,
+  `ASSISTANT.md`, `EXPORTS.md` — pulled by a skill or read when relevant, never auto-loaded), or to the wiki if
   it is a narrative. Do not append and hope.
 
 - **Never re-add `@` imports to the root `CLAUDE.md`.** Per-app context is read when working in
-  that app; the root file is a router (see its *App & Package Details* table). Importing the tree
+  that app; the root file is a router (see its *Context system* table). Importing the tree
   put ~97 KB in every session regardless of task and contradicted the pulled-depth doctrine the
   agent layer already follows.
 

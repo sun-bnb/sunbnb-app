@@ -16,7 +16,6 @@ sources:
 related:
   - flow:walk-in
   - entity:reservation
-  - entity:settlement
 last_verified: 2026-07-23
 ---
 
@@ -31,7 +30,7 @@ gate on the manage page is unchanged; see [[subsystem:auth]]).
 
 **Why it exists:** before this, every on-site transaction was stamped with the site *owner's*
 `userId`, so a multi-worker venue couldn't tell who rang up what and had no daily cash
-reconciliation (Sunbnb has only monthly [[entity:settlement]]). The leapfrog over Alonso: Alonso's
+reconciliation (money reporting was invoice-level only). The leapfrog over Alonso: Alonso's
 "employee" is a free-text name with a single per-device default that wipes at day-reset; Sunbnb does
 a real roster + persisted attribution → durable cross-day reporting.
 

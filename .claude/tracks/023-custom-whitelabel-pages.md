@@ -1,9 +1,9 @@
 ---
 id: 023-custom-whitelabel-pages
 title: Custom whitelabel pages — bespoke brand experiences for key customers
-status: active
+status: paused
 created: 2026-08-21
-updated: 2026-08-21
+updated: 2026-10-13
 worktree: null
 ---
 
@@ -219,6 +219,7 @@ That extraction is the real engineering in this track. Everything else is plumbi
 
 ## Resume here
 
+- **PAUSED 2026-10-13** (track 031 status pass) — mechanism shipped (custom-brand migrations live); waiting on founder review of the Alcúdia page and open questions Q6+.
 - **▶ NEXT ACTION: founder review of the Alcúdia page** (`/s/alcudia` locally — the site is
   wired live in the local DB). It is customer #1 of the mechanism: all five phases of this
   track are done. After review: USER OPS `npm run migrate:test` (three migrations queued:
@@ -572,6 +573,7 @@ That extraction is the real engineering in this track. Everything else is plumbi
     actual name, "Platja d'Alcúdia"; tagline and cover kept. Worth a standing rule: seeded
     fixtures modelled on real places should carry the real name or an obviously fictional one,
     never a plausible invention.
+- **2026-10-13** — Status → paused (track 031 status pass, founder-approved): mechanism shipped (custom-brand migrations live); waiting on founder review of the Alcúdia page and open questions Q6+.
 
 ## Links
 

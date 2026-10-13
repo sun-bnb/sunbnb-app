@@ -4,10 +4,15 @@ slug: implementation
 status: stable
 sources:
   - .claude/wiki/README.md
+  - .claude/rules/architecture.md
+  - .claude/rules/migrations.md
+  - .claude/rules/commits.md
+  - .claude/commands/test.md
 related:
   - workflow:feature-design
   - workflow:ingest
-last_verified: 2026-05-20
+  - subsystem:migrations
+last_verified: 2026-10-13
 ---
 
 # Workflow: Implementation
@@ -18,114 +23,80 @@ The procedure for translating a designed feature (`[[workflow:feature-design]]`)
 
 ### 1. Reconfirm the plan
 
-If a plan was produced via `[[workflow:feature-design]]`, re-read it. Check:
+If a plan was produced via `[[workflow:feature-design]]`, re-read it:
 - Has the user since redirected? Adjust before coding.
 - Are the cited wiki pages and source files still current? Spot-check `last_verified` and a sample file.
+- Is the work part of a track? Read its **Resume here** in `.claude/tracks/` first.
 
-If there is no plan, **stop** and produce one. Don't code blind on non-trivial work.
+No plan on non-trivial work → **stop** and produce one. If the change crosses an app boundary, touches `packages/data`, or changes a shared contract, the architecture pass in `.claude/rules/architecture.md` is mandatory before code.
 
 ### 2. Establish the order of operations
 
-The dependency direction in this monorepo is rigid:
+Dependencies run one way: `packages/data` (schema, payment/invoice core, status constants) ← shared packages (`@repo/floor-core`, `@repo/agent`, `@repo/ui`, …) ← `apps/{user,partner,admin,mobile}`. Within a feature:
 
-```
-packages/data  ←  apps/{user,partner,admin}
-       ↑                ↑
-   schema first     consume schema + payment service
-```
+1. **Schema** — edit `packages/data/prisma/schema.prisma`, `npm run migrate:local`, review the SQL. Additive only (expand/contract) and `migrate:test` before pushing `main` — `.claude/rules/migrations.md`, `[[subsystem:migrations]]`.
+2. **Shared logic** — `packages/data/src/*.ts` (or the owning shared package) + unit tests. A `@repo/data` submodule imported by client components must not pull in Prisma.
+3. **Integration tests** for DB-touching logic against `sunbnb_test`.
+4. **App server actions / API routes** — consume the shared logic; tests with the app's `__mocks__/@repo/data/` mocks (add a mock file when you add a mocked submodule).
+5. **App components & UI** — prime with `/ui <surface>` first; mirror the reference implementation.
+6. **i18n** — keys in `messages/{en,es,fi}.json` for every user-facing string.
 
-Within a feature touching multiple layers:
-
-1. **Schema** — edit `packages/data/prisma/schema.prisma`, run `npm run migrate:local`, review the generated SQL.
-2. **Shared logic** — update `packages/data/src/*.ts` (payment, reservation-status, email templates, etc.). Add unit tests.
-3. **Integration tests** for `packages/data` — verify DB-touching logic against `sunbnb_test`.
-4. **App server actions / API routes** — consume the new shared logic. Add tests with mocked Prisma.
-5. **App components & UI** — consume server actions / API routes. Add tests where they make sense.
-6. **i18n** — add keys to `messages/{en,es,fi}.json` for any user-facing string.
-
-Skip levels only if the feature genuinely doesn't touch them.
+Skip a level only if the feature genuinely doesn't touch it. Per-surface work goes to the surface agent (`data-dev`, `partner-dev`, `user-dev`, `admin-dev`, `sunbed-inventory`), schema/data first.
 
 ### 3. Apply project conventions
 
-Non-negotiables (these are in `.claude/rules/` and `CLAUDE.md` — always check them):
+The rules are canonical in `.claude/rules/` (always loaded) — don't re-derive them, check the change against them:
 
-**Data access** (`.claude/rules/data-access.md`):
-- `@repo/data` owns Prisma. Never import `@prisma/client` directly in apps.
-- Status fields are String columns. Use constants from `@repo/data/reservation-status`.
-- Server actions return `{ status: 'ok' | 'error', errors?: string[] }`.
-- PostGIS spatial queries via `prisma.$queryRawUnsafe`.
+- **`data-access.md`** — `@repo/data` owns Prisma; status constants from `@repo/data/reservation-status`; `{ status, errors }` action shape; availability check + create in one operation.
+- **`auth.md`** — ownership verified before every read/mutation (partner `requireSiteOwner()` / `authorizeSite()`, user `getRequestIdentity()` + `verifyOwnership()`, admin sudo).
+- **`payments.md`** — DB prices only; idempotent invoices; fee cascade; consumer pays the listed price only (commission deducted from partner revenue); `round()` for money; provider identified by `paymentRef` prefix via `@repo/data/payment-refs` (`isDemoPayment()` before any provider call); webhooks re-fetch from the provider.
+- **`ui.md`** — Tailwind-first, one `accent` token, component classes, status colours.
 
-**Auth** (`.claude/rules/auth.md`):
-- Partner app: `requireSiteOwner()` / `authorizeSite()` on every mutation.
-- User app: `verifyOwnership(identity, entity)` after `getRequestIdentity()`.
-- Admin app: `requireSudo()` on every action.
-- Password tokens are SHA-256 hashed before storage.
-
-**Payments** (`.claude/rules/payments.md`):
-- Never trust client-submitted prices. Fetch from DB.
-- Invoice creation is idempotent — check before creating, double-check in the transaction.
-- Service fees use the three-tier cascade (`[[entity:service-fee]]`). No hardcoded amounts.
-- Fee model is **uniform** (since 2026-07-25, all F&B included): the consumer pays the listed price only; the commission is **deducted from partner revenue** (applicationFee + PLATFORM invoice). Never add a fee to a consumer total.
-- All prices VAT-inclusive. Use `round()` from `@repo/data` for all money math.
-- Demo payments: `pi_demo_{timestamp}` prefix. Check `isDemoPayment()` before any provider call.
-- Mollie webhook: validate the payment-id regex + re-fetch state. (Subscription Stripe webhook: verify the HMAC signature.)
-- `/api/reconcile` must require `RECONCILIATION_SECRET`.
+Surface-specific patterns live in the surface's `CLAUDE.md` and its pulled siblings (`PATTERNS.md`, `TESTING.md`, `UI.md`, `EXPORTS.md`, …) — read the one for the code you touch.
 
 ### 4. Write the tests first when feasible
 
-Per the project's testing philosophy (see `MEMORY.md`): tests are **requirements-driven and bug-revealing**, not validations of existing code. Aim for:
+Tests are **requirements-driven and bug-revealing**, not validations of existing code. Aim for:
 
-- Tests that would fail today if the feature were broken in the way users care about
-- Edge cases: unauthenticated, anonymous, double submission, race, ownership mismatch, zero/negative input, expired/missing config
-- Idempotency assertions for any creation that must not duplicate
-
-Use the existing mock pattern (`apps/<app>/__mocks__/@repo/data/`) for unit tests. Use the integration test setup (`sunbnb_test` DB) for anything DB-touching.
+- tests that would fail today if the feature broke in the way users care about;
+- edge cases: unauthenticated, anonymous (`anonId`), double submission, race, ownership mismatch, zero/negative input, expired/missing config;
+- idempotency assertions for every creation that must not duplicate.
 
 ### 5. Implement
 
-Write the code. Stay inside the plan. If you discover the plan was wrong, **pause** and revise the plan in conversation rather than improvising past it.
+Stay inside the plan. If the plan turns out wrong, **pause** and revise it in conversation rather than improvising past it.
 
-Guardrails:
-- Don't add error handling, fallbacks, or validation for cases that can't happen
-- Don't introduce abstractions for hypothetical future requirements
-- Don't add backwards-compat shims when you can change the code
-- No comments unless the *why* is non-obvious
+- No error handling, fallbacks or validation for cases that can't happen.
+- No abstractions for hypothetical future requirements; no back-compat shims when you can change the code.
+- Comments only when the *why* is non-obvious.
 
 ### 6. Verify
 
-Run, in order:
+`/test` maps the change scope to the right suites. The ladder it draws from:
 
 ```bash
-# Unit tests for everything you changed
-cd packages/data && npm run test                # if data package touched
-cd apps/<app>    && npm run test                # per app touched
-
-# Integration tests if DB logic changed
-cd packages/data && npm run test:integration
-cd apps/user     && npm run test:integration    # if user-app DB logic changed
-
-# Build (catches type errors)
-npm run build
-
-# Lint
-npm run lint
+cd packages/data && npm run test && npm run test:integration   # data package touched
+cd apps/<app>    && npm run test                               # per app touched
+cd apps/<app>    && npm run test:integration                   # user/partner DB logic touched
+cd <workspace>   && npx tsc --noEmit && npm run lint           # per touched workspace
+npm run build                                                  # client/server boundary leaks only show here
 ```
 
-For UI changes: start the relevant dev server, exercise the feature in a browser, check the golden path AND at least one failure path. If you can't test the UI in a browser, **say so explicitly** — type checking does not verify feature correctness.
+For UI changes, run the app and drive the golden path plus at least one failure path (`verifier-sunbnb` skill). If you can't test in a browser, **say so** — type checking does not verify feature correctness.
 
 ### 7. Ingest
 
-Once the feature is verified and the user has accepted it, run `[[workflow:ingest]]` to update the wiki. This is part of "done", not optional.
+Once verified and accepted, run `[[workflow:ingest]]` — part of "done", not optional. Agents emit `kb:` markers for surface lessons (`.claude/agent-protocol.md`); the wiki gets only what passes its gate. On a track, run the `handoff` workflow before stopping.
 
 ### 8. Commit
 
-Only commit when the user asks. Follow the project's commit conventions (see root `CLAUDE.md`). Never `--no-verify`. Never `--amend` if pre-commit hooks failed — create a new commit after fixing.
+Only when the user asks, per `.claude/rules/commits.md` (`/commit`); push / promote / deploy only on the matching verb (`.claude/rules/deploys.md`). Never `--no-verify`; never `--amend` after a failed hook — fix and make a new commit.
 
 ## Anti-patterns
 
-- **Implementing across all layers in parallel.** Schema/data changes feed everything downstream. Land them first.
-- **Skipping integration tests for DB logic.** Mocks lie. Per `feedback_testing` memory: prior incidents have come from mocked tests passing while production broke.
-- **Writing "happy path only" tests.** They catch nothing useful.
-- **Using `as any` to silence the type checker.** The type checker is usually right.
-- **Adding a feature flag for a single feature.** Don't.
-- **"Cleaning up" surrounding code while fixing a bug.** Out of scope. Open a separate task.
+- **Implementing across all layers in parallel.** Schema/data changes feed everything downstream — land them first.
+- **Skipping integration tests for DB logic.** Mocks lie; mocked tests have passed while the real query broke.
+- **Happy-path-only tests.** They catch nothing useful.
+- **`as any` to silence the type checker.** It's usually right.
+- **A destructive migration in the same release that stops using the column.** Expand now, contract later.
+- **"Cleaning up" surrounding code while fixing a bug.** Out of scope — separate task.

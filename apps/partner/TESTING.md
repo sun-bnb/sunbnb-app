@@ -16,18 +16,59 @@ npm run test:integration  # integration tests (223 tests across 12 files, real s
 
 ### Test architecture spine
 
-The test suite includes four meta-guards that enforce architecture invariants:
+The test suite includes six meta-guards (`app/test/`) that enforce architecture invariants:
 
 - **`app/test/auth-matrix.test.ts`** (718 tests) — Drives every action in the gated-action registry (`app/test/gated-actions.ts`) through all auth scenarios (no session, wrong owner, token-only, sudo). The single source of truth for "which actions exist and which gates they must respect."
 - **`app/test/coverage-contract.test.ts`** (4 tests) — Fails if the gated-action registry omits an exported server action that has an auth gate in its source. Prevents new actions from silently skipping the matrix.
 - **`app/test/mock-contract.test.ts`** (17 tests) — Verifies that the `@repo/data` mock modules expose every export from the real source packages. Prevents silent mock drift (new real export never added to mock → tests silently skip code paths).
 - **`app/test/no-inline-money.test.ts`** (2 tests) — Rejects hardcoded monetary literals (`0.XX`, `XX.00`) in server-action source files; enforces use of DB-fetched prices.
+- **`app/test/no-hardcoded-tier-pricing.test.ts`** — Rejects local plan-price/commission tables
+  (`TIER_FEES`-style constants, `PRO: '2%'`); the catalogue lives only in `@repo/data/pricing-tiers`.
+- **`app/test/no-pairid-writes.test.ts`** — Track 021 ratchet: nothing writes legacy `pairId`
+  (`SunbedGroup` is the pairing); shrink-only allowlist = `inventory-actions.ts` cleanup sweeps.
+
+### Auth-matrix predicate semantics (`app/test/auth-matrix.ts`)
+
+- The ok/reject predicate checks the error MESSAGE, not just `status`. `AUTH_ERROR_MESSAGES` =
+  `'Not authenticated'`, `'Not authorized'`, `'Invalid or expired access key'`.
+- `assertReject` needs `status: 'error'` AND one of those messages; `assertOk` needs NONE of them
+  (business errors such as "not found" are fine).
+- "ok" scenarios run the action body past the gate with `undefined` from every unstubbed
+  delegate: new actions must guard (`?? []`, `if (!row) return { status: 'error' }`) — an
+  unhandled throw fails a scenario unrelated to auth.
+- A new gate helper must emit one of the three messages (lifecycle-style helpers return
+  `['forbidden', 'Not authorized']`).
+- Before reusing a gate type, check which `prisma.*.findUnique` its appliers stub — a site gate
+  type stubs only `prisma.site.findUnique`, so a restaurant-keyed gate passes vacuously
+  (hence `'restaurant-token-or-session'`).
+- Route handlers (`kind: 'route'`) have no runner: they go on `UNGATED_ALLOWLIST`
+  (`coverage-contract.test.ts`, with a reason) and their 401/403/sudo/flag cases are tested in the
+  route's own test with the REAL gate over Prisma mocks.
+
+### Mock-contract traps
+
+- `vi.importActual('@repo/data/…')` does NOT return the real module: `vitest.config.ts` aliases
+  redirect it to the mock too. `mock-contract.test.ts` therefore parses the REAL
+  `packages/data/src/*.ts` with `fs.readFileSync` + regex, and Prisma models via
+  `Prisma.dmmf.datamodel.models`. Mocks may be supersets.
+- An un-mocked `prisma.<model>.<method>` resolves `undefined` silently; the crash surfaces at the
+  first property read, often far from the change. Chain one `mockResolvedValueOnce` per sequential call.
+- Not aliased (mock explicitly with `vi.mock` when a test imports them): e.g.
+  `@repo/data/mollie-tokens`, `@repo/data/env`, `@mollie/api-client`.
+
+### No React component tests
+
+`vitest.config.ts` `include` is `{app,lib,components}/**/*.test.ts` — no `.tsx`, no jsdom, no
+`@testing-library/react`. Verify client `.tsx` with `npx tsc --noEmit` + lint + review; extract
+separable logic into a `.ts` module and test that. Adding jsdom + RTL is an orchestrator decision.
 
 ### Unit tests (`vitest.config.ts`)
 
-Path aliases redirect `@repo/data/PrismaCient` → mock, `@repo/data/password-reset` → mock, `@repo/data/rate-limit` → mock, `@repo/data/subscription` → mock.
-
-Mock modules (`__mocks__/@repo/data/`): `PrismaCient.ts`, `password-reset.ts`, `rate-limit.ts`, `subscription.ts`, `reservation-emails.ts`.
+`vitest.config.ts` `resolve.alias` is the source of truth: most `@repo/data/*` DB modules
+(`PrismaCient`, `till`, `stripe`, `reservation-machine-apply`, …) point at `__mocks__/@repo/data/`,
+while pure modules (`reservation-status`, `payment-refs`, `reservation-machine`, provider
+`availability`/`readiness`, `promotion`) point at the real `packages/data/src`. A new `@repo/data`
+import needs an alias or a per-file `vi.mock`.
 
 | File | What it tests | Tests |
 |---|---|---|
@@ -85,9 +126,9 @@ Requires local Docker Postgres with `sunbnb_test` DB. No `@repo/data` mocks — 
 | `app/restaurants/[id]/reservations/actions.integration.test.ts` | table reservation lifecycle, deposit invoicing, double-booking guard | 8 |
 | `app/sites/[id]/token-scope.integration.test.ts` | SecurityToken scope policy — manage vs orders gates (real DB) | 5 |
 | `app/sites/[id]/rentals/actions.integration.test.ts` | deleteRentalItem active-booking guard, getRentalItems booking count | 5 |
-| `app/sites/[id]/parcels.integration.test.ts` | track 020 C2 slice 2: `getParcelSummaries` ORACLE-equivalence vs the pre-C2 per-seat grouping (parcels, counts, ungrouped, pool exclusion), ItemGroup geometry passthrough, legacy null-geometry parcels, site scoping | 4 |
-| `app/sites/[id]/item-counts.integration.test.ts` | track 020 C2 payload cut: `getSiteItemCounts` ORACLE-equivalence — the verbatim pre-C2 array computations (brand total/available-today, readiness active>0) run as referee over mixed statuses, pool sentinels, a now-overlapping reservation, an out-of-window one, and cross-site scoping | 4 |
-| `app/sites/[id]/inventory/actions.integration.test.ts` | track 020 P4 batched writes against real Postgres: moveParcel exact set-based arithmetic (seats + anchor, pool untouched, NaN rejected), moveItems subset scope, createInventoryItem concurrent number minting (advisory lock), rearrange re-pairing across crossed legacy SunbedGroups (historical P2025 double-delete); deleteInventoryItems bulk parcel delete (group dissolution, survivor pairId sweep, foreign-site scope); pure-rotation rearrange pair-stability (200-seat paired parcel, SunbedGroups/pairIds byte-identical, ~90ms) — 3 of the original 6 verified to FAIL on the pre-P4 code | 10 |
+| `app/sites/[id]/parcels.integration.test.ts` | track 020 C2.2: `getParcelSummaries` ORACLE-equivalence vs pre-C2 grouping (counts, ungrouped, pool exclusion), geometry passthrough, null-geometry parcels, site scope | 4 |
+| `app/sites/[id]/item-counts.integration.test.ts` | track 020 C2: `getSiteItemCounts` ORACLE-equivalence with the pre-C2 array computations over mixed statuses, pool sentinels, in/out-of-window reservations, cross-site | 4 |
+| `app/sites/[id]/inventory/actions.integration.test.ts` | track 020 P4 set-based writes: moveParcel/moveItems arithmetic + scope, concurrent number minting (advisory lock), crossed-SunbedGroup re-pairing, bulk parcel delete, rotation pair-stability | 10 |
 
 ### AI assistant (track 030)
 
@@ -115,7 +156,11 @@ Unit config now also includes `components/**/*.test.ts` (pure client modules of 
 
 Integration (`sunbnb_test`): `app/assistant/lifecycle.integration.test.ts` (16 — propose → apply → undo
 through the REAL actions; caught the jsonb key-order staleness bug), `inventory.integration.test.ts`
-(12), `layout.integration.test.ts` (5), `sql.integration.test.ts` (13 — the `sql` tool / `run_js` data through the REAL `assistant_reader` role: only the claimed site's rows, forged other-site queries empty, error mapping, `sql-schema.ts` == live view columns, every `inspect:data` example runs; needs `ASSISTANT_DB_URL`/`ASSISTANT_DB_CLAIM_SECRET` in `.env.local` + `scripts/setup-assistant-reader.sh integration`), `app/sites/[id]/inventory/parcel-ops.integration.test.ts`
+(12), `layout.integration.test.ts` (5), `sql.integration.test.ts` (13 — `sql` / `run_js` data
+through the REAL `assistant_reader` role: only the claimed site's rows, forged other-site queries
+empty, error mapping, `sql-schema.ts` == live view columns, every `inspect:data` example runs;
+needs `ASSISTANT_DB_URL`/`ASSISTANT_DB_CLAIM_SECRET` in `.env.local` +
+`scripts/setup-assistant-reader.sh integration`), `app/sites/[id]/inventory/parcel-ops.integration.test.ts`
 (13 — editor/assistant parity on real Postgres).
 
 `packages/agent` has its own Vitest suite (`cd packages/agent && npm run test`: claude-model,

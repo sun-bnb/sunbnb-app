@@ -143,7 +143,7 @@ const plannedSlugs = new Set();
 {
   const idx = join(WIKI_DIR, 'index.md');
   if (existsSync(idx)) {
-    const planned = readFileSync(idx, 'utf8').match(/##\s+Planned[\s\S]*?(?=^##\s|$)/m);
+    const planned = readFileSync(idx, 'utf8').match(/^##\s+Planned[\s\S]*?(?=^##\s|^---\s*$|(?![\s\S]))/m);
     if (planned) for (const m of planned[0].matchAll(/`([\w-]+)`/g)) plannedSlugs.add(m[1]);
   }
 }

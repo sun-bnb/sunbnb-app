@@ -18,7 +18,7 @@ related:
   - flow:order-payment
   - flow:rental-booking
   - subsystem:auth
-last_verified: 2026-10-08
+last_verified: 2026-10-13
 ---
 
 # Subsystem: Payments
@@ -54,7 +54,12 @@ prefix is a prefix of another (hence the namespaced `stripe_*` wrappers).
   `syncEffectiveProvider` (`payment-providers/selection.ts`) applies `effectiveProviderFor` —
   the selection once `providerReadiness(...).ready`, else the previous effective one if it still
   works (switching never strands a venue mid-onboarding). Partner calls it after every
-  connection-state write via `syncEffectiveProviderSafe`.
+  connection-state write via `syncEffectiveProviderSafe`; it `updateMany`s **every** site of the
+  account to that one provider (seeding `previousEffective` from the oldest site).
+- **Admin per-site override is a repair tool, not configuration.** `apps/admin/app/sites/actions.ts#updatePaymentProvider`
+  writes only `Site.paymentProvider` (never the partner's selection) and refuses a provider that is
+  not `providerReadiness(...).ready` for the owner's account — but the partner's next connection
+  change re-syncs every site and erases it. To move a partner durably, change the *selection*.
 - Readiness: Mollie = token + onboarding `completed`; Viva = merchant id + `verified`; Stripe =
   `stripeConnectChargesEnabled`. The same predicates are inlined in the discovery SQL (below) and
   pinned by an integration test.

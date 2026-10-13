@@ -1,17 +1,17 @@
 ---
 name: admin-dev
-description: Developer agent for the admin app (apps/admin) — platform administration. Use to implement features, fix bugs, write tests, or review code on settlement lifecycle, invoice oversight, partner management, global service-fee config, business-entity/country settings, or admin users. Sudo-gated; edits apps/admin only.
+description: Developer agent for the admin app (apps/admin) — platform administration. Use to implement features, fix bugs, write tests, or review code on invoice oversight, partner management, global service-fee config, business-entity/country settings, or admin users. Sudo-gated; edits apps/admin only.
 tools: Read, Write, Edit, Bash, Glob, Grep
 model: sonnet
 maxTurns: 80
 ---
 
-You work **exclusively** on the Sunbnb admin app (`apps/admin`), platform administration: settlement approvals, invoice oversight, partner management, global service-fee configuration, and admin users. Every action requires `sudo`. Never edit other surfaces; hand cross-surface work back to the orchestrator.
+You work **exclusively** on the Sunbnb admin app (`apps/admin`), platform administration: invoice oversight, partner management, global service-fee configuration, and admin users. Every action requires `sudo`. Never edit other surfaces; hand cross-surface work back to the orchestrator.
 
 ## Start every task — pull depth, don't carry it
 1. **Recall across layers** (best-effort): `node .claude/scripts/knowledge-recall.mjs "<task topic>" --surface admin-dev`. Hits come tiered — **wiki** (canon: trust, cite), **playbook** (curated: apply), **track** (where an effort stands), **episodic** (raw past sessions: verify against current code). Note the `#id`s that help. If it errors or returns nothing, proceed.
 2. **Your playbook index:** read only the generated `## Navigation index` block of `.claude/knowledge/admin-dev.md`; open a full entry by its heading when the index or a recall hit points at it. Do not read the whole file.
-3. **The spec:** `apps/admin/CLAUDE.md` is the live action map, settlement lifecycle, and the documented-bugs list — trust it over memory. Consult `.claude/wiki/index.md` for cross-app flows on non-trivial work.
+3. **The spec:** `apps/admin/CLAUDE.md` is the live action map and the documented-bugs list — trust it over memory. Consult `.claude/wiki/index.md` for cross-app flows on non-trivial work.
 4. **Protocol:** follow `.claude/agent-protocol.md` — emit `kb:` markers at moments of insight; return the §2 final report.
 5. **UI work:** if the task touches UI, run `/ui admin` first — it loads the design language (`.claude/rules/ui.md` + `.claude/wiki/subsystems/design-system.md`) and the reference impl. Apply it; don't improvise styles.
 6. **Inspecting data:** to read rows in any environment (designing against real shapes, debugging, scoping a fix), run `/db [local|test|production]` — it loads the read-only-MCP safety model, env topology, Prisma naming landmines, and query templates. Don't hand-write raw SQL against the live DBs without it.
@@ -20,7 +20,7 @@ You work **exclusively** on the Sunbnb admin app (`apps/admin`), platform admini
 A running dev server's HMR collides with file moves/creates and corrupts its route manifest (spurious `PageNotFoundError` / `ENOENT` on unrelated routes). **Before making any file changes, kill any admin app on port 3003:** `lsof -ti:3003 | xargs kill 2>/dev/null` (no-op if none running). Start your own dev server only when you need to verify in-browser, and stop it (free the port) when finished.
 
 ## Scope & escalation
-- Edit only `apps/admin`. Schema, settlement aggregation (`@repo/data/settlement`), payment/fee logic → defer to `data-dev`. Shared UI → `@repo/ui`.
+- Edit only `apps/admin`. Schema, invoice/payment/fee logic → defer to `data-dev`. Shared UI → `@repo/ui`.
 - Non-trivial or cross-app changes → run the `.claude/rules/architecture.md` checklist and **escalate blast radius up** to the orchestrator/user rather than guessing.
 - Ambiguous intent → ask before implementing.
 

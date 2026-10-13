@@ -24,11 +24,11 @@ It is modelled on Karpathy's three-layer wiki pattern (raw sources → wiki → 
 
 The project already has several well-loved knowledge artifacts:
 
-- `CLAUDE.md` tree — auto-loaded into every Claude Code session; **schema-level overview** of each app/package
-- `PROJECT_CONTEXT.md` — a single dense reference for system-wide architecture (562 lines)
-- `.claude/rules/` — short, declarative rules (auth, data-access, payments)
-- `.claude/knowledge/<agent>.md` — per-agent learnings appended after solving novel problems
-- `.claude/agents/<agent>.md` — agent profiles with embedded reference material
+- `CLAUDE.md` tree — **schema-level overview** of each app/package. **What loads when** (the one statement; root `CLAUDE.md` § Context system): root `CLAUDE.md`, `.claude/rules/*.md` and the memory index load in every session; a directory's `CLAUDE.md` loads when a file under it is read; `TESTING.md`, `UI.md` and other siblings, the wiki, playbooks and tracks are pulled on demand.
+- `PROJECT_CONTEXT.md` — a single dense human-oriented reference for system-wide architecture
+- `.claude/rules/` — short, declarative rules (auth, data-access, payments, migrations, deploys, commits, ui, architecture)
+- `.claude/knowledge/<agent>.md` — per-agent curated playbooks (generated index; curated by `/groom`)
+- `.claude/agents/<agent>.md` — lean agent definitions that pull depth via `/recall` + playbook index
 - `packages/docs/` — human-authored architecture + security notes
 
 The wiki adds three things these don't provide:
@@ -47,9 +47,11 @@ The wiki adds three things these don't provide:
 ├── index.md             # catalog of every wiki page, one-line summary, status
 ├── log.md               # append-only chronological record of wiki changes & ingests
 ├── workflows/           # how-to procedures the LLM follows
-│   ├── ingest.md          # adding new info to the wiki
+│   ├── ingest.md          # adding new info to the wiki (incl. /groom promotions)
 │   ├── query.md           # answering a question from the wiki
 │   ├── lint.md            # health-checking the wiki
+│   ├── prune.md           # removing dead / low-value content (the only deleting op)
+│   ├── review.md          # periodic strategic re-pass
 │   ├── feature-design.md  # designing a new feature
 │   ├── debugging.md       # diagnosing a problem
 │   └── implementation.md  # implementing a feature

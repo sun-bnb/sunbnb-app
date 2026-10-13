@@ -10,12 +10,13 @@ sources:
   - packages/table-reservations-core/src/emails.ts#confirmationEmailHtml
   - apps/user/app/sites/[id]/table/actions.ts#cancelTableBooking
   - apps/partner/app/restaurants/[id]/reservations/actions.ts
+  - packages/data/src/checkout.ts#claimTabForPayment
 related:
   - entity:table-reservation
   - entity:restaurant
   - subsystem:table-reservations
   - subsystem:auth
-last_verified: 2026-05-22
+last_verified: 2026-10-13
 ---
 
 # Flow: Table Booking
@@ -100,6 +101,30 @@ Combination bookings transition as a group. See `[[entity:table-reservation]]` f
 | Site has no linked restaurant | `getSiteRestaurant` returns null | "Restaurant not found for this site" |
 | Confirmation/cancellation email fails | try/catch around `sendEmail` | Logged + swallowed; booking/cancel still succeeds |
 | Past time / bad party / missing identity | `createTableReservation` `validate()` | `{ status: 'error', errors }` |
+
+## Adjacent: dine-in tab payment (the QR tab at the table)
+
+Not a booking — a guest at `/tables/[tableId]` runs a tab of rounds and pays it at close — but it
+shares the table and is where tab-payment rules live until it earns its own flow page.
+
+- **Claim first.** Every pay path atomically claims the tab (`TAB_OPEN → TAB_PENDING_PAYMENT`) before
+  the total is computed: `packages/data/src/checkout.ts#claimTabForPayment` (neutral
+  `POST /api/payment/create`, Stripe/Viva), an inline copy in
+  `apps/user/app/api/tab-payment/mollie/create-payment/route.ts`, and `initiateDemoTabPayment`.
+- **Keep the claim exactly when a `paymentRef` is stored.** `/api/reconcile` sweeps only
+  `pending_payment` tabs WITH a `paymentRef`, so a claim without one would be stuck forever. Rule:
+  no ref stored → release (`releaseTabClaim` / the Mollie route's `revertClaim`): credentials, zero
+  total, provider create throwing, and the neutral route's `no_checkout` (`createOnlineCheckout`
+  never calls `recordStarted`, so no ref). Ref stored → keep the claim, return the error, and let the
+  tab poll (`/api/tabs/[id]`) or reconcile settle it (the Mollie route's null-checkout-URL case,
+  which writes the ref first; demo when `processConfirmedTabPayment` throws). `releaseTabClaim` is
+  idempotent (only touches a `pending_payment` tab); the neutral route skips it on `provider_error`
+  because `createOnlineCheckout` already released inside its own failure path.
+- **Only terminal transitions null `openTableId`.** The claim flips `status` alone — `openTableId`
+  stays set, which is what lets `placeTabOrder` reject "payment in progress". Closing writers (paid,
+  `settled_cash`, discarded: `packages/data/src/payment.ts#processConfirmedTabPayment` and the partner
+  settle/discard actions in `apps/partner/app/{restaurants,sites}/[id]/orders/actions.ts`) must null it
+  in the same update that sets the terminal status — it releases the one-open-tab-per-table guard.
 
 ## Related
 

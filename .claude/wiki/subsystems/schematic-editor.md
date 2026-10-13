@@ -1,10 +1,9 @@
 ---
 type: subsystem
 slug: schematic-editor
-status: draft
+status: stable
 sources:
-  - packages/schematic/src/grid.ts#generateChairGrid
-  - packages/schematic/src/grid.ts#generateTableGrid
+  - packages/schematic/src/grid.ts
   - packages/schematic/src/SchematicRenderer.tsx
   - packages/schematic-editor/src/index.ts
   - apps/partner/app/sites/[id]/inventory/chair-util.ts#generateChairs
@@ -15,7 +14,7 @@ sources:
 related:
   - subsystem:table-reservations
   - subsystem:partner-assistant
-last_verified: 2026-10-08
+last_verified: 2026-10-13
 ---
 
 # Subsystem: Schematic Editor
@@ -95,6 +94,21 @@ Exported from `packages/schematic-editor/src/index.ts`:
 The `SchematicRenderer` (+ `SCHEMATIC_DRAG_MIME`) from `@repo/schematic` draws the SVG canvas
 and handles drag MIME for drag-and-drop.
 
+## Co-move & pair highlight (`groupId`)
+
+`SchematicItem.groupId` (`packages/schematic/src/types.ts`) is the renderer's **only** key both for
+"items that move together on drag" (outside a multi-selection) and for the paired highlight
+(`isPaired = !!item.groupId`); `pairId` is gone from the type. It is domain-agnostic: the partner
+schematic fills it from `sunbedGroupId` (`apps/partner/app/sites/[id]/schematic/SchematicCanvas.tsx`),
+while the table editors in `@repo/table-reservations-ui` never set it, so tables never co-move.
+Map domain ids to `groupId` in the consuming canvas — never inside `packages/schematic`.
+
+Drag lives in **two sites** in `SchematicRenderer.tsx` that must change together: `handleUp`
+(commits `pendingItemDrops` for the dragged item + its `coMoverIds`) and the render-time IIFE
+(`dragCoMoverIds` / `followDrag` for the live preview). Change one and preview and commit diverge.
+Since the renderer is shared, any change here also ships to the restaurant table editor and the
+consumer `FloorMapPicker`.
+
 ## Invariants
 
 1. **Geometry is pure.** `grid.ts` does no IO; never add DB/auth there. Placement + persistence belong to the consumer.
@@ -113,4 +127,5 @@ The persisted sunbed rows this layer places live behind `apps/partner/app/sites/
 - **Forgetting the rotation sign flip** when adding an SVG consumer — parcels render mirrored vs the map editor.
 - **Mutating one paired seat** without its partner (`pairTempId`) — leaves a half-pair.
 - **Adding business logic to `@repo/schematic`** — it must stay pure; auth/DB go in the consuming app's actions.
+- **Editing only one of the renderer's two drag sites** (`pendingItemDrops` in `handleUp` vs `followDrag` at render) — the drag preview and the committed position disagree.
 - **Treating `group` 0 as a real parcel** — 0/undefined means ungrouped; `getParcelColor` returns undefined for it.

@@ -1,9 +1,9 @@
 ---
 id: 004-partner-test-architecture
 title: Partner Test Architecture
-status: active
+status: done
 created: 2026-06-16
-updated: 2026-06-16
+updated: 2026-10-13
 worktree: null
 ---
 
@@ -37,6 +37,7 @@ expanded set.
 
 ## Resume here
 
+- **DONE 2026-10-13** (track 031 status pass) — partner test architecture complete (all phases; 903 unit + 91 integration green), committed and pushed.
 - **Next action:** **PARTNER SCOPE COMPLETE — all phases (0,1,2,3,4) done.** Phase 2 just closed:
   `moveReservation` (confirmed double-booking, fixed via `@repo/data` `moveReservationWithConflictGuard`)
   + `createWalkInRental` (rental race, fixed via `createRentalBookingsWithGuard`) + `setOrderStatus`
@@ -395,6 +396,7 @@ The 6 race-prone actions, resolved:
   at (source-file, export) granularity to handle the `toggleProductSoldOut` duplicate.
 - ~~`reserveWithConflictGuard` final home~~ **Settled (0.4):** `@repo/data` (`src/reservations.ts`,
   `./reservations` export) — shared, fixes partner + user; pessimistic FOR-UPDATE lock, no migration.
+- **2026-10-13** — Status → done (track 031 status pass, founder-approved): partner test architecture complete (all phases; 903 unit + 91 integration green), committed and pushed.
 
 ## Links
 

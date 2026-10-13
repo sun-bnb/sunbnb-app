@@ -165,5 +165,5 @@ The earlier "open decisions" are all resolved *by alignment*, not by preference:
 Mirrors the anon-sunbed flow end-to-end; reuses `@repo/data/reservations` patterns and the
 `createRentalBookingsWithGuard` guard from [[track:004-partner-test-architecture]] (whose testing
 discipline — bug-revealing, integration isolation tests — applies here). Consumer payments are
-Mollie + demo only (see [[track:003-stripe-connect-compliance]]). Touches `[[entity:rental]]`,
+Mollie + demo only (see [[track:003-stripe-connect-compliance]]). Touches `[[flow:rental-booking]]`,
 `[[entity:reservation]]`, `[[entity:invoice]]`, and the consumer booking/payment flow.

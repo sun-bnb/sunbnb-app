@@ -15,9 +15,16 @@ npm run test:integration  # integration tests against local sunbnb_test DB (88 t
 
 ### Unit / route tests (`vitest.config.ts`)
 
-- Excludes `*.integration.test.ts`; scans `app/**` and `store/**`
-- Path aliases redirect `@repo/data/PrismaCient` → mock, `@repo/data/payment` → mock
-- **Mock modules** (`__mocks__/@repo/data/`): `PrismaCient.ts`, `payment.ts`, `reservation-emails.ts`, `env.ts`, `reservation-machine-apply.ts` (the state-machine interpreter, track 018 — the pure model `@repo/data/reservation-machine` is aliased to REAL source), `preferences.ts` (platform preferences — the real module imports the Prisma client; the mock resolves the registry DEFAULTS so an app test asserts the route serves whatever the preference resolves to, and resolution/bounds stay tested where they live)
+- Vitest 5. Scans `app/**`, `store/**`, `brands/**` `*.test.ts`; excludes `*.integration.test.ts`
+- **The alias list in `vitest.config.ts` is the mock boundary** — a `@repo/data/*` module NOT
+  aliased there loads the REAL module (and usually real Prisma). Aliased to mocks
+  (`__mocks__/@repo/data/`): `PrismaCient`, `payment`, `reservation-machine-apply`,
+  `reservation-emails`, `rental-emails`, `env`, `password-reset`, `rate-limit`, `preferences`,
+  `device-claim`, `reservations`, `reservation-payment`. Aliased to REAL source (pure, no Prisma):
+  `reservation-status`, `reservation-machine` (the pure model; its DB interpreter
+  `reservation-machine-apply` is mocked — track 018), `payment-refs`.
+- `preferences` mock resolves the registry DEFAULTS, so an app test asserts the route serves
+  whatever the preference resolves to; resolution/bounds stay tested in `packages/data`.
 - `app/api/_lib/payment-ids.test.ts` — isDemoPayment, isValidEntityId (6 tests)
 - `app/api/_lib/payment-provider.test.ts` — detectProvider (Mollie/demo), isPaymentSucceeded/Failed (16 tests)
 - `app/api/reservations/[id]/route.test.ts` — reservation fetch, payment verification (9 tests)
@@ -82,4 +89,21 @@ Requires local Docker Postgres with `sunbnb_test` DB (same DB as `packages/data`
 - Use `vi.mock()` with `vi.fn()` in factory (never reference external variables — hoisting), then `vi.mocked(importedFn)` after import for typed references
 - For env vars captured at module load time, use `vi.hoisted()`
 - Always call `mockAuth.mockResolvedValue(null)` in `beforeEach` — `vi.clearAllMocks()` clears call history but not implementations, so auth leaks between tests if not reset
+- **Mock-shape checklist (before writing a route/action test):** list every `prisma.<model>.<method>`
+  and every `@repo/data/*` export the code under test calls, and confirm each exists in
+  `__mocks__/@repo/data/` (or that the module is in the `vitest.config.ts` alias list). Gaps surface
+  as test errors, not mock warnings: a missing method throws `undefined is not a function` inside
+  the route (e.g. `rentalBooking.findUnique`); a missing export or un-aliased module silently runs
+  the REAL Prisma-backed function (e.g. `sendDueReminders`).
+
+### Anon fixtures must be UUID-shaped
+
+`getRequestIdentity` (`app/api/_lib/auth.ts`) and the anon-aware server actions
+(`initiateDemoRentalPayment`, `cancelRentalBooking`, …) validate `anonId` against the 8-4-4-4-12 hex
+UUID pattern (≤36 chars) BEFORE any DB or ownership logic. An informal fixture (`'anon-123'`) gets a
+401 / `'Invalid anonId format'` and never reaches the ownership branch the test meant to exercise —
+a masked test. Use real UUID v4 strings, e.g. `550e8400-e29b-41d4-a716-446655440000` (owner) and
+`660e8400-e29b-41d4-a716-446655440001` (wrong caller); informal strings only as a deliberate
+negative case or on paths that do not validate. When adding anonId validation to a path, grep its
+tests for non-UUID anonIds first.
 

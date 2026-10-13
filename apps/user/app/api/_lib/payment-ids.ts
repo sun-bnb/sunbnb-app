@@ -1,9 +1,10 @@
 /**
  * Provider-neutral payment-id helpers.
  *
- * Extracted from the (removed) Stripe lib so they survive independently of any
- * payment provider: `isDemoPayment` is used across the Mollie + demo flows, and
- * `isValidEntityId` guards route inputs everywhere.
+ * Independent of any payment provider: `isDemoPayment` (re-exported from
+ * `@repo/data/payment-refs`) gates every provider call across the Mollie,
+ * Stripe Connect, Viva and demo flows, and `isValidEntityId` guards route
+ * inputs everywhere.
  */
 
 /** Check if a paymentRef is a demo/fake payment (not a real provider charge). */

@@ -1,9 +1,9 @@
 ---
 id: 013-settlement-ledger-till
 title: Settlement ledger — offline cash till source of truth
-status: active
+status: done
 created: 2026-06-21
-updated: 2026-06-21
+updated: 2026-10-13
 worktree: null
 ---
 
@@ -67,6 +67,7 @@ operational marker; the settlement is the money.
 
 ## Resume here
 
+- **DONE 2026-10-13** (track 031 status pass) — the TillEntry settlement ledger shipped (`058cb1c`, migrations `20260621151602`, `20260621162554`); the per-day till that followed is track 016.
 **P0a DONE** (uncommitted) — `TillEntry` model + migration `20260621151602_add_till_entry_ledger`
 (additive + idempotent backfill from existing `paid-in-cash`+`walked-in`+`amount>0`
 reservations) + `recordSettlement`/`voidSettlementsForReservation` + till re-pointed onto
@@ -123,3 +124,4 @@ tests. Schema migrations are additive; push to `main` gated on track-012 test-DB
 - **Context:** `packages/data/src/till.ts` owns all ledger helpers; `apps/partner/app/sites/[id]/manage/actions.ts` `createWalkInRental` is the entry point for rental cash settlement; `apps/partner/app/sites/[id]/manage/CreateRentalModal.tsx` is the UI that distinguishes cash vs card vs free.
 - **Blocked by:** nothing (additive). Note: pushing `main` is already gated on the
   track-012 test-DB migration; this adds another additive migration to that queue.
+- **2026-10-13** — Status → done (track 031 status pass, founder-approved): the TillEntry settlement ledger shipped (`058cb1c`, migrations `20260621151602`, `20260621162554`); the per-day till that followed is track 016.

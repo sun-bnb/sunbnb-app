@@ -1,9 +1,9 @@
 ---
 id: 031-context-system-v2
 title: Context system v2 — close the curation loop (health signal, cross-layer recall, groom, budgets)
-status: active
+status: done
 created: 2026-10-12
-updated: 2026-10-12
+updated: 2026-10-13
 worktree: null
 ---
 
@@ -30,61 +30,20 @@ per-phase file lists, verification).
 
 ## Resume here
 
-- **Next action:** P5 — canonical compaction to budget, one big `CLAUDE.md` per session (user, partner, data, then root), applying the queued promotions below while each file is open (plan file §P5).
-- **P5 per file:** keep route/action/API tables, move narrative to a pulled sibling
-  (`apps/user/HW-API.md`, `apps/partner/ASSISTANT.md`, `packages/data/EXPORTS.md`) or the wiki page
-  that already covers it; fix stale facts (Vitest 5, TS 6, partner auth = Google + Facebook +
-  Credentials per `apps/partner/app/auth.ts`, ONE loading-model statement reused by
-  `update-knowledge.md` / `wiki/README.md` / `help.md`); `/update-knowledge` reads
-  `.claude/context/budgets.json`; re-verify the 11 stale wiki pages + fix the 2 BROKEN citations
-  while their canonical sections move; `node .claude/scripts/context-health.mjs --scope canonical`
-  must drop the file's BROKEN line.
-- **Queued canon promotions from the P3 grooms** (apply with `/update-knowledge` / `/wiki ingest`;
-  each gate-checked by its groom, source entry named in the playbook):
-  - `packages/data/TESTING.md` — shared `sunbnb_test` is cross-session mutable state: serialize
-    integration suites across agents, `pg_stat_activity` before blaming infra, no `git stash`
-    (partner-dev + user-dev entries 2026-07-25; collapse both to pointers afterwards).
-  - `.claude/rules/migrations.md` — never background `migrate dev` (advisory lock, P1002); when
-    Prisma refuses a non-interactive shell on a warning, `migrate diff … --script` into a
-    timestamped dir → `migrate deploy` → `generate` → `migrate:check`; "unique among active rows"
-    = nullable `@unique` NULLed on close, never a partial index (data-dev).
-  - `.claude/rules/data-access.md` — Prisma `upsert` is SELECT-then-INSERT: catch P2002 + refetch
-    is the convention under RSC prefetch concurrency (partner-dev).
-  - `apps/partner/TESTING.md` — auth-matrix predicate semantics (`AUTH_ERROR_MESSAGES`, "ok"
-    scenarios run the body, routes have no runner → `UNGATED_ALLOWLIST`), mock-contract traps,
-    no React component tests / no jsdom (partner-dev).
-  - `apps/partner/CLAUDE.md` — `inventory/actions.ts` bulk ops do not `revalidatePath`; they rely
-    on the client's scoped `refreshItems()` (track 020) — new actions pick one deliberately
-    (sunbed-inventory).
-  - `apps/user/TESTING.md` — anon fixtures must be UUID v4; mock-shape checklist (every
-    `prisma.<model>.<method>` and `@repo/data` export in `__mocks__` or the vitest alias list) (user-dev).
-  - `apps/user/CLAUDE.md` — line ~78 and `api/_lib/payment-ids.ts` header still say "extracted
-    from the removed Stripe lib"; reword provider-neutral (Stripe Connect is back via
-    `/api/payment/create`) (user-dev).
-  - `apps/admin/CLAUDE.md` — Testing: `updatePaymentProvider` is a readiness gate over
-    mollie/viva/stripe, not "Mollie token verification"; Mocking: current Prisma mock tables
-    (+ device, customSubscription, platformPreference, featureFlag, impersonationLog) and the
-    `promotion-db.ts` mock; document `/flags`, partner tax identity, `/leads`, `/verifactu` (admin-dev).
-  - `packages/data/CLAUDE.md` — § Testing: `npx tsc --noEmit` is a real gate now (rootDir fixed);
-    § Payment providers: zero-commission Stripe still yields a processing-only PLATFORM invoice,
-    zero-commission Mollie is invoice-less (data-dev).
-  - `/wiki ingest subsystems/payments` — `syncEffectiveProvider` rewrites every site of an account
-    on any partner connection change; the admin per-site override is a repair tool, not config (admin-dev).
-  - `/wiki ingest subsystems/schematic-editor` — `SchematicItem.groupId` is the renderer's only
-    co-move AND pair-highlight key (`pairId` gone); the two drag sites in `SchematicRenderer.tsx`
-    (`handleUp` + render-time `followDrag` IIFE) must change together (sunbed-inventory).
-  - `/wiki ingest subsystems/reservation-state-machine` — card-present: `cardPresent` condition,
-    `vivaSale`/`vivaAbort` effects, row order above the QR rows, "abandon may stay processing" (data-dev).
-  - `/wiki ingest subsystems/partner-assistant` — track-030 invariants (jsonb key order → sorted
-    diffBasis; sudo applies patch the owner's rows; payloads hold names not ids; snapshot mocks
-    copy rows) so partner-dev's 9 assistant entries can shrink (partner-dev).
-  - `/wiki ingest flows/table-booking` — tab payment claim rule (revert only on pre-commitment
-    failures; `releaseTabClaim` idempotent, skipped on `provider_error`) and "only terminal
-    transitions null `openTableId`" (user-dev).
-- **Context needed:** plan file §P5; `node .claude/scripts/context-health.mjs --scope canonical`
-  for the live list; `.claude/context/budgets.json`.
-- **Done so far:** P0 · P1 · P2 · P3 · P4 (see roadmap). P6 after P5.
-- **Blocked by:** nothing.
+- **DONE 2026-10-13.** The curation loop is closed: one health signal at session start and push,
+  tiered cross-layer recall with credits, `/groom`, generated registries, canon inside
+  `budgets.json`, and the model written down in `.claude/wiki/subsystems/context-system.md`.
+  Health 13 broken / 84 warn → 1 broken / 18 warn (`.claude/context/health-history.jsonl`).
+- **Handed off (not context work), from P5 verification — pick up as product tasks:**
+  1. `packages/data/src/settlement.ts#generateSettlement` selects only reservation/order invoices:
+     rental, table-deposit and dine-in tab revenue never reaches a partner settlement.
+  2. `/api/payment/create` releases a tab claim on `no_checkout` after the provider was called;
+     the Mollie tab route keeps it (wiki `flows/table-booking.md`).
+  3. `PROJECT_CONTEXT.md` (human-owned) documents the deleted `apps/user/app/api/_lib/stripe.ts` —
+     the one BROKEN left in the health check.
+- **Follow-ups for the normal cadence:** re-groom partner-dev (39.9 KB, soft 30) after track 030
+  closes; shrink playbook entries now in canon to pointers at the next grooms; packaging the
+  system for other monorepos would be a new track (engine/instance split, plugin + init skill).
 
 ## Roadmap
 
@@ -107,13 +66,17 @@ per-phase file lists, verification).
 - ✅ **P4** — `tracks-index.mjs` generates `index.md`; sub-docs carry `parent:`; status truth pass
   (029/008/009/010 done, 024 blocked, 020 paused, 003 proposed, 011/013/016 frontmatter);
   030 Resume-here corrected. *Deferred to P2:* track-001 roadmap refresh.
-- ☐ **P5** — canonical compaction to budget (`apps/user/HW-API.md`, `apps/partner/ASSISTANT.md`,
-  `packages/data/EXPORTS.md`, root map + env list), stale facts (Vitest/TS versions, partner
-  auth, ONE loading-model statement), `/update-knowledge` reads `budgets.json`, re-verify the
-  11 stale wiki pages + 2 broken citations.
-- ☐ **P6** — user-memory dedupe (ask first), `wiki/subsystems/context-system.md`, `help.md`
-  rewrite, `/context health|groom`, wiki README/index fixes, commit `AGENTS.md`, first
-  `/context sync` to set the cursor, `--snapshot` baseline.
+- ✅ **P5** — canonical compaction (2026-10-13): user 34.4→12.3 KB, partner 35.5→13.1 KB, data
+  36.5→14.4 KB, root 17.8→15.2 KB; pulled siblings `apps/user/{HW-API,PATTERNS}.md`,
+  `apps/partner/{ASSISTANT,PATTERNS}.md`, `packages/data/EXPORTS.md`; pointer `CLAUDE.md` for
+  `apps/marketing` + `packages/agent`; one loading-model statement (root § Context system) reused
+  by `/update-knowledge`, wiki README, `help.md`; `/update-knowledge` reads `budgets.json`; all 14
+  queued promotions applied; 10 stale wiki pages re-verified; 6 groom ingests; commands got frontmatter.
+- ✅ **P6** (2026-10-13) — `wiki/subsystems/context-system.md`; `help.md` rewritten against it; nine
+  maintenance workflows re-verified; README/index fixed; user memory 25 → 14 files (10 repo
+  duplicates deleted after confirming or folding each lesson into canon; profile refreshed;
+  one frontmatter format); nine stale tracks closed or paused (founder-approved); Planned-list
+  parser bug fixed in `context-health.mjs`; sync cursor set at HEAD; final snapshot.
 
 ## Log
 
@@ -144,6 +107,22 @@ per-phase file lists, verification).
   section, user `CLAUDE.md` "Stripe purged" wording) — queued in Resume here. Decision:
   `--candidates` stays surface-scoped; two agents correctly refused off-surface clusters.
   Store after P3: 162 verified / 290 promoted / 3,154 raw, 44 credits.
+- **2026-10-13 — P5.** Five parallel agents with disjoint file ownership (user, partner, data +
+  rules, wiki ingests, wiki re-verify); the orchestrator kept root, admin, `auth.md`, the shared
+  loading statement, `log.md` and `index.md` so no file had two writers. Verification against
+  code corrected far more than the queued promotions: canon was missing 15 user API routes and 9
+  pages, claimed Viva online was unwired, described invoice numbering as a per-type `FOR UPDATE`
+  sequence (it is per-issuer series under an advisory lock), and the partner auth as Google-only.
+  Decision: libraries whose canon is a wiki subsystem page (schematic*, table-reservations-*,
+  floor-core) are `optionalWorkspaces` in `budgets.json` rather than getting thin CLAUDE.md files.
+  Health: 10 broken / 76 warn → 1 broken / ~46 warn.
+- **2026-10-13 — P6, track closed.** One agent re-verified the nine workflow pages; the
+  orchestrator wrote the context-system page, help, index/README, track and memory changes.
+  Memory deletions were confirmed against canon first: the offline-only split rule, the npm /
+  no-global-installs rule and the kill-dev-server-before-edits rule had no canonical home and were
+  added (state-machine wiki page, root `CLAUDE.md`) before their memory files went. The sync
+  cursor was set at HEAD rather than replaying a sync, because P5/P6 had just verified canon and
+  wiki against the current code — a replay would have re-done that work.
 
 ## Open decisions
 

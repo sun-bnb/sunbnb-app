@@ -1,3 +1,7 @@
+---
+description: Multi-layer AI-context operations: health check, sync cursor, status, help
+argument-hint: [check|health [--scope S] [--with-store] | sync | status | help]
+---
 # /context — AI context metadata management
 
 Multi-layer operations across the AI context metadata: wiki, CLAUDE.md tree, `.claude/rules/`, and `PROJECT_CONTEXT.md`. Workflows are canonical under `.claude/context/workflows/`.

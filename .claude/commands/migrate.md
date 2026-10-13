@@ -1,3 +1,7 @@
+---
+description: Database migration assistant for packages/data (Prisma, expand/contract, env lockstep)
+argument-hint: [describe the schema change]
+---
 # /migrate — Database migration assistant
 
 Manage Prisma schema changes and migrations across local, test, and production environments.

@@ -4,100 +4,93 @@ slug: debugging
 status: stable
 sources:
   - .claude/wiki/README.md
+  - packages/data/src/payment-refs.ts
+  - packages/data/src/reservation-machine.ts
+  - apps/user/app/api/reconcile/route.ts
+  - .claude/commands/db.md
 related:
   - workflow:query
   - subsystem:payments
   - subsystem:auth
-last_verified: 2026-05-20
+  - subsystem:reservation-state-machine
+last_verified: 2026-10-13
 ---
 
 # Workflow: Debugging
 
-Procedure for diagnosing a reported problem. The wiki accelerates this by letting you orient on the relevant subsystem in seconds instead of grepping.
+Procedure for diagnosing a reported problem. The wiki lets you orient on the relevant flow or subsystem in seconds instead of grepping.
 
 ## Procedure
 
 ### 1. Restate the symptom precisely
 
-Strip interpretation; capture what the user observed:
-- What did they do?
-- What did they expect?
-- What did they see?
-- Which app? Which environment (local, test, production)?
-- Is it reproducible? On which inputs?
+Strip interpretation; capture what was observed:
+- What did they do, expect, and see?
+- Which app (user, partner, admin, mobile)? Which environment (local, preview/test — they share the TEST DB — or production)?
+- Reproducible? On which inputs? Which payment provider was the venue on?
 
 ### 2. Map the symptom to a flow
 
-Identify which `[[flow:…]]` page (or pages) the failing behaviour lives in.
-
-| Symptom hint | Likely flow |
+| Symptom hint | Start at |
 |---|---|
 | Booking didn't create / payment screen errored | `[[flow:reservation-payment]]` |
-| Order placed but no invoice | `[[flow:order-payment]]` → check **Side effects** |
+| Order placed but no invoice | `[[flow:order-payment]]` → **Side effects** |
 | Equipment rental shows wrong availability | `[[flow:rental-booking]]` |
-| Sunbed shown as available when it isn't (or vice versa) | `[[entity:reservation]]` (operational status) + `[[flow:reservation-payment]]` |
-| Walk-in won't check in | `[[flow:walk-in]]` |
-| Partner not seeing payout / wrong amount | `[[entity:settlement]]` + `[[entity:invoice]]` + `[[entity:service-fee]]` |
+| Sunbed shown free when it isn't (or vice versa) | `[[subsystem:reservation-state-machine]]` + `[[entity:reservation]]` |
+| Walk-in won't check in / collect fails | `[[flow:walk-in]]` |
+| Table or dine-in tab misbehaves | `[[flow:table-booking]]` |
+| Partner payout / revenue looks wrong | `[[entity:invoice]]` + `[[entity:service-fee]]` + `[[subsystem:payments]]` (payouts come from the partner's own provider; there is no platform payout) |
 | Login / "you don't own this" | `[[subsystem:auth]]` |
 | Webhook didn't fire / payment stuck | `[[subsystem:payments]]` → webhooks + reconciliation |
 
+Not listed? `/recall "<symptom>"` — past sessions often hold the same incident (episodic tier: a lead, verify it).
+
 ### 3. Read the flow / subsystem page
 
-Look specifically at:
-- **Sequence** — find the step where the failure could occur
-- **Side effects** — figure out which side effects should have happened but didn't (or shouldn't have happened but did)
-- **Failure modes** — see if this is a known failure pattern with a documented recovery
+Look at **Sequence** (the step where it could fail), **Side effects** (what should have happened but didn't, or vice versa), **Failure modes** (known pattern with a documented recovery) and **Common pitfalls**.
 
-### 4. Form hypotheses, ranked
+### 4. Form hypotheses, ranked — cheap to disprove first
 
-Cheap to disprove first. Typical ranking:
+1. **Auth/ownership** — wrong user, missing `anonId`, missing sudo. Check the `requireSiteOwner()` / `verifyOwnership()` call on the path.
+2. **State-machine mismatch** — a transition that didn't fire or was rejected. Compare `status` / per-day `operationalStatus` with the constants in `packages/data/src/reservation-status.ts` and the `TRANSITIONS` table in `packages/data/src/reservation-machine.ts`.
+3. **Idempotency / double-write** — invoice created twice, or not created because a partial run left inconsistent state.
+4. **Provider state diverged** — the rail is identified by `paymentRef` prefix (`providerFromRef` in `packages/data/src/payment-refs.ts`); check the payment in that provider's dashboard (Mollie, Stripe connected account, Viva).
+5. **Webhook missed** — reconciliation should catch it; if it doesn't, that's a second bug.
+6. **Env var missing** — e.g. `RECONCILIATION_SECRET` / `CRON_SECRET`, `MOLLIE_*`, `STRIPE_CONNECT_*`, `VIVA_*` (root `CLAUDE.md` § Key Environment Variables).
+7. **Race** — availability check and create not in one operation.
+8. **Venue-day boundary** — dates computed in UTC instead of the venue's civil day (`[[subsystem:venue-timezone]]`).
 
-1. **Auth/ownership** — wrong user, missing `anonId`, missing sudo. Check the relevant `requireSiteOwner()` / `verifyOwnership()` call.
-2. **Status field mismatch** — a state machine transition that didn't fire. Confirm `status` and `operationalStatus` values match the constants module.
-3. **Idempotency / double-write** — invoice created twice, or not created because a prior partial run set inconsistent state.
-4. **External provider state** — Mollie payment status diverged from DB. Check the Mollie dashboard / payment id.
-5. **Webhook missed** — reconciliation endpoint should be a safety net; if it's not catching this, that's a second bug.
-6. **Env var missing** — esp. `RECONCILIATION_SECRET`, `CRON_SECRET`, `MOLLIE_*`.
-7. **Race condition** — concurrent availability check + create. Wrap-in-transaction was missed.
+### 5. Verify against code and data
 
-### 5. Verify against code
-
-For each candidate hypothesis, open the relevant file (cited in the flow page) and trace the code path. Use `Grep` for status string usages, function call sites, env var references.
-
-For DB state questions, ask the user to run a Prisma Studio query (`cd packages/data && source .env.local && npx prisma studio`) — usually faster than guessing.
+For each hypothesis, open the file the flow page cites and trace the path; grep for status constants, call sites, env var references. For DB state, use `/db` (schema-aware, read-only, local/test/production) rather than guessing.
 
 ### 6. Confirm root cause
 
-Don't propose a fix until you can explain:
-- The exact line(s) where the bug originates
-- Why the bug happens (the precise condition)
-- Why no existing safeguard caught it
-- What the correct behaviour is (with citation — wiki page or canonical rule file)
+Don't propose a fix until you can state: the exact line(s) where it originates, the precise condition, why no existing safeguard caught it, and the correct behaviour (with a citation — wiki page or rule file).
 
 ### 7. Fix or report
 
-If small and well-understood: fix and add a regression test. If big: write up the diagnosis, link to the relevant wiki + source, propose options.
+Small and well understood: fix it and add a regression test that fails without the fix. Big: write up the diagnosis with wiki + source links and propose options.
 
 ### 8. Ingest the learning
 
-If the bug exposed:
-- A misleading or missing wiki page → revise it
-- A class of bug worth remembering → add a **Common pitfalls** bullet to the entity/flow page
-- A non-obvious gotcha → append to `.claude/knowledge/<agent>.md`
+- Misleading or missing wiki page → `[[workflow:ingest]]` revise.
+- A class of bug worth remembering → **Common pitfalls** bullet on the page (bounded at 7).
+- A surface-specific gotcha → emit a `kb:gotcha` / `kb:incident` marker (`.claude/agent-protocol.md`); it reaches the agent's playbook through `/groom`.
 
-Update `last_verified` on any page you re-verified during the debug.
+Bump `last_verified` only on pages whose claims you re-verified.
 
 ## Cross-app debugging tips
 
-- **Stuck payments**: `/api/reconcile` (user app) is the safety net. It requires `RECONCILIATION_SECRET`. POST it manually to clear backlogs.
-- **Webhook verification failures**: the Mollie webhook validates the payment-id regex then re-fetches state from the provider. (The partner subscription Stripe webhook needs `STRIPE_SUBSCRIPTION_WEBHOOK_SECRET` matched to the dashboard.)
-- **Demo mode confusion**: anything starting with `pi_demo_` is a fake payment ref. `isDemoPayment(ref)` (in `apps/user/app/api/_lib/payment-ids.ts`) is the canonical check.
-- **`@repo/data/PrismaCient`**: the typo path (missing 'l') is intentional — every app depends on it. Don't "fix" it.
-- **Status field typos**: every status value lives in `packages/data/src/reservation-status.ts`. Searches for raw strings like `'expected'` or `'checked-in'` will turn up usages — always prefer the constant.
+- **Stuck payments:** `/api/reconcile` (user app) is the safety net — `Bearer` `RECONCILIATION_SECRET` or `CRON_SECRET`; 503 when neither is set. POST it manually to clear a backlog.
+- **Webhooks:** every webhook re-fetches from the provider; the body only names the payment. Mollie validates the `tr_` id, Stripe verifies `stripe-signature` (Connect events need `event.account`), Viva is unsigned and trusts only the re-fetched transaction (`.claude/rules/payments.md`).
+- **Demo payments:** `pi_demo_*` refs are fake; `isDemoPayment()` from `@repo/data/payment-refs` is the one check — never a private `startsWith`.
+- **`@repo/data/PrismaCient`:** the typo is intentional — every app depends on the path. Don't "fix" it.
+- **Preview vs test:** both run against the TEST DB, so a migration applied for `main` is live for test.sunbnb.app too (`.claude/rules/migrations.md`).
 
 ## Anti-patterns
 
 - **Guessing the cause and writing a fix.** Verify, then fix.
-- **Adding defensive code to mask a symptom.** Find the root cause.
-- **Bypassing safety checks to "make it work."** (`--no-verify`, deleting `requireSiteOwner`, skipping the webhook signature check.) Never.
-- **Skipping the wiki and re-deriving the flow from source.** The flow page exists precisely so you don't.
+- **Defensive code that masks the symptom.** Find the root cause.
+- **Bypassing safety checks to "make it work"** (`--no-verify`, removing an ownership guard, skipping webhook re-fetch). Never.
+- **Re-deriving the flow from source** when the flow page exists.

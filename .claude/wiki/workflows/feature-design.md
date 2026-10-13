@@ -4,104 +4,105 @@ slug: feature-design
 status: stable
 sources:
   - .claude/wiki/README.md
+  - .claude/rules/architecture.md
+  - packages/data/src/payment-refs.ts
+  - packages/data/src/payment-providers/index.ts
+  - apps/user/app/api/_lib/payment-provider.ts
 related:
   - workflow:query
   - workflow:implementation
-last_verified: 2026-05-20
+  - subsystem:payments
+  - subsystem:reservation-state-machine
+last_verified: 2026-10-13
 ---
 
 # Workflow: Feature Design
 
-The procedure for going from "we want to add X" to a concrete, file-level implementation plan. Use this *before* writing code on any change larger than a single function.
+The procedure for going from "we want to add X" to a concrete, file-level implementation plan. Use it *before* writing code on any change larger than a single function. When the change crosses an app boundary, touches `packages/data`, or changes a shared contract, this design *is* the architecture pass of `.claude/rules/architecture.md` — run its checklist here.
 
 ## Procedure
 
 ### 1. Frame the feature
 
-Capture, in one paragraph, the user-visible behaviour:
-- Who is the actor (consumer, partner, admin, anonymous user)?
-- What is the entry point (route, action, event)?
-- What is the success outcome?
-- What is the failure outcome?
+One paragraph of user-visible behaviour:
+- Who is the actor (consumer, anonymous consumer, partner, floor staff on mobile, admin)?
+- What is the entry point (route, action, event, device)?
+- What are the success and failure outcomes?
+
+Check `.claude/tracks/index.md` — if a track already owns this goal, design inside it.
 
 ### 2. Map to existing concepts
 
-For each concept in the framing, look up the wiki:
+For each concept in the framing, find the wiki page (`[[workflow:query]]`: index + `/recall`):
 
-- "Affects bookings" → `[[entity:reservation]]`
+- "Affects bookings" → `[[entity:reservation]]` + `[[subsystem:reservation-state-machine]]`
 - "Involves payment" → `[[flow:reservation-payment]]` + `[[subsystem:payments]]`
 - "Touches partner authorization" → `[[subsystem:auth]]`
 - "Generates revenue line" → `[[entity:invoice]]` + `[[entity:service-fee]]`
 
-Make a list of pages read. If you find concepts the wiki has no page for, note them — they may need ingest after this feature ships.
+List the pages read. Concepts with no page are ingest candidates after the feature ships.
 
 ### 3. Identify constraints and invariants
 
-From the wiki pages and `.claude/rules/`, extract every invariant the feature must respect. Examples:
-- "Service fees use a three-tier cascade — site → partnerAccount → settings" (`[[entity:service-fee]]`)
-- "Invoice creation must be idempotent" (`.claude/rules/payments.md`)
-- "All site mutations require `requireSiteOwner()`" (`[[subsystem:auth]]`)
-- "Status fields are plain String columns; use constants from `@repo/data/reservation-status`" (`.claude/rules/data-access.md`)
-
-Write these down. They will become non-negotiable acceptance criteria.
+From those pages and `.claude/rules/`, write down every invariant the feature must respect — they become non-negotiable acceptance criteria. Cite, don't restate, e.g.:
+- fee cascade site → partnerAccount → settings (`[[entity:service-fee]]`);
+- idempotent invoice creation, provider identified by `paymentRef` prefix (`.claude/rules/payments.md`);
+- ownership before every site mutation (`.claude/rules/auth.md`);
+- status values are constants and transitions go through the state machine (`[[subsystem:reservation-state-machine]]`).
 
 ### 4. Identify the data model impact
 
-Will the feature need:
-- A new model? Edit `packages/data/prisma/schema.prisma`, add migration via `npm run migrate:local` from `packages/data`.
-- New fields on an existing model? Same.
-- A new status value? Add to `packages/data/src/reservation-status.ts` AND update the mock at `apps/*/__mocks__/@repo/data/reservation-status.ts` if it diverges.
-- New service-fee tier or product code? Update fee resolution + invoice-line creation in `packages/data/src/payment.ts`.
+- **New model or fields?** `packages/data/prisma/schema.prisma` + `npm run migrate:local` from `packages/data`; additive only (nullable/defaulted) per `.claude/rules/migrations.md`. A column read by an `assistant.*` view pins its type.
+- **New status value?** `packages/data/src/reservation-status.ts` and the transition table in `packages/data/src/reservation-machine.ts`.
+- **New fee tier or product code?** Fee resolution + invoice lines in `packages/data/src/payment.ts` (`processConfirmed*`).
 
-If yes, the data package is the first place to change — apps depend on it.
+If yes, the data package changes first — every app depends on it, and each app's `__mocks__/@repo/data/` may need the matching mock.
 
 ### 5. Identify the app surface
 
-Which app(s) does the feature touch? For each, list:
-- New routes (`apps/<app>/app/<route>/page.tsx`)
-- New API routes (`apps/<app>/app/api/<route>/route.ts`)
-- New server actions (file with `'use server'` at top)
-- New components
-- Auth model implications (existing guard sufficient? need new helper?)
-- State management impact (new Redux slice? new RTK Query endpoint?)
-- i18n impact (`messages/{en,es,fi}.json`)
+Which app(s) — `apps/user`, `apps/partner`, `apps/admin`, `apps/mobile`, `apps/marketing`? For each, list:
+- new pages, API routes, server actions (`'use server'`), components;
+- auth implications (existing guard enough? new helper?);
+- state (RTK Query endpoint / polling in the user app);
+- UI — prime with `/ui <surface>`; i18n keys in `messages/{en,es,fi}.json`.
+
+Read the surface's `CLAUDE.md` and its pulled siblings (`PATTERNS.md`, `TESTING.md`, `UI.md`, …) for the conventions you'll follow.
 
 ### 6. Identify side effects
 
-- Will it send emails? Edit/extend `packages/data/src/reservation-emails.ts`.
-- Will it touch consumer payment? Use the abstractions in `apps/user/app/api/_lib/payment-provider.ts` (Mollie + demo; or pull them up if a new app needs them).
-- Will it trigger a webhook? Define new webhook route, update reconciliation if applicable.
-- Will it need a cron job? Edit `vercel.json` in the relevant app.
+- **Emails?** Extend the templates in `packages/data/src/reservation-emails.ts` (sent via `packages/data/src/email.ts`).
+- **Consumer payment?** Consumer rails are Mollie, Stripe Connect direct charges, Viva Smart Checkout and demo, one provider per partner account. The rail is identified by `paymentRef` prefix (`@repo/data/payment-refs`); provider adapters, availability, selection and the fee policy live in `packages/data/src/payment-providers/`; the user app routes by prefix in `apps/user/app/api/_lib/payment-provider.ts`. Design against these abstractions — never a provider-specific branch in feature code.
+- **Webhook?** New route re-fetches state from the provider before acting; extend reconciliation (`/api/reconcile`) if the flow can get stuck.
+- **Cron?** Add it to `crons` in the app's `vercel.json`.
 
 ### 7. Decide testability
 
-For each component:
-- Pure logic → unit test in the closest `*.test.ts`
-- DB-touching logic → integration test (`*.integration.test.ts`) in `packages/data/src/` or `apps/*/app/...`
-- API route → route test with mocked Prisma + auth
-- Server action → action test with mocked Prisma + auth
+- Pure logic → unit test next to the module (`*.test.ts`).
+- DB-touching logic → `*.integration.test.ts` against `sunbnb_test`.
+- API route / server action → test with mocked `@repo/data` + auth.
 
-Identify the **bug-revealing edge cases** (per `feedback_testing_philosophy`): unauthenticated user, anonymous user, ownership mismatch, double submission, race condition with concurrent action, zero-quantity input, negative price, expired token, missing env var.
+Name the **bug-revealing edge cases**: unauthenticated, anonymous, ownership mismatch, double submission, concurrent action, zero quantity, negative price, expired token, missing env var / provider not connected.
 
 ### 8. Produce a written plan
 
-Output (in the conversation, not as a wiki page) a numbered plan with:
-- Files to create (with intended path)
-- Files to edit (with the concept of the change, not the diff)
-- Migrations to run
-- Tests to add
-- Risks and how each is mitigated by an invariant from step 3
+In the conversation (not a wiki page), a numbered plan with:
+- files to create (path) and files to edit (concept of the change, not the diff);
+- migrations, and whether each is expand or contract;
+- tests to add;
+- risks, each mitigated by an invariant from step 3;
+- blast radius: every app/package touched.
 
-For non-trivial changes, use the `ExitPlanMode` tool to present this plan and wait for approval before writing code.
+For non-trivial changes, present the plan and wait for approval before writing code. Large or multi-option designs go to the `Plan` agent.
 
 ### 9. After the feature ships
 
-Run `[[workflow:ingest]]` to fold the new concepts/flows into the wiki.
+Run `[[workflow:ingest]]` to fold new concepts and flows into the wiki.
 
 ## Anti-patterns
 
-- **Skipping the wiki scan.** You will miss an invariant. The invariant will become a bug in production.
-- **Designing the schema last.** Schema drives the apps in this project. Decide it first.
-- **Adding a new status value without updating the constants module.** Apps will type-check fine and break at runtime.
-- **Designing payment logic outside `packages/data/src/payment.ts`.** All money math goes there; apps consume.
-- **Inventing fee logic.** Fees are configured in `Settings` / `ServiceFee` records. Never hardcode.
+- **Skipping the wiki scan.** You will miss an invariant; it becomes a production bug.
+- **Designing the schema last.** Schema drives the apps here — decide it first.
+- **A new status value outside the constants module and state machine.** Apps type-check and break at runtime.
+- **Money math outside `packages/data`.** Payment, fee and invoice logic lives there; apps consume.
+- **A provider-specific branch in feature code.** Go through `payment-refs` / `payment-providers`.
+- **Inventing fee amounts.** Fees come from the `ServiceFee` / settings cascade — never hardcoded.

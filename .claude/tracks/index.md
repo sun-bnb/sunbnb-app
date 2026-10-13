@@ -10,26 +10,21 @@ drift. Regenerate after every `handoff` / `close`.
 
 | ID | Track | Next action | Worktree | Updated |
 |---|---|---|---|---|
-| [031](031-context-system-v2.md) | Context system v2 — close the curation loop (health signal, cross-layer recall, groom, budgets) | **Next action:** P5 — canonical compaction to budget, one big `CLAUDE.md` per session (user, partner, data, then root), applying the queued promotions below while each file is open (plan file §P5). | — | 2026-10-12 |
+| [032](032-retire-settlements.md) | Retire the legacy admin settlement feature (expand/contract) | **Next action:** Step 2 (contract) — only after step 1 is on `test` (promoted), so no deployed | — | 2026-10-13 |
 | [030](030-partner-ai-assistant.md) | Partner AI assistant — site tabs, inventory/schematic editing, documents, photos | **State 2026-10-12:** all slices S0–S8 **committed and pushed** on `main` (`534d9c3`, `c978ce3`, | — | 2026-10-12 |
 | [027](027-beach-mockup-lead-agent.md) | Beach mockup lead agent — marketing landing page that builds a prospect's beach | **State 2026-10-09:** P0–P6, P8–P10 (+ P8b tracking stack) and the coastline DB are committed | — | 2026-10-09 |
 | [028](028-multi-provider-payments.md) | Multi-provider payments — Mollie, Viva and Stripe as pluggable rails per partner | **State (2026-10-08):** **P1–P6 shipped — committed and pushed to `main` 2026-10-08** (`41c09f7..116f696`, 9 commits; | — | 2026-10-08 |
 | [026](026-verifactu.md) | Veri*factu — Spanish fiscal compliance for receipts and invoices | **Every code phase is complete. The transport covers every authorised issuer and | — | 2026-10-04 |
 | [021](021-physical-unit-model.md) | Physical unit model — durable mount point, policy split from structure | **▶ NEXT ACTION: P4 (A1) — make parcel resize a real edit.** See *Delivery sequence* for | — | 2026-09-12 |
-| [023](023-custom-whitelabel-pages.md) | Custom whitelabel pages — bespoke brand experiences for key customers | **▶ NEXT ACTION: founder review of the Alcúdia page** (`/s/alcudia` locally — the site is | — | 2026-08-21 |
-| [022](022-short-qr-urls.md) | Short QR URLs — address-keyed POS entry | **▶ NEXT ACTION: nothing for an agent — the track is waiting on USER OPS.** All build | — | 2026-08-20 |
-| [018](018-reservation-state-machine.md) | Reservation state machine — explicit model, conservation contracts, matrix enforcement | **Next action:** commit P4 slice (g) — docs/wiki sync (awaiting founder's word). | — | 2026-08-11 |
-| [002](002-table-reservations.md) | Table Reservations | **✅ SHIPPED (2026-07-25): Dine-in tabs v2 — the standalone-restaurant rail (decoupling | — | 2026-07-19 |
-| [015](015-cash-sale-receipts.md) | Cash-sale receipts (invoice every income) | **ALL 5 PHASES BUILT & GREEN (P1–P5). Backfill APPLIED to test+prod by the user (38 prod receipts).** | — | 2026-07-10 |
-| [006](006-alonso-staff-ui.md) | Alonso → Staff UI Migration | **⚠ REOPENED 2026-07-09 — customer "literal parity" feedback.** The operator sent four Alonso | — | 2026-07-09 |
-| [013](013-settlement-ledger-till.md) | Settlement ledger — offline cash till source of truth | **P0a DONE** (uncommitted) — `TillEntry` model + migration `20260621151602_add_till_entry_ledger` | — | 2026-06-21 |
-| [012](012-multiday-per-day-operational-state.md) | Per-day operational state for multiday sunbed reservations | **Next action:** Finish **P2** — only **occupancy** remains. The availability double-sell is | — | 2026-06-20 |
-| [004](004-partner-test-architecture.md) | Partner Test Architecture | **Next action:** **PARTNER SCOPE COMPLETE — all phases (0,1,2,3,4) done.** Phase 2 just closed: | — | 2026-06-16 |
 
 ## Blocked / paused
 
 | ID | Track | Status | Next action | Updated |
 |---|---|---|---|---|
+| [023](023-custom-whitelabel-pages.md) | Custom whitelabel pages — bespoke brand experiences for key customers | paused | **PAUSED 2026-10-13** (track 031 status pass) — mechanism shipped (custom-brand migrations live); waiting on founder review of the Alcúdia page and open questions Q6+. | 2026-10-13 |
+| [012](012-multiday-per-day-operational-state.md) | Per-day operational state for multiday sunbed reservations | paused | **PAUSED 2026-10-13** (track 031 status pass) — availability double-sell fixed; per-day occupancy remains, waiting for prioritisation. | 2026-10-13 |
+| [006](006-alonso-staff-ui.md) | Alonso → Staff UI Migration | paused | **PAUSED 2026-10-13** (track 031 status pass) — floor-state parity done; three reporting-presentation gaps from the 2026-07-09 customer feedback remain, waiting for prioritisation. | 2026-10-13 |
+| [002](002-table-reservations.md) | Table Reservations | paused | **PAUSED 2026-10-13** (track 031 status pass) — core and dine-in tabs v2 shipped; remaining follow-ups wait for a new product ask. | 2026-10-13 |
 | [001](001-knowledge-store.md) | Knowledge Store | paused | **Next action:** none scheduled — the store is in steady state (ingest at SessionEnd incl. | 2026-10-12 |
 | [024](024-card-present-payments.md) | Card-present payments — Viva as the card rail, and the floor app that hosts it | blocked | > **Provider end state resolved by [[track:028]] (2026-10-07)** — its D1: **multi-provider, not | 2026-10-08 |
 | [020](020-large-venue-scale.md) | Large-venue scale — dozens of parcels, thousands of sunbeds | paused | **State 2026-08-15 (night):** P0–P5 + P6 slices A/B (LOD + culling both apps, oriented | 2026-08-15 |
@@ -46,6 +41,12 @@ drift. Regenerate after every `handoff` / `close`.
 
 | ID | Track | Status | Outcome | Updated |
 |---|---|---|---|---|
+| [031](031-context-system-v2.md) | Context system v2 — close the curation loop (health signal, cross-layer recall, groom, budgets) | done | **DONE 2026-10-13.** The curation loop is closed: one health signal at session start and push, | 2026-10-13 |
+| [022](022-short-qr-urls.md) | Short QR URLs — address-keyed POS entry | done | **DONE 2026-10-13** (track 031 status pass) — short QR URLs shipped (`20260820101055_add_site_code`); the address-keyed entry is live and documented in `apps/user/PATTERNS.md`. | 2026-10-13 |
+| [018](018-reservation-state-machine.md) | Reservation state machine — explicit model, conservation contracts, matrix enforcement | done | **DONE 2026-10-13** (track 031 status pass) — state machine P0–P4 shipped and ingested into wiki `subsystems/reservation-state-machine.md` (2026-08-11). | 2026-10-13 |
+| [015](015-cash-sale-receipts.md) | Cash-sale receipts (invoice every income) | done | **DONE 2026-10-13** (track 031 status pass) — cash-sale receipts built, backfilled on test+prod, and shipped; later credit-note work landed with Veri*factu (track 026). | 2026-10-13 |
+| [013](013-settlement-ledger-till.md) | Settlement ledger — offline cash till source of truth | done | **DONE 2026-10-13** (track 031 status pass) — the TillEntry settlement ledger shipped (`058cb1c`, migrations `20260621151602`, `20260621162554`); the per-day till that followed is track 016. | 2026-10-13 |
+| [004](004-partner-test-architecture.md) | Partner Test Architecture | done | **DONE 2026-10-13** (track 031 status pass) — partner test architecture complete (all phases; 903 unit + 91 integration green), committed and pushed. | 2026-10-13 |
 | [029](029-next16-react19-upgrade.md) | Next.js 16 / React 19 upgrade — one web app at a time | done | **DONE 2026-10-12.** All four web apps on Next 16.4 / React 19.3 / ESLint 9 / Tailwind 4; S0–S6, | 2026-10-12 |
 | [016](016-day-anchored-till.md) | Day-anchored till (per-day till the operator expects) | done | **TRACK FUNCTIONALLY COMPLETE (2026-07-23, committed: 'Day-anchor the per-worker till' on local main).** All phases done: | 2026-10-12 |
 | [010](010-floor-reservation-lookup.md) | Floor Reservation Lookup & Arrivals — the "Guests" host stand | done | **P1+P2 SHIPPED & LIVE on test+prod (deployed 2026-06-20).** Committed `06a0224` (P1) + `e7952fd` | 2026-10-12 |

@@ -1,9 +1,9 @@
 ---
 id: 012-multiday-per-day-operational-state
 title: Per-day operational state for multiday sunbed reservations
-status: active
+status: paused
 created: 2026-06-20
-updated: 2026-06-20
+updated: 2026-10-13
 worktree: null
 ---
 
@@ -35,6 +35,7 @@ cycle). Early-checkout / release-rest-of-stay is a separate cancel/edit concern,
 
 ## Resume here
 
+- **PAUSED 2026-10-13** (track 031 status pass) — availability double-sell fixed; per-day occupancy remains, waiting for prioritisation.
 - **Next action:** Finish **P2** — only **occupancy** remains. The availability double-sell is
   DONE (see Log). `@repo/data/analytics.ts:getOccupancyByDay` → per-day: a bed counts occupied on
   day D unless its `(reservation, D)` row is no-show/departed, falling back to the parent
@@ -208,6 +209,7 @@ cycle). Early-checkout / release-rest-of-stay is a separate cancel/edit concern,
   scope** (P3); no-show non-propagating; occupancy **recalculated per-day** (accepted as a
   correction). P0 also gains coord→IANA derivation + `Site.timeZone` coord-backfill. Status:
   awaiting go-ahead to start P0 (schema migration).
+- **2026-10-13** — Status → paused (track 031 status pass, founder-approved): availability double-sell fixed; per-day occupancy remains, waiting for prioritisation.
 
 ## Links
 
