@@ -296,26 +296,14 @@ export async function deleteUser(userId: string) {
     return { status: 'error', errors: ['Cannot delete a sudo user'] }
   }
 
-  const siteIds = user.sites.map((s) => s.id)
-  const partnerAccountId = user.partnerAccount?.userId
-
-  // 1. Delete legacy Settlement rows (no cascade from PartnerAccount or Site). The settlement
-  //    feature is retired (track 032); this cleanup goes when the table is dropped.
-  if (partnerAccountId) {
-    await prisma.settlement.deleteMany({ where: { accountId: partnerAccountId } })
-  }
-  if (siteIds.length > 0) {
-    await prisma.settlement.deleteMany({ where: { siteId: { in: siteIds } } })
-  }
-
-  // 2. Delete SecurityTokens (no FK relation to User)
+  // 1. Delete SecurityTokens (no FK relation to User)
   await prisma.securityToken.deleteMany({ where: { userId } })
 
-  // 3. For each OAuth account, check if other users share it
+  // 2. For each OAuth account, check if other users share it
   //    (Account uses @@id([provider, providerAccountId]) and userId FK with cascade)
   //    The Account model cascades on user delete, so it will be cleaned up automatically.
 
-  // 4. Delete the User — cascading deletes handle:
+  // 3. Delete the User — cascading deletes handle:
   //    Account, Authenticator, InventoryItem, Order, PartnerAccount (+ Invoice, Subscription, ServiceFee),
   //    Reservation, Session, Site (+ SiteBrand, SiteWorkingHours, Product, etc.)
   await prisma.user.delete({ where: { id: userId } })

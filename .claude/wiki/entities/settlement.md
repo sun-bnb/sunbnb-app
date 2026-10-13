@@ -3,7 +3,7 @@ type: entity
 slug: settlement
 status: stale
 sources:
-  - packages/data/prisma/schema.prisma#model-Settlement
+  - packages/data/prisma/migrations/20261013101617_drop_legacy_settlement/migration.sql
 related:
   - entity:invoice
   - subsystem:payments
@@ -19,8 +19,8 @@ and paying partners out, which ended with direct charges (Mollie for Platforms, 
 Viva): the partner's own provider account is paid, and the commission is taken at charge time.
 Production never created a settlement.
 
-What remains: the `Settlement` table and `Invoice.settlementBatchId` (unused, dropped by a later
-contract migration) and the admin `deleteUser` cleanup of legacy rows. Partner money reporting is
+Nothing remains in code or schema: migration `20261013101617_drop_legacy_settlement` dropped the
+`Settlement` table, `Invoice.settlement_batch_id` and `SettlementStatus`. Partner money reporting is
 the partner accounting page and invoices ([[entity:invoice]], [[subsystem:payments]]).
 Do not confuse with till **cash settlements** (`TillEntry`, [[subsystem:employee-till]]) or the
 payment provider's own payout settlements (`Invoice.settlementId`).

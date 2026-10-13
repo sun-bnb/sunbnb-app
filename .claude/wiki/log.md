@@ -248,3 +248,6 @@ Operations:
 
 ## [2026-10-13] retire | entity:settlement + flow:settlement-cycle — admin settlement feature removed (track 032 step 1)
 - Pages reduced to retirement stubs (status stale; delete after 2026-11-12), listed under index "Retired"; links removed from invoice, reservation, service-fee, auth, employee-till, venue-timezone; debugging symptom row points at invoice/service-fee/payments.
+
+## [2026-10-13] patch | entity:settlement + flow:settlement-cycle stubs — table dropped (track 032 step 2)
+- Stubs now say nothing remains; source points at migration `20261013101617_drop_legacy_settlement`. Pages still due for deletion after 2026-11-12.

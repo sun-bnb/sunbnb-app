@@ -405,12 +405,6 @@ const prisma = {
     create: vi.fn(),
     update: vi.fn(),
   },
-  settlement: {
-    findFirst: vi.fn(),
-    findMany: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-  },
   invoiceLine: {
     createMany: vi.fn(),
     findMany: vi.fn(),

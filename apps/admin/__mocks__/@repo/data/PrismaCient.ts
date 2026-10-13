@@ -60,9 +60,6 @@ const prisma = {
     deleteMany: vi.fn(),
     findMany: vi.fn(),
   },
-  settlement: {
-    deleteMany: vi.fn(),
-  },
   securityToken: {
     deleteMany: vi.fn(),
   },

@@ -364,7 +364,6 @@ describe('deleteUser', () => {
         accounts: [],
       } as any)
 
-    vi.mocked(prisma.settlement.deleteMany).mockResolvedValue({ count: 0 } as any)
     vi.mocked(prisma.securityToken.deleteMany).mockResolvedValue({ count: 0 } as any)
     vi.mocked(prisma.user.delete).mockResolvedValue({} as any)
 
@@ -372,40 +371,10 @@ describe('deleteUser', () => {
     expect(res.status).toBe('ok')
     expect((res as any).email).toBe('target@test.com')
 
-    // Verify settlements cleaned up for both accountId and siteIds
-    expect(vi.mocked(prisma.settlement.deleteMany)).toHaveBeenCalledTimes(2)
-    expect(vi.mocked(prisma.settlement.deleteMany)).toHaveBeenCalledWith({
-      where: { accountId: 'target' },
-    })
-    expect(vi.mocked(prisma.settlement.deleteMany)).toHaveBeenCalledWith({
-      where: { siteId: { in: ['site-1', 'site-2'] } },
-    })
-
     // Verify security tokens cleaned up
     expect(vi.mocked(prisma.securityToken.deleteMany)).toHaveBeenCalledWith({
       where: { userId: 'target' },
     })
-  })
-
-  it('skips settlement cleanup when user has no partner account', async () => {
-    authenticateAsSudo()
-    vi.mocked(prisma.user.findUnique)
-      .mockResolvedValueOnce({ sudo: true } as any) // requireSudo
-      .mockResolvedValueOnce({
-        id: 'target',
-        email: 'target@test.com',
-        sudo: false,
-        partnerAccount: null,
-        sites: [],
-        accounts: [],
-      } as any)
-
-    vi.mocked(prisma.securityToken.deleteMany).mockResolvedValue({ count: 0 } as any)
-    vi.mocked(prisma.user.delete).mockResolvedValue({} as any)
-
-    await deleteUser('target')
-    // Should NOT call settlement.deleteMany for accountId
-    expect(vi.mocked(prisma.settlement.deleteMany)).not.toHaveBeenCalled()
   })
 
   // BUG: deleteUser uses singular 'error' not 'errors' — should use errors[] for consistency

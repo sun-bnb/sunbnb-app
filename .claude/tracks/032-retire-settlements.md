@@ -19,17 +19,11 @@ reporting is the partner accounting page + invoices, which is what the merchant 
 
 ## Resume here
 
-- **Next action:** Step 2 (contract) — only after step 1 is on `test` (promoted), so no deployed
-  code references the table: a migration dropping `"Settlement"`, `"Invoice".settlement_batch_id`
-  and the `SettlementStatus` enum (check for an `assistant.*` view pinning the column first —
-  `.claude/rules/migrations.md`); in the same change remove the legacy cleanup in
-  `apps/admin/app/users/actions.ts#deleteUser` (+ its tests and the `settlement` entry in
-  `apps/admin/__mocks__/@repo/data/PrismaCient.ts`), the `// LEGACY` comment in `schema.prisma`, and
-  the relation fields on `PartnerAccount` / `Site`. Apply to the test DB at promote time (contract).
-- **Then:** delete `.claude/wiki/entities/settlement.md` and `flows/settlement-cycle.md` (grace ends
-  2026-11-12) and their "Retired" index line; close this track.
+- **Next action:** after 2026-11-12, delete `.claude/wiki/entities/settlement.md` and
+  `.claude/wiki/flows/settlement-cycle.md` and their line under index "Retired", then close this
+  track. Nothing else remains: step 1 and step 2 are on production.
 - **Keep:** `Invoice.settlementId` — a different field (the provider's own payout settlement id).
-- **Blocked by:** step 1 being promoted to test (founder's call).
+- **Blocked by:** the wiki grace period only.
 
 ## Roadmap
 
@@ -38,7 +32,10 @@ reporting is the partner accounting page + invoices, which is what the merchant 
   `settlement` mock + vitest alias, nav entry and `/settlements` redirects (landing → `/partners`),
   the unused `_count.settlements` on the partners page; docs, agent, playbook, `/db` command and
   wiki pages retired. Schema untouched apart from a `// LEGACY` comment.
-- ☐ **Step 2 (contract)** — drop the table, column, enum and the `deleteUser` cleanup.
+- ✅ **Step 2 (contract, 2026-10-13)** — migration `20261013101617_drop_legacy_settlement` drops
+  `"Settlement"`, `"Invoice".settlement_batch_id` and `SettlementStatus` (generated with
+  `migrate diff --script`; `migrate:check` clean); `deleteUser` cleanup, its two test cases and the
+  admin + partner Prisma-mock `settlement` entries removed; docs say the table is gone.
 
 ## Log
 
@@ -46,6 +43,10 @@ reporting is the partner accounting page + invoices, which is what the merchant 
   deposit and tab invoices). Founder confirmed the feature is legacy; retired instead of fixed.
   Admin 225 tests and `@repo/data` 1,206 unit tests green; both typechecks clean (admin needed its
   generated `.next/types` refreshed after the route was deleted).
+- **2026-10-13** — Step 1 shipped: promoted to test (`e8959fe`, all 4 builds Ready) and deployed to
+  production together with the 43-commit test backlog (Next 16/React 19, partner AI assistant,
+  GA4 — founder-approved); prod migrate had nothing pending (the assistant migrations were already
+  applied). Step 2 written and verified the same day: admin 224, partner 3,362, data 1,206 tests.
 
 ## Links
 

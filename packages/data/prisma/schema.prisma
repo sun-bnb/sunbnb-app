@@ -6,13 +6,6 @@ datasource db {
   provider = "postgresql"
 }
 
-enum SettlementStatus {
-  DRAFT
-  CLOSED
-  APPROVED
-  PAID
-}
-
 enum SubscriptionTier {
   STARTER
   PRO
@@ -269,7 +262,6 @@ model PartnerAccount {
   stripeConnectTosAcceptedAt    DateTime?               @map("stripe_connect_tos_accepted_at")
   stripeConnectConnectedAt      DateTime?               @map("stripe_connect_connected_at")
   invoices                      Invoice[]
-  settlements                   Settlement[]
   subscription                  Subscription?
   customSubscription            CustomSubscription?
   user                          User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -389,7 +381,6 @@ model Site {
   rentalBookings RentalBooking[]
   reservations   Reservation[]
   serviceFees    ServiceFee[]
-  settlements    Settlement[]
   sunbedGroups   SunbedGroup[]
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -799,7 +790,6 @@ model Invoice {
   // the settlement-sync step (deferred); null until captured.
   processingFee           Float?            @map("processing_fee")
   settlementId            String?           @map("settlement_id")
-  settlementBatchId       String?           @map("settlement_batch_id")
   reservationId           String?           @map("reservation_id")
   orderId                 String?           @map("order_id")
   // Table-reservation deposit invoice link (no-show deposit cascade).
@@ -845,7 +835,6 @@ model Invoice {
   // it explicitly.
   product                 String            @default("beachclub") @map("product")
   account                 PartnerAccount    @relation(fields: [accountId], references: [userId], onDelete: Cascade)
-  settlementBatch         Settlement?       @relation(fields: [settlementBatchId], references: [id])
   reservation             Reservation?      @relation(fields: [reservationId], references: [id])
   order                   Order?            @relation(fields: [orderId], references: [id])
   tableReservation        TableReservation? @relation(fields: [tableReservationId], references: [id])
@@ -867,33 +856,6 @@ model Invoice {
   @@index([issuerType, invoicedAt])
   @@index([accountId])
   @@index([creditsInvoiceId])
-}
-
-// LEGACY (track 032): the platform-payout settlement feature is retired — consumer payments are
-// direct charges to the partner. Unused since step 1; dropped with Invoice.settlementBatchId in a
-// later contract migration. Do not build on it.
-model Settlement {
-  id            String           @id @default(cuid())
-  accountId     String           @map("account_id")
-  siteId        String           @map("site_id")
-  periodStart   DateTime         @map("period_start")
-  periodEnd     DateTime         @map("period_end")
-  grossRevenue  Float            @map("gross_revenue")
-  totalTax      Float            @default(0) @map("total_tax")
-  commission    Float
-  netPayout     Float            @map("net_payout")
-  currency      String           @default("EUR")
-  status        SettlementStatus @default(DRAFT)
-  bankReference String?          @map("bank_reference")
-  paidAt        DateTime?        @map("paid_at")
-  notes         String?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  // Product discriminator (see Invoice.product).
-  product       String           @default("beachclub") @map("product")
-  account       PartnerAccount   @relation(fields: [accountId], references: [userId])
-  site          Site             @relation(fields: [siteId], references: [id])
-  invoices      Invoice[]
 }
 
 /// The invoice-number counter, one row per (issuer, series, year).

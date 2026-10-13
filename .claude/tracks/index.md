@@ -10,7 +10,7 @@ drift. Regenerate after every `handoff` / `close`.
 
 | ID | Track | Next action | Worktree | Updated |
 |---|---|---|---|---|
-| [032](032-retire-settlements.md) | Retire the legacy admin settlement feature (expand/contract) | **Next action:** Step 2 (contract) — only after step 1 is on `test` (promoted), so no deployed | — | 2026-10-13 |
+| [032](032-retire-settlements.md) | Retire the legacy admin settlement feature (expand/contract) | **Next action:** after 2026-11-12, delete `.claude/wiki/entities/settlement.md` and | — | 2026-10-13 |
 | [030](030-partner-ai-assistant.md) | Partner AI assistant — site tabs, inventory/schematic editing, documents, photos | **State 2026-10-12:** all slices S0–S8 **committed and pushed** on `main` (`534d9c3`, `c978ce3`, | — | 2026-10-12 |
 | [027](027-beach-mockup-lead-agent.md) | Beach mockup lead agent — marketing landing page that builds a prospect's beach | **State 2026-10-09:** P0–P6, P8–P10 (+ P8b tracking stack) and the coastline DB are committed | — | 2026-10-09 |
 | [028](028-multi-provider-payments.md) | Multi-provider payments — Mollie, Viva and Stripe as pluggable rails per partner | **State (2026-10-08):** **P1–P6 shipped — committed and pushed to `main` 2026-10-08** (`41c09f7..116f696`, 9 commits; | — | 2026-10-08 |

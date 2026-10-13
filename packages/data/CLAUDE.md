@@ -37,7 +37,7 @@ GiST index) for spatial queries.
 
 Core models: User, PartnerAccount, Site, InventoryItem, SunbedGroup, Reservation, ReservationDay,
 Order, OrderItem, RentalItem, RentalBooking, Restaurant, Table, TableTab, MenuItem, Invoice,
-InvoiceLine, Settlement, ServiceFee, Settings, Employee, TillEntry, TillClose, Device,
+InvoiceLine, ServiceFee, Settings, Employee, TillEntry, TillClose, Device,
 PlatformPreference, FeatureFlag, SecurityToken, PasswordResetToken, Product.
 
 **Read `REFERENCE.md` before touching** `Site.code`, the `SunbedGroup` address

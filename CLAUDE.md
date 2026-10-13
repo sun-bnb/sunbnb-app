@@ -217,7 +217,7 @@ commission invoice; they do not sum to the consumer total. The rule is canonical
 
 ### Settlements (retired)
 
-Settlements are retired ([[track:032]]): consumer payments are direct charges to the partner's own provider account, so the platform never holds funds to pay out. Partner money reporting is the partner accounting page + invoices. The `Settlement` table remains, unused, until a contract migration drops it.
+Settlements are retired ([[track:032]]): consumer payments are direct charges to the partner's own provider account, so the platform never holds funds to pay out. Partner money reporting is the partner accounting page + invoices. The table, `Invoice.settlement_batch_id` and the enum were dropped by `20261013101617_drop_legacy_settlement`.
 
 ## Cross-Cutting Patterns
 
