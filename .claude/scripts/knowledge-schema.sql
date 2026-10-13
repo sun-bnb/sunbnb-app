@@ -18,7 +18,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE IF NOT EXISTS knowledge_record (
   id            BIGSERIAL PRIMARY KEY,
-  source        TEXT        NOT NULL,                 -- 'session-transcript' (Phase 0)
+  source        TEXT        NOT NULL,                 -- 'session-transcript' (episodic) | 'wiki' | 'track' | 'playbook:<agent>' (curated, track 031)
   type          TEXT        NOT NULL,                 -- decision | incident | gotcha | dead-end | observation
   text          TEXT        NOT NULL,                 -- distilled + redacted content (this is what gets embedded)
   embedding     vector(384),                          -- local bge-small (384-dim); NULL until embedded
@@ -31,6 +31,17 @@ CREATE TABLE IF NOT EXISTS knowledge_record (
   status        TEXT        NOT NULL DEFAULT 'raw',   -- raw | verified | promoted
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Track 031 (credit → promotion loop + curated indexing). Idempotent — safe to re-apply.
+--   hits / last_hit : a recall hit that helped is credited by `knowledge-recall.mjs --credit <id>`;
+--                     credits feed `--candidates` and `/groom` (episodic → curated promotion)
+--   content_sha     : SHA-256 of the indexed text for curated units (playbook entries, wiki
+--                     sections, track resume-heres) so `knowledge-curated.mjs` re-embeds only changes
+ALTER TABLE knowledge_record ADD COLUMN IF NOT EXISTS hits        INT         NOT NULL DEFAULT 0;
+ALTER TABLE knowledge_record ADD COLUMN IF NOT EXISTS last_hit    TIMESTAMPTZ;
+ALTER TABLE knowledge_record ADD COLUMN IF NOT EXISTS content_sha TEXT;
+CREATE INDEX IF NOT EXISTS knowledge_record_provenance_idx ON knowledge_record (provenance);
+CREATE INDEX IF NOT EXISTS knowledge_record_status_idx     ON knowledge_record (status);
 
 -- ANN index for cosine similarity search. NULL embeddings are simply not indexed.
 CREATE INDEX IF NOT EXISTS knowledge_record_embedding_idx

@@ -9,7 +9,9 @@
 
 import { spawn, spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
+const HERE = dirname(fileURLToPath(import.meta.url));
 const C = 'sunbnb-knowledge-postgres';
 const WAIT_MS = 120_000;   // Docker Desktop cold start is typically 15–40 s
 const POLL_MS = 2_000;
@@ -23,6 +25,11 @@ function ensureContainer() {
     return;
   }
   if (r.stdout.trim() !== 'true') spawnSync('docker', ['start', C], { stdio: 'ignore' });
+  // Track 031: keep the curated layers (playbooks, wiki, track resume-heres) indexed in the
+  // store. Detached + idempotent — re-embeds only units whose text changed, so a session whose
+  // docs didn't move costs one pg round-trip.
+  const idx = spawn(process.execPath, [join(HERE, 'knowledge-curated.mjs')], { detached: true, stdio: 'ignore' });
+  idx.unref();
 }
 
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));

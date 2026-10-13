@@ -27,6 +27,17 @@ knowledge moves between layers. The grooming routine (`workflows/groom.md`) enfo
 playbook entry contradicts current code or canon, the code/canon wins and the entry is
 the bug — correct or delete it.
 
+### How an agent consumes the ladder (track 031)
+
+All three layers are indexed in **one** vector store, labelled by source: `wiki` (promoted),
+`playbook:<agent>` (verified), `track` (verified), `session-transcript` (raw). At task start an
+agent runs **one** query, `knowledge-recall.mjs "<topic>" --surface <agent>`, and gets results
+grouped by tier, then reads only the **generated navigation index** of its playbook — never
+the whole file. Full entries are opened by heading when the index or a hit points at them.
+Hits that helped are **credited** (`--credit <id,id>`): raw → verified, and the credit count is
+what `/groom` uses to pick promotion candidates. The curated index is refreshed by
+`knowledge-curated.mjs` (detached, at session start; only changed units are re-embedded).
+
 ### Promotion (knowledge earns its way up by recurring + verifying)
 
 - **episodic → curated.** A recall lead that proves correct and recurs gets written up as
@@ -60,26 +71,32 @@ committed, shared — not a private orchestrator silo.
 Every `.claude/knowledge/<agent>.md` follows the same shape:
 
 1. **Header** — one line: whose growing memory this is, governed by this README.
-2. **Navigation index** — a maintained theme/tag map at the top: the handful of topics
-   this playbook covers, so the agent (and recall) cheaply knows *what it knows* and
-   where to look. Rebuilt by the grooming routine; it is the "learning to navigate" half
-   of the layer.
-3. **Themed sections** — buckets matching the agent's surface disciplines (e.g. *Auth &
+2. **Navigation index** — a **generated** block (`<!-- nav:begin -->` … `<!-- nav:end -->`
+   under `## Navigation index`): one line per entry — date · title · entities · track —
+   grouped by section. Rebuilt by `node .claude/scripts/playbook-index.mjs <agent>` after
+   every entry added; the health check flags a stale block. This is what an agent reads at
+   task start, so it must stay complete and cheap.
+3. **Themed sections** — `##` buckets matching the agent's surface disciplines (e.g. *Auth &
    ownership*, *Test failures & fixes*, *Schema & migrations*, *Rejected approaches*).
-   Seeded empty; grown by appending entries.
+   Entries are always `###` under a section — never a dated `##`.
 
-### Entry format
+### Entry format (v2)
 
 ```
 ### YYYY-MM-DD: <concise title>
+tags: entities=reservation,till · files=apps/partner/app/sites/[id]/manage/actions.ts · track=016
 **Problem:** what went wrong / what was non-obvious
 **Solution:** what actually worked
 **Prevention:** how a future session avoids the friction (cite `path/file.ts#symbol`)
 ```
 
-Cite code (`path/file.ts:line` / `#symbol`); don't paste it. Keep entries dense and
-self-contained — readable months later without the surrounding conversation, the same
-discipline as the `kb:` markers in `.claude/agent-protocol.md`.
+The `tags:` line is required and comes first: `entities` and `files` use the same vocabulary
+as `kb:` markers (so one record shape flows through every layer), `track` is optional. It is
+what the navigation index and the curated recall index are built from. Cite code
+(`path/file.ts:line` / `#symbol`); don't paste it. Keep entries dense and self-contained —
+readable months later without the surrounding conversation, the same discipline as the
+`kb:` markers in `.claude/agent-protocol.md`. Size budgets (bytes, entries) live in
+`.claude/context/budgets.json`; crossing one is the signal to run `/groom <agent>`.
 
 ---
 
@@ -89,9 +106,12 @@ discipline as the `kb:` markers in `.claude/agent-protocol.md`.
   vector store at session end, including from subagents). After a *non-trivial* task, run
   the gated retrospective in your agent skeleton: add a curated entry here for anything
   durable. Trivial tasks add nothing — silence is a valid outcome.
-- **Curate** — periodically, `workflows/groom.md` dedupes/merges entries, deletes stale
-  ones (verified against current code), rebuilds the navigation index, and surfaces
-  promotion candidates. This is the mandatory counter-loop; without it the playbook rots.
+- **Curate** — `/groom <agent>` (`workflows/groom.md`) dedupes/merges entries, deletes stale
+  ones (verified against current code), migrates entries to the v2 format, regenerates the
+  navigation index, and surfaces promotion candidates in both directions: episodic → curated
+  (`knowledge-recall.mjs --candidates <agent>`: recurring or credited session records not yet
+  in the playbook) and curated → canon (proposed `/wiki ingest` / `/update-knowledge`). This is
+  the mandatory counter-loop; the health check nags when a playbook crosses its budget.
 
 ## The gate (apply before every entry)
 

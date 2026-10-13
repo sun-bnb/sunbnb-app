@@ -1,9 +1,9 @@
 ---
 id: 001-knowledge-store
 title: Knowledge Store
-status: active
+status: paused
 created: 2026-05-20
-updated: 2026-05-20
+updated: 2026-10-12
 worktree: null
 ---
 
@@ -16,9 +16,10 @@ decided / tried this before?"* Free + keyless wherever possible.
 
 ## Resume here
 
-- **Next action:** Phase 1 — stand up a Vercel **test-env log drain** and write a
-  `source='vercel-log'` adapter mapping grouped error signatures → `knowledge_record`
-  through a redaction gate.
+- **Next action:** none scheduled — the store is in steady state (ingest at SessionEnd incl.
+  subagents; curated layers indexed by `knowledge-curated.mjs`; tiered recall + credits +
+  `--candidates` delivered by [[track:031-context-system-v2]]). Phase 1 (Vercel log drain) is
+  parked until an operational need appears; reopen with a handoff when it does.
 - **Context needed:** ingest pipeline + schema in `.claude/scripts/knowledge-ingest.mjs`
   and `knowledge-schema.sql`; the adapter contract is "map any datasource → `knowledge_record`,
   only `source` distinguishes it." First sub-decision: drain destination (HTTP endpoint vs.
@@ -35,13 +36,21 @@ decided / tried this before?"* Free + keyless wherever possible.
 - ✅ **Phase 0.1 — Chunked distillation + resilience** (2026-05-20). ~80k-char overlapping
   windows; per-chunk distill → merge + dedupe; non-array output is retryable (backoff) then
   skipped visibly — no silent data loss.
-- ▶ **Phase 1 — Operational log adapter (Vercel test env).** Log drain → durable sink;
-  `source='vercel-log'` adapter; redaction at ingestion; `/recall --source vercel-log`.
-- ☐ **Phase 2 — Payment & reconcile adapters (with redaction).** `source='reconcile'`
+- ✅ **Phase 0.2 — Retrieval hygiene + coverage** (2026-06-17 → 2026-09-12). Recency-decay
+  re-ranking (`--recency/--halflife`); subagent transcripts (`<session>/subagents/agent-*.jsonl`)
+  ingested by the hook and the sweep; `--embed-pending`; SessionStart `knowledge-ensure.mjs`
+  launches Docker so a reboot no longer silently stops ingestion.
+- ✅ **Phase 3 — Promotion pipeline** (2026-10-12, delivered as [[track:031-context-system-v2]]
+  P2/P3). Curated layers (`playbook:<agent>`, `wiki`, `track`) indexed into the same store;
+  tiered recall with status boost; `--credit` (raw → verified, hits); `--candidates <agent>`
+  (near-duplicate clusters across sessions + credited records, minus what the playbook already
+  covers) consumed by `/groom`; `type` validated on insert; store metrics in
+  `context-health.mjs --with-store`.
+- 💤 **Phase 1 — Operational log adapter (Vercel test env).** Log drain → durable sink;
+  `source='vercel-log'` adapter; redaction at ingestion; `/recall --source vercel-log`. Parked.
+- 💤 **Phase 2 — Payment & reconcile adapters (with redaction).** `source='reconcile'`
   (persist `/api/reconcile` output); `source='payment-event'` (Stripe/Mollie, gated redactor).
-- 💤 **Phase 3 — Scale + promotion pipeline.** Recurring-record clusters → promote into
-  wiki/memory; semantic dedup; store metrics; `--embed-pending` for model migration; swap
-  pgvector → managed only if scale demands; sweep should also scan worktree transcript dirs.
+- 💤 **Later:** swap pgvector → managed only if scale demands; sweep worktree transcript dirs.
 
 ## Log
 
@@ -55,6 +64,9 @@ decided / tried this before?"* Free + keyless wherever possible.
   volume (`sunbnb-knowledge-data`) + `--restart unless-stopped`, preserving all 68 records via
   pg_dump/restore. Provisioning `docker run` now documented in `.claude/scripts/knowledge-schema.sql`.
   (Was an anonymous volume with no restart policy — fragile to `docker rm`/reboot.)
+- **2026-10-12** — Roadmap refreshed by track 031: Phase 0.2 and Phase 3 recorded as done (the
+  promotion pipeline shipped as 031 P2/P3: curated indexing, tiered recall, credits, candidates).
+  Status → paused: nothing scheduled until an operational log source is wanted.
 
 ## Open decisions
 

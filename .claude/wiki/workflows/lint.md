@@ -19,7 +19,7 @@ Read-only health check on the wiki. **Detects** drift, bloat, and contradictions
 
 | Mode | Invocation | What runs | Token cost |
 |---|---|---|---|
-| **Quick** | `/wiki lint --quick` (alias of `/context check --scope wiki`); also the pre-push git hook | Mechanical script `.claude/scripts/detect-drift.mjs --scope wiki` — checks `sources:` paths, inline `path/file.ts#symbol` refs, `[[type:slug]]` cross-refs. No LLM. | ~0 |
+| **Quick** | `/wiki lint --quick` (alias of `/context check --scope wiki`); its one-line summary also prints at session start and in the pre-push hook | Mechanical script `.claude/scripts/context-health.mjs --scope wiki` — checks `sources:` paths, inline `path/file.ts#symbol` refs, `[[type:slug]]` / `[[track:…]]` cross-refs, status vocabulary, `last_verified` freshness (30 d stable / 90 d stale), edits after `last_verified`, line and `sources:` caps from `.claude/context/budgets.json`. No LLM. | ~0 |
 | **Full** | `/wiki lint` | Runs the script first, then performs LLM-augmented checks (contradictions, freshness narrative, semantic drift, bloat indicators) on what remains. | Real |
 
 **Use quick mode** for routine wiki drift detection. For multi-layer (wiki + canonical) drift, use `/context check`. **Use full mode** before a strategic `[[workflow:review]]` pass or when something feels off but quick lint reports clean.

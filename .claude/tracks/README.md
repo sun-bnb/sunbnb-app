@@ -69,6 +69,13 @@ the registry shows them all.
 - Frontmatter + status discipline, append-only `Log`, `[[type:slug]]` cross-refs.
 - Cross-ref types: the wiki's (`entity`, `flow`, `subsystem`, `workflow`) plus `track`.
 - One concern per track; split if it sprawls.
+- **Sub-documents.** A track may own companion files (a design, a baseline, a manual test
+  plan): `NNN-slug.<part>.md` or any name, with frontmatter `parent: NNN-slug` (+ optional
+  `title:`). They are listed under the parent in the registry, never as rows, and the health
+  check flags any `.md` here that is neither a track nor a sub-document.
+- **Status is frontmatter only.** `context-health.mjs` enforces the vocabulary, flags an
+  `active` track untouched for 45 days (handoff it or set `paused`/`done`), and flags a
+  registry that no longer matches the files.
 
 ## Operating it
 
@@ -78,8 +85,10 @@ See `workflows/`: **create** · **resume** · **handoff** · **close**. The **ha
 
 ## Registry
 
-`index.md` lists every track with its status, next action, and worktree. **Start there.**
-```
+`index.md` lists every track with its status, next action (the first line of its **Resume
+here**, capped at 220 chars), and worktree. **Start there.** It is **generated** — run
+`node .claude/scripts/tracks-index.mjs` after every handoff/close (`--check` tells you if it
+is stale; the session-start health line does too). Never edit it by hand.
 
 Legacy phased plans in `.claude/plans/` predate this layer and are not tracks; migrate one
 only if/when it becomes an active effort.

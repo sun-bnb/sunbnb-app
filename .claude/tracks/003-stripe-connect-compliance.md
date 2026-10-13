@@ -1,9 +1,9 @@
 ---
 id: 003-stripe-connect-compliance
 title: Stripe Connect / platform-collection compliance
-status: backlog
+status: done
 created: 2026-05-23
-updated: 2026-05-23
+updated: 2026-10-12
 worktree: null
 ---
 
@@ -67,6 +67,14 @@ on *payment capability* — a venue is hidden when it has **neither off-platform
 working Mollie connection** (it can't take any payment → unusable for the guest). So the usable-payment
 path is **off-platform-or-Mollie**; Stripe-consumer is not part of it, which is *why* the latent Stripe
 gap touches no real users. (Worth verifying + folding into [[subsystem:payments]] — see roadmap.)
+
+## Resume here
+
+- **Next action:** none — superseded. Consumer Stripe came back **on Connect from the start** in
+  [[track:028-multi-provider-payments]] (direct charges on the connected account, own-form
+  onboarding, commission in `application_fee_amount`), which delivers this track's open roadmap
+  items. The fee-clean pre-auth deposit for table reservations stays with
+  [[track:002-table-reservations]]. Re-read this file only for the compliance rationale.
 
 ## Roadmap
 
@@ -137,6 +145,9 @@ gap touches no real users. (Worth verifying + folding into [[subsystem:payments]
   Reconciled docs + wiki to "consumer = Mollie + Demo, Stripe = subscriptions only". Stripe survives
   for partner subscriptions only. **This track is now green-field** (build-on-Connect-if-reintroduced),
   not remediation of live non-compliant code.
+- **2026-10-12** — Closed as superseded (track 031 status pass): [[track:028-multi-provider-payments]]
+  rebuilt consumer Stripe on Connect (direct charges) and shipped 2026-10-08.
+
 
 ## Links
 

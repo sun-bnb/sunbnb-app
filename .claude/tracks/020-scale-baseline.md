@@ -1,3 +1,8 @@
+---
+parent: 020-large-venue-scale
+title: Scale baseline — measured reference figures
+---
+
 # Track 020 — scale baseline
 
 The measured reference this track's phases are judged against. Every figure here

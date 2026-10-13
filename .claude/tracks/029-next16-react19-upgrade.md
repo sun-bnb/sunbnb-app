@@ -1,9 +1,9 @@
 ---
 id: 029-next16-react19-upgrade
 title: Next.js 16 / React 19 upgrade — one web app at a time
-status: active
+status: done
 created: 2026-10-10
-updated: 2026-10-10
+updated: 2026-10-12
 worktree: null
 ---
 
@@ -17,12 +17,17 @@ Plan of record: `~/.claude/plans/plan-upgrade-to-latest-ticklish-snail.md` (appr
 
 ## Resume here
 
-- **State:** ALL FOUR web apps on Next 16.4 / React 19.3, pushed (`f03f0ea`), all four previews Ready. S5 done (root pins removed, new stack hoisted). S6 done (ESLint 9 flat config).
-- **State (promotion):** promoted to TEST 2026-10-10 (`test` = `f93173b`); all four test deploys Ready.
-- **State:** promoted to TEST at `4002d18`; defect fixes + full dependency sweep committed on top (`01d607c`..`7d330fc`), not yet pushed.
-- **Next action:** push `main` + promote to test when the founder asks; production is the founder's call. Follow-ups: react-hooks rules, deferred audit roots + version ceilings (roadmap).
-- **Carry forward to S3/S4 (MUI apps):** add `AppRouterCacheProvider` from `@mui/material-nextjs/v16-appRouter` (v9.5, MUI-version-agnostic) around the root layout, or every page fails hydration under Next 16. Also add `allowedDevOrigins: ['local.sunbnb.app']`.
-- **Watch:** since S5 the root hoists ONE Next/React stack for all four web apps (only `apps/mobile` nests its RN-pinned React 19.2.x). The S1–S4 root-pin scheme is retired; if a future per-app major upgrade is staged again, re-read the S1 log entry first.
+- **DONE 2026-10-12.** All four web apps on Next 16.4 / React 19.3 / ESLint 9 / Tailwind 4; S0–S6,
+  the audit pass, defect fixes and the full dependency sweep are committed and pushed on `main`
+  and promoted to TEST (`4002d18` + `01d607c..7d330fc`). Production is the founder's call
+  (`./deploy-to-production.sh`). Nothing for an agent to resume.
+- **Follow-ups live in the roadmap:** react-hooks lint rules; deferred audit roots + version
+  ceilings. Pick them up as ordinary tasks, not as this track.
+- **Keep in mind (canon now):** MUI apps need `AppRouterCacheProvider` from
+  `@mui/material-nextjs/v16-appRouter` around the root layout (wiki `design-system` pitfalls);
+  the root hoists ONE Next/React stack for the four web apps (only `apps/mobile` nests its
+  RN-pinned React). The S1–S4 root-pin scheme is retired — re-read the S1 log entry before
+  staging another per-app major upgrade.
 
 ## Roadmap
 
@@ -74,6 +79,10 @@ Per-app recipe and verification checklist: see the plan file.
 - 2026-10-10: **Promoted to TEST** (founder: "proceed to S6 and then promotion (fix any int test failures until success)"). Ran `./promote-to-test.sh` from Claude (sandbox off, background + log), per the explicit current-turn request. Everything passed on the first run: migrate:check OK; TEST DB had nothing to apply; lint 12/12; unit; integration; partner coverage floor. `test` advanced `92a71d0..f93173b`. The founder's uncommitted `027` track + `index.md` edits were stashed only for the run (the script's `git checkout test` would otherwise abort mid-way) and popped back afterwards; the pre-existing older stashes are untouched. Test deploys for all four projects Ready: test.sunbnb.app `/`, `/sites`, `/embed/<restaurant>` → 200; partnertest `/info`, `/sites` → 200; trytest → 200; admintest → Vercel SSO (deployment protection, as before).
 - 2026-10-10: **Security audit pass.** 85 → 28 findings, 0 critical. vitest 3 → 4.1.11 (critical vitest/tinypool/mocker advisories have no 3.x fix; the vite 8 / oxc transform needed `oxc: { jsx: { runtime: 'automatic' } }` in the user vitest config). npm 11.2's arborist crashes (`#loadPeerSet` edgesOut) when resolving this graph from scratch; npm 11.21 resolves it but gates install scripts behind `allowScripts`. Prisma 7.4.2 → 7.10, partner sharp → 0.35.5 (libvips CVEs; Next 16.4 wants ^0.35.4 anyway), lodash 4.18.1, @turbo/gen 2.11.7. **Tailwind 3 → 4** across all four apps (official upgrade tool plus hand fixes): `@source` for every shared package (the tool added none), MUI `enableCssLayer` + a layer-order `GlobalStyles`, removal of the packages' checked-in v3 `output.css` (its unlayered preflight overrode every v4 utility), `@theme inline` for next/font variables, v3-parity rules (button cursor, input `Field` background, responsive text-size-overrides-leading at 10 sites, react-day-picker restore rules in `base`), and one tool-corrupted JS expression (`colors.ring-3`). Verified by pixel-diffing 38 before/after screenshots across all four apps plus the full test matrix.
 - 2026-10-10: **Defects + dependency sweep.** Promote retry passed (`test` = `4002d18`; the first attempt's single till-test hook timeout was external contention on the shared local Postgres; it passed 4× standalone). Defects: partner tables labels (`t.raw`), user POS dead 400 query, `@repo/data` typecheck had silently checked nothing since TS2209 (fixed with rootDir + Bundler resolution; data-dev fixed the 109 hidden test type errors). Sweep in five verified waves (see roadmap). Notable findings: stripe 23 moves the default API to `2026-09-30.endive`, which removed PaymentIntent `payment_method_types`. Tap to Pay now uses `allowed_payment_method_types`, verified against Stripe test mode (terminal PI create/cancel, Checkout create/state/expire with metadata round-trip, account snapshot, account session). xmldom 0.9 throws on fatal parse (wrapped into MalformedReplyError). TS 6 defaults `types` to [] (apps list `google.maps`) and deprecates `baseUrl` (dropped). Next's incremental tsbuildinfo had masked TS 6 errors, so all workspaces were re-checked with `--incremental false`. ESLint 10 `no-useless-assignment` found 12 dead initializers (fixed so tsc's definite-assignment proves them). The @mui/codemod 9.5 CLI is broken (yargs 18 ESM); its transforms were run via jscodeshift. Icons v9 dropped `*Outline` (→ `*Outlined`, rendered pixel-identical). bcryptjs 3 verifies existing `$2a$` hashes. npm audit after sweep: 37 findings, 0 critical, roots braces / node-forge / mysql2 / deepmerge-ts / decode-uri-component / xcode's uuid@7 (all deferred, reasons above).
+- **2026-10-12** — Closed (track 031 status pass). Everything shipped and promoted to TEST; the
+  AppRouterCacheProvider and Tailwind 4 pitfalls were ingested into the wiki on 2026-10-10.
+  Remaining follow-ups (react-hooks rules, deferred audit roots) are ordinary tasks.
+
 
 ## Links
 

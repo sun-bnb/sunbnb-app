@@ -1,3 +1,8 @@
+---
+parent: 018-reservation-state-machine
+title: Reservation state machine — de facto extraction (P0)
+---
+
 # Reservation state machine — de facto extraction (track 018, P0)
 
 Extracted 2026-08-11 from code, not docs. Every claim carries a `file:line` anchor.

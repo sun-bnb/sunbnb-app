@@ -1,731 +1,285 @@
 # partner-dev playbook
 
-`partner-dev`'s curated, growing memory for `apps/partner`. Governed by
-`.claude/knowledge/README.md` (layer spec + trust ladder). Grow it via the gated
-retrospective; curate it via `workflows/groom.md`.
+`partner-dev`'s curated, growing memory for `apps/partner` — governed by `.claude/knowledge/README.md`.
 
 ## Navigation index
 
-What this playbook knows, by theme. Maintained by grooming; scan it before reading
-sections. *(Empty — entries are added as the agent learns. Each entry: a one-line
-pointer here + the full entry in its section below.)*
+What this playbook knows, by section. **Generated** from the entry headings and their `tags:` lines — read this block, then open an entry by its heading only when it (or a recall hit) points at it.
 
-- **Auth & ownership** — `requireSiteOwner` / `verifySiteOwnership` / sudo edge cases — _none yet_
-- **State machines** — operational status extension pattern (7-file checklist), color palette — see "Adding a new manage-page operational status"
-- **Test failures & fixes** — mock/fixture gotchas — see "Mock-contract test", "saveInventoryItemProperties", "auth-matrix ok/reject predicate"
-- **Accounting analytics remodel** — coverage-contract allowlist + analytics mock + TREND_WINDOWS extension pattern — see "Adding analytics actions to accounting/actions.ts"
-- **Bug patterns & fixes** — recurring partner-app bugs — see "verifySiteOwnership vs verifySiteAccess scope divergence", "Prisma upsert is not atomic — RSC-prefetch concurrency crash on manage page"
-- **Component decomposition** — manage page decomposition, shared state boundary, pinch handler scroll-target — see "Decomposing view.tsx manage monolith"
-- **Manage page naming** — hold/reserve/rent action-row distinction — see "Reserve vs Rent vs Hold terminology"
-- **Till conservation** — unreserveItem disconnect + splitWalkInSeat reduce paymentAmount; depart-split pattern — see "Till conservation in per-seat walk-in operations"
-- **Cash rental settlement (track 013 P3b)** — `createWalkInRental` `recordCashSettlement` param; Card(QR) path must NOT pass it; free path auto-skips — see "Cash walk-in rental TillEntry (P3b)"
-- **BedDetail state-machine patterns** — convertHoldToWalkIn in-place update + multi-day $transaction extend, pendingConfirm per-branch guards, inSync-gated toggle, walk-in disconnect depart — see "BedDetail state-machine patterns"
-- **Manage surface routing** — token-gated sub-routes, admin-tier gating, `validateManageToken` convention, `closeDay` cash-up-only contract, `DayCloseView` frontend pattern — see "Token-gated sub-routes and admin-tier gating on the manage surface", "closeDay — cash-up only, does not touch the floor", "DayCloseView — todayIso derivation and dual-fetch pattern"
-- **Till day-anchoring (track 016 P3/P4)** — reuse `siteTodayBounds(siteId)` for dayStart, `EmployeeTill` vs `EmployeeCashTotal` type split, mock defaults must carry full bucket shape — see "Wiring a data-layer signature change requiring a new required param into manage/actions.ts"; UI headline-vs-close-anchor split + locale date formatting — see "Day-anchored till UI (track 016 P4)"
-- **Viva merchant connect + terminal registry (track 024 W8 C1)** — idempotent connect (no re-issue invitation), UNGATED_ALLOWLIST for session-gated account actions, VivaTerminal upsert cross-site guard — see "Viva connect page and terminal registry"
-- **Viva card-present collect leg (track 024 W8 C2)** — generic result-shape mapping (`data.demo`/`data.card`/`checkoutUrl`) over branching on the caller's requested method, terminals-present as the chooser flag (no env var), the modal's `cancel()` "still processing" branch that keeps polling instead of closing, `toHaveBeenCalledWith` assertion decay when an action starts always passing a 4th opts arg — see "Card-present Collect leg: action contract + modal chooser"
-- **Rejected approaches** — dead-ends, so nobody re-tries them — see "React onWheel prop"
-- **Mollie lib tests** — mocking strategy for app/api/_lib/mollie.ts — see "Testing mollie.ts: mocking boundary + scope separator"
-- **Restaurant query tests** — mocking @repo/table-reservations-core while keeping real auth-helpers — see "Mocking @repo/table-reservations-core for queries.ts tests"
-- **Dual-scope dashboards (dine-in v2 Phase 5)** — sharing a client view across two owner types via a `scope` prop, extending the auth-matrix for a second token-or-session gate type — see "Restaurant-scoped orders dashboard: scope-prop view reuse + new gate type"
-- **Shared local dev environment** — sunbnb_test Postgres and the working tree can be concurrently used by a parallel agent session; diagnose before assuming a regression — see "Concurrent-session interference: git stash and shared local Postgres"
-- **Cross-package boolean-toggle plumbing (dine-in v2 Phase 6)** — a new `RestaurantInput` boolean needs FOUR touch points across two packages, not the two obvious ones — see "Adding a new Restaurant boolean toggle end-to-end"
-- **Partner AI assistant API (track 030 S2)** — SSE route + read-only tool registry under `lib/assistant/`; gate order, siteId bound by the route, route test as the auth "matrix", tsconfig `allowImportingTsExtensions` for `@repo/agent`, prisma-mock gaps — see "Assistant route + tools (track 030 S2)"
-- **Assistant safe writes (track 030 S3)** — proposal-only `propose_*` tools, `KindHandler` registry, apply/undo lifecycle, stale = re-diff, jsonb key-order trap, sudo gaps in child-row actions — see "Assistant proposals: propose / apply / undo (track 030 S3)"
-- **Assistant map preview (track 030 S4b)** — preview is DERIVED from the conversation + a tiny override store; ghosts as native google.maps overlays; schematic ghosts ride as synthetic renderer items — see "Assistant inventory preview on map/schematic (track 030 S4b)"
-- **Assistant inventory proposals (track 030 S4a)** — one `inventory_batch` kind: sim over pure `inventory/geometry.ts`, execute = the sim's `calls`, `Diff.basis`/`geometry`, expect-based undo staleness, pairing read from units — see "Assistant inventory proposals (track 030 S4a)"
-- **Assistant layout proposals (track 030 S4c)** — `layout_elements` / `layout_canvas` kinds, renderer `overlay` prop, element handles = id tail, restore finds created rows by signature — see "Assistant schematic layout proposals (track 030 S4c)"
-- **Assistant photo placement (track 030 S6a)** — `place_image` kind: copy-on-apply to a deterministic public blob path (undo check = URL path match), core writers `lib/site-images.ts`, the model only learns upload ids from the page-context `attachments` — see "Assistant photo placement (track 030 S6a)"
-- **Assistant spatial tools (track 030 G2)** — one local ENU frame (`lib/assistant/geo/*`: x east, y north; schematic y negated), `describe_site_area` + generic `measure` over feature refs, Overpass fetch is 3 raced mirrors (count fetch calls accordingly) — see "Assistant spatial tools: shared frame + describe/measure (track 030 G2)"
-- **Assistant system inspector (track 030 G3)** — `inspect({aspect,topic})` providers under `lib/assistant/inspect/`; generated-from-registry (snapshot schema, propose tool schemas) + one hand table (`OP_META`); lazy registry import to survive the tools/index cycle; test seams — see "Assistant inspect tool (track 030 G3)"
-- **No React component tests in apps/partner** — vitest.config.ts only globs `*.test.ts`, no jsdom/testing-library — see "Adding a new Restaurant boolean toggle end-to-end" (component-test note)
-
----
+<!-- nav:begin — generated by .claude/scripts/playbook-index.mjs; do not edit by hand -->
+- **Auth & ownership** (2)
+  - 2026-07-10 · Token-gated manage sub-routes and the admin tier — security-token, manage-page · track 013
+  - 2026-07-25 · Restaurant-scoped dashboard — scope prop + its own gate type — restaurant, security-token, auth-matrix · track 002
+- **State machines** (7)
+  - 2026-06-17 · Adding a manage-page operational status (comp example) — reservation, operational-status, bed-state · track 018
+  - 2026-06-17 · "Reserve" vs "Rent" vs "Hold" on the manage page — reservation, hold, walk-in
+  - 2026-06-17 · convertHoldToWalkIn — in-place update, locked multi-day extension — reservation, hold, conflict-guard
+  - 2026-06-17 · BedDetail confirm panel — guard `reservation` per branch — bed-detail
+  - 2026-06-17 · inSync-gated Group/Seat toggle and walk-in seat depart — reservation, sunbed-pair, walk-in
+  - 2026-06-21 · Multi-seat subset split — array param, lazy splitSet — reservation, multiselect · track 011
+  - 2026-07-10 · closeDay — cash-up only, never touches the floor — till, day-close · track 016
+- **Till & cash** (4)
+  - 2026-06-21 · Till conservation when peeling a seat off a cash walk-in — till, walk-in, collect · track 013
+  - 2026-06-21 · createWalkInRental — genuine cash vs Card(QR) TillEntry — till, rental, settlement · track 013
+  - 2026-07-23 · Absorbing a data-layer signature change (dayStart) — till, site-day, prisma-mock · track 016
+  - 2026-07-10 · Day-anchored till UI — headline vs sweepable, locale dates — till, day-close, i18n · track 016
+- **Accounting analytics** (2)
+  - 2026-07-19 · Invoice.totalCharge is NET, totalAmount is GROSS — invoice, vat, accounting
+  - 2026-07-10 · Adding analytics actions and summary cards to accounting — accounting, analytics, coverage-contract
+- **Test failures & fixes** (8)
+  - 2026-06-16 · Mock-contract test — parse sources, never vi.importActual — mock-contract, prisma-mock
+  - 2026-06-14 · Un-mocked prisma calls return undefined, not throw — prisma-mock, inventory
+  - 2026-06-16 · auth-matrix ok/reject predicate checks the error MESSAGE — auth-matrix, security-token
+  - 2026-06-17 · Mollie route + lib tests — the mocking boundary — mollie, oauth
+  - 2026-06-17 · queries.ts tests — mock the core, keep the gate real — restaurant, auth-helpers
+  - 2026-07-10 · Employee.accountId is an FK to PartnerAccount, not User — employee, partner-account, integration-tests
+  - 2026-07-25 · No React component tests — verify .tsx via tsc — testing, vitest
+  - 2026-07-25 · Concurrent sessions share the tree and local Postgres — testing, integration-tests, postgres
+- **Bug patterns & fixes** (2)
+  - 2026-06-21 · Prisma upsert races under RSC prefetch (P2002) — reservation-day, prisma, race
+  - 2026-07-05 · Emoji glyphs ignore CSS font-size and clip in small tiles — bed-state, grid
+- **Cross-package plumbing** (1)
+  - 2026-07-25 · Restaurant boolean toggle — four touch points, not two — restaurant, settings · track 002
+- **Card-present payments (Viva, track 024)** (2)
+  - 2026-08-30 · Viva connect idempotency, account actions, terminal upsert guard — viva, partner-account, viva-terminal · track 024
+  - 2026-08-30 · Card-present Collect leg — frozen contract, returned-shape mapping — collect, reservation-payment, viva-terminal · track 024
+- **Partner AI assistant (track 030)** (9)
+  - 2026-10-11 · `/api/assistant` route and tool plumbing — assistant, security · track 030
+  - 2026-10-11 · Proposal lifecycle gotchas (apply / undo / sudo) — assistant, proposal, undo, sudo · track 030
+  - 2026-10-11 · Inventory ghost preview on map and schematic — assistant, ghost-preview, schematic · track 030
+  - 2026-10-11 · Inventory proposals — simulate with the actions' own geometry — assistant, inventory, parcel · track 030
+  - 2026-10-11 · Schematic layout proposals (elements + canvas) — assistant, schematic, layout-element · track 030
+  - 2026-10-11 · Photo placement (`place_image`) — assistant, image, blob · track 030
+  - 2026-10-11 · Spatial tools — one local frame, generic relate/measure — assistant, geo, osm · track 030
+  - 2026-10-11 · Inspect tool — providers generate from live registries — assistant, inspect · track 030
+  - 2026-10-11 · Act-immediately — createAndApply test wiring — assistant, proposal · track 030
+- **Rejected approaches** (1)
+  - 2026-06-15 · React `onWheel` prop for wheel zoom (passive listener no-op) — schematic, zoom
+<!-- nav:end -->
 
 ## Auth & ownership
 
-<!-- Entry format:
-### YYYY-MM-DD: <concise title>
-**Problem:** what went wrong / what was non-obvious
-**Solution:** what actually worked
-**Prevention:** how a future session avoids it (cite path/file.ts#symbol) -->
+### 2026-07-10: Token-gated manage sub-routes and the admin tier
+tags: entities=security-token,manage-page · files=apps/partner/app/sites/[id]/manage/token.ts · track=013
+**Problem:** Manage sub-pages (`/manage/summary`, `/manage/close`) are reached with a staff token, not a session; admin-only ones need a second tier.
+**Solution:** Each sub-route page calls `validateManageToken(params.id, key)` (`apps/partner/app/sites/[id]/manage/token.ts#validateManageToken` → `{ ok, isAdmin, site }`), renders `<ErrorCard showBackLink={false} />` on failure, and admin pages also check `!result.isAdmin` (the actions gate too). Tiers: `['all']`/`['manage_site']` → floor-staff ops via `verifySiteAccess` (`hasSome`); `+ ['admin']` → `verifySiteAdmin` (till admin). `manage/actions.ts`'s private `verifySiteOwnership` wraps `verifySiteAccess` — one scope rule.
+**Prevention:** New admin-only sub-route → same two-check page, `DailySummaryView.tsx` as reference. The token result has no timezone: pages needing the venue day fetch `timeZone/locationLat/locationLng` and use `siteDayKey(buildSiteTimezone(site))` (see `close/page.tsx`).
+
+### 2026-07-25: Restaurant-scoped dashboard — scope prop + its own gate type
+tags: entities=restaurant,security-token,auth-matrix · files=apps/partner/lib/auth-helpers.ts · track=002
+**Problem:** One orders dashboard serves two owner types; the auth-matrix fixtures can't exercise a restaurant-keyed token gate.
+**Solution:** The view takes `scope: { kind: 'site' | 'restaurant'; id }` and `scopedX(scope, ...)` dispatchers pick the action module; the two `'use server'` modules share status-machine/tab logic via the non-server `orders/shared.ts` (outside the coverage-contract glob). `verifyRestaurantAccess` (`apps/partner/lib/auth-helpers.ts#verifyRestaurantAccess`) compares `restaurant.partnerAccountId` and deliberately reuses `hasSome: ['all','manage_site']` so staff tokens need no re-provisioning (acknowledged open item). It needs its OWN gate type `'restaurant-token-or-session'` whose appliers `stubOwnerRestaurant()` — the site appliers stub only `prisma.site.findUnique`, so the site gate type passes vacuously.
+**Prevention:** Before reusing a gate type, check which `prisma.*.findUnique` its appliers stub. `app/restaurants/layout.tsx` only checks a global flag (`apps/partner/app/flags.ts`) — no session boundary, so token-only pages nest under it unchanged.
 
 ## State machines
 
-### 2026-06-17: Adding a new manage-page operational status (comp example)
-**Pattern:** A new `operationalStatus` value for the manage page needs a 7-file checklist:
-1. `@repo/data/reservation-status.ts` — add the constant (e.g. `OP_COMP = 'comp' as const`).
-2. `manage/actions.ts` — add the create action (mirror `blockBed`) and the release action (mirror
-   `unblockBed`); import the new constant. Both must go through `reserveWithConflictGuard`.
-3. `app/test/gated-actions.ts` — register both actions as `token-or-session`; auth-matrix picks
-   them up automatically (coverage-contract fails if you skip this).
-4. `view.tsx` AND `ParcelView.tsx` — **both** have their own copy of `BedState` + `getBedState`;
-   both need the new case. `POOL_STATE_STYLES` and `POOL_ICONS` only exist in `ParcelView.tsx`.
-5. `ManageToolbar.tsx` — extend its local `BedState` type; add counter segment to the readout.
-6. `BedDetail.tsx` — extend its local `BedState` type, `getBedState`, `stateBadgeColors`,
-   `stateLabels`, `TOGGLE_VISIBLE_STATES`; add action from available state + state UI section.
-7. `types/shared.ts` `Reservation` interface — add any new durable field (e.g. `isComp?: boolean`).
-**Color guidance:** green=free, yellow=expected, blue=checked-in, orange=walked-in, gray=blocked,
-purple=comp. Pick the next unused hue for P5+ states.
-**Revenue exclusion:** `paymentAmount: 0` + no `processConfirmedReservation` call = no Invoice →
-automatically excluded from invoice-driven accounting. No accounting changes needed.
+### 2026-06-17: Adding a manage-page operational status (comp example)
+tags: entities=reservation,operational-status,bed-state · files=packages/floor-core/src/bed-state.ts · track=018
+**Problem:** A new `operationalStatus` (e.g. `OP_COMP`) touches more than the action.
+**Solution:** (1) constant in `packages/data/src/reservation-status.ts`; (2) create + release actions mirroring `blockBed`/`unblockBed`, both through `reserveWithConflictGuard`; (3) register both as `token-or-session` in `app/test/gated-actions.ts`; (4) `BedState`/`getBedState`/`getCellAppearance` live in `packages/floor-core/src/bed-state.ts` (shared with mobile — one copy) and the `Reservation` view-model in `packages/floor-core/src/types.ts` (durable fields like `isComp`); (5) `BedDetail.tsx` local `stateBadgeColors`/`stateLabels`/`TOGGLE_VISIBLE_STATES` + the state's action section; (6) `ManageToolbar.tsx` counter; pick the next unused hue.
+**Prevention:** `paymentAmount: 0` + no `processConfirmedReservation` = no Invoice → excluded from accounting for free.
 
-## Accounting analytics — extension patterns
+### 2026-06-17: "Reserve" vs "Rent" vs "Hold" on the manage page
+tags: entities=reservation,hold,walk-in · files=apps/partner/app/api/reservations-cleanup/route.ts
+**Problem/Solution:** (decided with user) "Rent" = paid walk-in (`reserveItem`); "Reserve" = hold (`holdBed`: `status=RESERVATION_HELD`, `operationalStatus=OP_EXPECTED`, today-only, no payment; rides the existing yellow lane and check-in/no-show). `RESERVATION_HELD` is in `BLOCKING_STATUSES`; the cleanup cron sweeps expired holds with stale walk-ins (`status: { in: [PAID_IN_CASH, HELD] }`).
+**Prevention:** A state mapping to an EXISTING `operationalStatus` skips the bed-state checklist — still the action, gated-actions entry, cron clause, i18n, tests.
 
-### 2026-07-19: Invoice header field semantics — totalCharge is NET, totalAmount is GROSS
-**Problem:** A phase-5F report claimed `Invoice.totalCharge` is the gross (VAT-inclusive) amount and derived net as `totalCharge - totalTax`. That is INVERTED. In every `processConfirmed*` creator (`packages/data/src/payment.ts`): `totalCharge` = summed line BASE amounts (net), `totalTax` = VAT, `totalAmount` = gross (VAT-inclusive, what the consumer paid). The dine-in tabs accounting card initially shipped with the inverted mapping and showed net-minus-VAT as "net".
-**Solution:** When rendering or aggregating invoice headers: net = `totalCharge`, VAT = `totalTax`, gross = `totalAmount`; sanity check `totalCharge + totalTax ≈ totalAmount`. Same convention at line level (`charge`/`tax`/`amount`).
-**Prevention:** Don't infer money-field semantics from names — read the creating function in `payment.ts` and check the arithmetic identity against a real row before wiring a display.
+### 2026-06-17: convertHoldToWalkIn — in-place update, locked multi-day extension
+tags: entities=reservation,hold,conflict-guard · files=apps/partner/app/sites/[id]/manage/actions.ts
+**Problem:** Converting a hold in place needs no conflict check (the seat is already this hold's), but extending `to` into future days races concurrent consumer bookings.
+**Solution:** Today-only: `prisma.reservation.update` on the same row. With `until`: find + conflict-check + update in one `$transaction` with `SELECT ... FOR UPDATE` (as `reserveWithConflictGuard`), excluding the hold's own id (`id: { not: hold.id }`) or it is its own false positive. `toDate` is always written.
+**Prevention:** The PrismaCient mock's `$transaction: vi.fn((arg) => arg(prisma))` lets tests chain `findFirst` (hold, then conflict) and `update` on one mock.
 
+### 2026-06-17: BedDetail confirm panel — guard `reservation` per branch
+tags: entities=bed-detail · files=apps/partner/app/sites/[id]/manage/BedDetail.tsx
+**Problem:** `runPendingConfirm` required a non-null `reservation` before any case; `'unreserve'` targets `item.id` and broke.
+**Solution/Prevention:** Guard inside the branches that need the reservation (`'no-show'`, `'depart'`); item-targeted cases (`'cancel'`, `'unreserve'`) must not be blocked by a top-level guard.
 
-### 2026-07-10: Adding analytics actions to accounting/actions.ts
-**Pattern:** When adding new server actions to `accounting/actions.ts`:
-1. **TREND_WINDOWS const** — extend `[7,30,365]` to `[1,7,30,365]` to support single-day window. The `const` drives the type used in `getOperationsTrend`'s guard expression.
-2. **analytics mock** — add any new `export async function` from `packages/data/src/analytics.ts` to `apps/partner/__mocks__/@repo/data/analytics.ts` as `vi.fn().mockResolvedValue(...)`. The mock-contract test parses both files with regex and fails with a clear "missing exported functions" message if you forget.
-3. **coverage-contract allowlist** — every new `export async function` in `accounting/actions.ts` must be added to `UNGATED_ALLOWLIST` in `app/test/coverage-contract.test.ts` with the auth pattern documented. The coverage-contract test enumerates all `'use server'` exports via glob and fails if any are ungoverned.
-4. **No gated-actions entry needed** for read-only session+owner analytics actions — they're allowlisted (read-only, session-gated, ownership via `site.userId !== session.user.id`), not token-or-session.
-**Prevention:** Run `npm run test` and watch for `coverage-contract` and `mock-contract` failures immediately after adding any new action or analytics import. Both tests give pinpoint diagnostics.
+### 2026-06-17: inSync-gated Group/Seat toggle and walk-in seat depart
+tags: entities=reservation,sunbed-pair,walk-in · files=apps/partner/app/sites/[id]/manage/BedDetail.tsx
+**Problem:** A paired walk-in is ONE row across seats: a Group toggle on an out-of-sync group invites an action that hits the conflict guard, and "depart one seat" via `markDeparted` frees the whole row.
+**Solution:** Render [Group | Seat] only when `inSync` (all `groupItems` share the selected item's active reservation id, or all free), else a non-interactive "Seat" indicator. Seat-mode depart of a walked-in group item = `unreserveItem(itemId, ..., false)` (disconnect) when `state === 'walked-in' && !applyToPair && inSync && groupItems.length > 0`; every other depart path stays `markDeparted` — a per-seat action on a shared row disconnects the item, never transitions the row. `cancelReservation` is whole-reservation by design.
 
-### 2026-07-10: Replacing the monthly summary cards — source-summary pattern
-**Pattern:** When redesigning the accounting summary cards to use `getMonthlySourceSummary`:
-- The action (`getMonthlySummary`) fetches current + prev month via `Promise.all` server-side and returns `{ current: MonthlySourceSummary, prevTotal: number }` — keeps the delta calculation off the client and avoids two separate effects.
-- Use a local interface in view.tsx mirroring `MonthlySourceSummary` rather than importing from `@repo/data/analytics` (client bundle isolation).
-- `salesCount` already exists in `Till` namespace; add it separately to `SiteAccounting` namespace for transaction counts — they're different plural formats and must remain independent.
-- Remove `grandTotal`/`totalTax`/`orderTotal`/`reservationTotal` useMemos when they're no longer rendered; keep `totalTransactions` (used by the fiscal-tables empty-state guard).
-- i18n: remove dead keys in one block replacement so en/es/fi stay in lock-step (73 keys each). Verify with `python3 -c "import json; [print(lang, len(json.load(open(f'messages/{lang}.json'))['SiteAccounting'])) for lang in ['en','es','fi']]"`.
-**Prevention:** Run `npx tsc --noEmit` after the card swap to catch any dangling refs to removed computed variables.
+### 2026-06-21: Multi-seat subset split — array param, lazy splitSet
+tags: entities=reservation,multiselect · files=apps/partner/app/sites/[id]/manage/view.tsx · track=011
+**Problem:** `markDeparted(..., splitItemIds?: string[])` / `convertHoldToWalkIn(..., applyToGroup, splitItemIds?)` split a PROPER subset into ONE new reservation; all items → whole-row path.
+**Solution:** (1) Compute `splitSet` as `!applyToGroup && reservation.items ? ... : []` — an unconditional `.some()` crashes tests that mock `findFirst` without `items`. (2) Callers passing a bare `item.id` must become `[item.id]`; TS does not flag it, only `.filter is not a function` at runtime — grep every caller. `view.tsx#getSelectionGroups` computes `isSubset` per reservation (full floor for `totalSeats`) for the bulk actions.
+
+### 2026-07-10: closeDay — cash-up only, never touches the floor
+tags: entities=till,day-close · files=apps/partner/app/sites/[id]/manage/actions.ts · track=016
+**Problem:** The first `closeDay` bulk-departed CHECKED_IN/WALKED_IN rows — wrong: a calendar-day change mutates no reservation (occupants age out of the window, stayovers carry over, blocks persist).
+**Solution:** `closeDay` = `verifySiteAdmin` + `closeAllOpenTills(siteId, dayStart)` → `{ status, closedCount, totalClosed, carryOverClosed }`, idempotent. The absence of `departedCount` is the contract, pinned by unit + integration tests.
+**Prevention:** Expiry is the cleanup cron + `ReservationDay` rows; never add floor mutations to a till close.
+
+## Till & cash
+
+### 2026-06-21: Till conservation when peeling a seat off a cash walk-in
+tags: entities=till,walk-in,collect · files=apps/partner/app/sites/[id]/manage/actions.ts · track=013
+**Problem:** Freeing one seat of a multi-seat cash walk-in without reducing `paymentAmount` leaves that seat's cash in the till.
+**Solution:** `unreserveItem`'s disconnect branch recomputes `paymentAmount: computeWalkInAmount(remainingItems, ...)` alongside the `disconnect`. `splitWalkInSeat` = peel without departing (same `$transaction` as the depart-split, new row stays `walked-in`, returns `{ status:'ok', reservationId }`; only cash + `walked-in` + multi-item). BedDetail's Collect in Seat mode calls it, then opens `CollectPaymentModal` on the returned id via `collectTargetId` — on close reset BOTH `showCollect` and `collectTargetId` or a stale id leaks.
+**Prevention:** Assert `original.paymentAmount + new.paymentAmount == originalTotal` in integration tests. Unit-test `$transaction` bodies with `mockImplementationOnce(async (fn) => fn({ reservation: { update: vi.fn(args => { captured = args }), create: vi.fn() } }))`.
+
+### 2026-06-21: createWalkInRental — genuine cash vs Card(QR) TillEntry
+tags: entities=till,rental,settlement · files=apps/partner/app/sites/[id]/manage/CreateRentalModal.tsx · track=013
+**Problem:** Cash rentals need `recordSettlement`, but the Card(QR) path also calls `createWalkInRental` with `paymentType='cash'` (persist the amount before Mollie) — recording there double-counts.
+**Solution:** Separate `recordCashSettlement` flag: `CreateRentalModal` maps card → `'cash'` + `false`, cash → `true`, free → `false`. The action records a `TillEntry` only when flag AND `paymentType === 'cash'` AND `paymentAmount > 0`, using the guarded per-booking amount (never recomputed). Same flag on `reserveItem`/`convertHoldToWalkIn`.
+**Prevention:** Unit invariants: cash → `recordSettlement` with `rentalBookingId` + amount; card/free → not called. New `@repo/data/till` exports go into `apps/partner/__mocks__/@repo/data/till.ts`.
+
+### 2026-07-23: Absorbing a data-layer signature change (dayStart)
+tags: entities=till,site-day,prisma-mock · files=apps/partner/app/sites/[id]/manage/actions.ts · track=016
+**Problem:** `@repo/data/till` added a required `dayStart: Date` and split `EmployeeTill` (bucketed) from `EmployeeCashTotal`; partner broke in three non-obvious places.
+**Solution:** (1) Reuse the private `siteTodayBounds(siteId)` (`apps/partner/app/sites/[id]/manage/actions.ts#siteTodayBounds`) — don't re-derive `siteDayBounds(buildSiteTimezone(site))` inline. (2) A UI file whose data didn't change can still fail typecheck via an `import type` of the split-away type — type-only rename. (3) `mock-contract` checks export parity, NOT default resolved shapes — update `mockResolvedValue` to the bucketed shape or end-to-end tests read `undefined` silently. (4) `toHaveBeenCalledWith(SITE_ID)` fails once a second arg appears — widen to `expect.any(Date)`, never a literal Date.
+**Prevention:** Work outward: grep imports of the function AND its return types → mock defaults → call assertions → type-only UI renames.
+
+### 2026-07-10: Day-anchored till UI — headline vs sweepable, locale dates
+tags: entities=till,day-close,i18n · files=apps/partner/app/sites/[id]/manage/DayCloseView.tsx · track=016
+**Problem:** When the till gained a `today` bucket beside the sweepable `total` (today + carryOver), re-pointing the headline must not change what the close action reports.
+**Solution:** `TillSheet`/`DailySummaryView` lead with `today.total` but keep `confirmBody`/`hasBalance`/the close gate on sweepable `total`; pair a re-pointed total with its own count (`today.count`). Short dates: `useLocale()` + `toLocaleDateString(locale, { day:'numeric', month:'short' })` — don't hardcode `'en'` like the older `calendar/view.tsx`/`TrendsView.tsx`.
+**Prevention:** When a track states an invariant ("X always uses the sweepable total"), grep every consumer (gates, confirm copy, paired counts) before pattern-replacing.
+
+## Accounting analytics
+
+### 2026-07-19: Invoice.totalCharge is NET, totalAmount is GROSS
+tags: entities=invoice,vat,accounting · files=packages/data/src/payment.ts
+**Problem:** A report inferred `totalCharge` = gross from the name and the dine-in tabs card shipped showing net-minus-VAT as "net". Canon: `.claude/wiki/entities/invoice.md` (`totalCharge` net · `totalTax` · `totalAmount` gross; same at line level).
+**Prevention:** Never infer money-field semantics from names — read the `processConfirmed*` creator in `packages/data/src/payment.ts` and check `totalCharge + totalTax ≈ totalAmount` on a real row.
+
+### 2026-07-10: Adding analytics actions and summary cards to accounting
+tags: entities=accounting,analytics,coverage-contract · files=apps/partner/app/sites/[id]/accounting/actions.ts
+**Problem:** New read-only analytics actions trip two contract tests and the client-bundle boundary if added naively.
+**Solution:** (1) `TREND_WINDOWS` (`as const`) drives the window guard — extend it. (2) New exports in `packages/data/src/analytics.ts` must be mirrored in `apps/partner/__mocks__/@repo/data/analytics.ts`. (3) New `'use server'` exports in `accounting/actions.ts` go in `UNGATED_ALLOWLIST` with their auth pattern (read-only session+owner, not `token-or-session`). (4) Compute month deltas server-side in one `Promise.all` (`getMonthlySummary` → `{ current, prevTotal }`); the view mirrors the type locally rather than importing `@repo/data/analytics` (client bundle). (5) Remove dead i18n keys in one block so en/es/fi stay in lock-step; verify namespace key counts with a one-line `node -e` over `messages/*.json`.
+**Prevention:** `npm run test` right after adding an action — the contract tests pinpoint the miss; `npx tsc --noEmit` catches dangling `useMemo`s after a card swap.
 
 ## Test failures & fixes
 
-### 2026-06-16: Mock-contract test — source parsing vs dynamic import
-**Problem:** Writing a contract test that checks mocks are a superset of real module exports.
-Two traps: (1) vitest aliases redirect `@repo/data/*` to mock files at import time, so
-`vi.importActual('@repo/data/subscription')` still returns the mock. (2) Mock files use
-`export const name = vi.fn()` — not `export const name = () =>` — so a strict
-`(?:\(|function)` regex on mock sources returns no matches.
-**Solution:** (a) Parse the REAL source files from `packages/data/src/*.ts` via `fs.readFileSync`
-and regex — alias-independent, no DB side-effects. (b) Use two different regexes: narrow
-pattern for real files (exclude exported object/const literals: require `(?:\(|function)`
-after `=`); wide pattern for mock files (`export const (\w+) =` catches `vi.fn()`).
-(c) For the Prisma client model list, use `Prisma.dmmf.datamodel.models` from `@prisma/client`
-directly — connection-free, not aliased, gives PascalCase names.
-(d) For the PrismaCient mock key check, parse the mock source for `/^  (\w+):\s*\{/gm`
-(two-space-indented keys of the top-level object) — works without importing the TS mock.
-**Prevention:** See `apps/partner/app/test/mock-contract.test.ts`. `spatial_ref_sys` is
-excluded (PostGIS system table, never queried via Prisma delegate in partner). Do NOT
-use `vi.importActual` with package paths for the "real" side; always use file paths.
+### 2026-06-16: Mock-contract test — parse sources, never vi.importActual
+tags: entities=mock-contract,prisma-mock · files=apps/partner/app/test/mock-contract.test.ts
+**Problem:** vitest aliases redirect `@repo/data/*` to mocks even for `vi.importActual`, and mock files use `export const x = vi.fn()` so a `(?:\(|function)` regex finds nothing.
+**Solution:** Read the REAL `packages/data/src/*.ts` via `fs.readFileSync` + a narrow regex (require `(?:\(|function)` after `=`); a wide `export const (\w+) =` regex for mocks; `Prisma.dmmf.datamodel.models` for the model list; the PrismaCient mock's keys via `/^  (\w+):\s*\{/gm`. `spatial_ref_sys` excluded. Mocks may be supersets.
 
-### 2026-06-14: saveInventoryItemProperties dual-write mock exhaustion
-**Problem:** Adding SunbedGroup dual-write to `saveInventoryItemProperties` added 3 extra `prisma.inventoryItem.findUnique` calls (fetch `sunbedGroupId` for current item, for pair, then re-fetch `siteId` for group creation). Existing test only mocked 3 calls; the 4th–6th returned `undefined`, crashing with `TypeError: Cannot read properties of undefined (reading 'id')` on `newGroup.id`.
-**Solution:** Extend the `mockResolvedValueOnce` chain to cover all sequential `findUnique` calls in order, plus mock `prisma.sunbedGroup.create` and `prisma.inventoryItem.updateMany`.
-**Prevention:** When a server action calls `findUnique` multiple times in sequence, count them carefully and chain `mockResolvedValueOnce` for each. Any un-mocked call returns `undefined` (not throws), so the crash can appear far from the missing mock.
+### 2026-06-14: Un-mocked prisma calls return undefined, not throw
+tags: entities=prisma-mock,inventory · files=apps/partner/app/sites/[id]/inventory/actions.ts
+**Problem:** Three extra `prisma.inventoryItem.findUnique` calls in `saveInventoryItemProperties` crashed an existing test far from the change (`reading 'id'` of undefined) because only three were chained.
+**Solution/Prevention:** Count every sequential call and chain `mockResolvedValueOnce` for each, plus new delegates. An unstubbed `vi.fn()` resolves `undefined` silently; the crash surfaces at the first property read.
 
-### 2026-06-16: auth-matrix ok/reject predicate — downstream stubs vs auth errors
-**Problem:** Auth-matrix "ok" scenario needed to distinguish "auth passed, downstream
-stub returned error" from "auth gate rejected." A single `status === 'error'` predicate
-would false-fail when the downstream mock returned wrong data (e.g. `markDeparted`
-needs `operationalStatus: 'checked-in'`; with `'expected'` the action returns
-`{ status: 'error', errors: ['Cannot mark departed from: expected'] }` — same shape as
-an auth rejection). Setting up per-action stubs in a flat `beforeEach` is fragile.
-**Solution:** Check the error *message* not just the status. Auth gate helpers emit a
-fixed set of messages: `'Not authenticated'`, `'Not authorized'`, `'Invalid or expired
-access key'`. assertReject verifies status='error' AND errors contains one of these.
-assertOk verifies errors contains NONE of these (downstream errors like "Reservation not
-found" are acceptable — the test only cares that auth passed). This made the runner
-robust to stub gaps without forcing per-action stub configuration.
-**Prevention:** See `AUTH_ERROR_MESSAGES` in `apps/partner/app/test/auth-matrix.ts`.
-When extending the matrix to new actions, check that the auth-gate helper emits one of
-those three messages on rejection.
+### 2026-06-16: auth-matrix ok/reject predicate checks the error MESSAGE
+tags: entities=auth-matrix,security-token · files=apps/partner/app/test/auth-matrix.ts
+**Problem:** A downstream stub returning wrong data yields `{ status:'error' }` with the same shape as an auth rejection; a status-only predicate false-fails "ok" scenarios.
+**Solution:** `AUTH_ERROR_MESSAGES` (`'Not authenticated'`, `'Not authorized'`, `'Invalid or expired access key'`): assertReject needs one in `errors`, assertOk needs NONE (business errors are fine). "ok" scenarios run the body past the gate with `undefined` from every unstubbed delegate — new actions must guard (`?? []`, `if (!row) return {status:'error'}`); an unhandled throw fails a scenario unrelated to auth. Route handlers (`kind:'route'`) have no runner: allowlist them and test 401/403/sudo/flag cases in the route's own test with the REAL gate over prisma mocks.
+**Prevention:** A new gate helper must emit one of the three messages; lifecycle-style helpers return `['forbidden', 'Not authorized']`.
 
-### 2026-06-16: verifySiteOwnership vs verifySiteAccess scope divergence
-**Problem:** Two separate token-gate implementations in the codebase with different scope
-requirements. `verifySiteOwnership` (manage/actions.ts) uses `resources: { hasSome:
-['all', 'manage_site'] }` — accepts either scope. `verifySiteAccess` (lib/auth-helpers.ts)
-uses `resources: { has: 'all' }` — requires exactly `'all'`. A token with only
-`'manage_site'` scope is accepted for manage-page actions but rejected for orders actions.
-**Discovery:** Confirmed by reading both source files; NOT surfaced by unit-mode matrix
-(mock returns null for both "wrong scope" cases — the Prisma where clause filter is not
-executed on a vi.fn()). Requires integration test (Phase 0.2b) to confirm.
-**Prevention:** When adding a new token-gated action, check which helper it uses and which
-scope its tokens must include. Staff tokens for manage-only should use `'manage_site'`;
-tokens needing full access (orders, etc.) must have `'all'`.
+### 2026-06-17: Mollie route + lib tests — the mocking boundary
+tags: entities=mollie,oauth · files=apps/partner/app/api/_lib/mollie.ts
+**Problem:** `_lib/mollie.ts` mixes raw `fetch` (OAuth tokens), the `@mollie/api-client` SDK and `@repo/data/mollie-tokens` (imports Prisma).
+**Solution:** `vi.stubGlobal('fetch', vi.fn())` + `vi.unstubAllGlobals()`; `vi.mock('@mollie/api-client', () => ({ default: vi.fn() }))`; `vi.mock` `@repo/data/mollie-tokens` and `@repo/data/env` explicitly — they are NOT aliased in `vitest.config.ts` (nor is `@mollie/api-client`, imported directly by `readiness-check`); dynamic `import('@repo/data/PrismaCient')` resolves through the alias. Redirects are 307 (`headers.get('location')`); cookies go in the `cookie` header of `NextRequest`.
+**Prevention:** `OAUTH_SCOPES` joins with `+` → `%2B` in the URL; Mollie accepts it — if that changes, switch to a space (RFC 6749).
+
+### 2026-06-17: queries.ts tests — mock the core, keep the gate real
+tags: entities=restaurant,auth-helpers · files=apps/partner/app/restaurants/[id]/queries.test.ts
+**Problem:** `restaurants/[id]/queries.ts` calls core read helpers that run real code over the mocked Prisma client.
+**Solution:** `vi.mock('@repo/table-reservations-core', ...)` with only the used functions; leave `lib/auth-helpers.ts` real so `requireRestaurantOwner` runs over `auth()` + the Prisma mock. Queries return `null` on failure (assert `toBeNull()`); `.not.toHaveBeenCalled()` on the core mock proves the gate fires first.
+**Prevention:** Mock outbound data calls, keep the inbound gate real. `queries.ts` is outside the coverage-contract glob.
+
+### 2026-07-10: Employee.accountId is an FK to PartnerAccount, not User
+tags: entities=employee,partner-account,integration-tests · files=apps/partner/app/test/fixtures.ts
+**Problem:** `prisma.employee.create({ data: { accountId: user.id } })` FK-fails in integration tests — the relation targets `PartnerAccount.userId` (`packages/data/prisma/schema.prisma#model-Employee`).
+**Solution/Prevention:** `createTestPartnerAccount(user.id)` (`apps/partner/app/test/fixtures.ts`) before any Employee row.
+
+### 2026-07-25: No React component tests — verify .tsx via tsc
+tags: entities=testing,vitest · files=apps/partner/vitest.config.ts
+**Problem:** "Component test" asks on client `.tsx` files have nothing to extend: `vitest.config.ts` `include` is `app|lib|components/**/*.test.ts` — no `.tsx`, no jsdom, no `@testing-library/react`.
+**Solution/Prevention:** Verify with `npx tsc --noEmit` + lint + source review; extract separable logic to a `.ts` module and test that; flag the gap. Introducing jsdom + RTL is an infrastructure decision for the orchestrator, not a one-file addition.
+
+### 2026-07-25: Concurrent sessions share the tree and local Postgres
+tags: entities=testing,integration-tests,postgres · files=apps/partner/vitest.integration.config.ts
+**Problem:** A concurrent session in the same working tree broke a `git stash`/`pop` round-trip and made `test:integration` throw non-deterministic FK-violation/`deadlock detected` errors in untouched files (its connections showed in `pg_stat_activity`).
+**Solution:** Never `git stash` for a baseline — use `git show HEAD:path` / `git diff HEAD -- path`. On flaky failures in files you didn't touch: run only your file (`npx vitest run <file> --config vitest.integration.config.ts`), check `docker exec sunbnb-postgres psql -U postgres -c "SELECT datname, count(*) FROM pg_stat_activity GROUP BY datname;"`, re-run once clear. `git diff --stat <path>` before "fixing" a red test you never touched — a parallel packet may have left an in-flight state that isn't yours to absorb.
+**Prevention:** Treat the local DB and working tree as shared mutable state across sessions — the discipline `.claude/rules/migrations.md` applies to the deployed test DB.
 
 ## Bug patterns & fixes
 
-<!-- Recurring bug shapes specific to apps/partner -->
-
-## Mollie lib tests
-
-### 2026-06-17: Route-level tests for Mollie OAuth + subscription routes — mocking matrix
-**Problem:** Seven route handlers (authorize, callback, client-link, readiness-check,
-setup-test-merchant, subscription/checkout, subscription/portal) had 0% coverage. Each route
-needed a different combination of mocks.
-**Solution:** Mock matrix per route:
-- `authorize`: mock `@/app/auth` + `@/app/api/_lib/mollie` (for `buildAuthorizationUrl`)
-- `callback`: mock `@/app/auth` + `@/app/api/_lib/mollie` (all three exchange/profile/bootstrap
-  fns) + `@repo/data/mollie-tokens` (for `mollieTokenExpiresAtFrom` — NOT aliased in vitest.config);
-  pass cookies via the `cookie` header in `NextRequest`
-- `client-link`: mock `@/app/auth` + `@/app/api/_lib/mollie` (createClientLink, getMollieClientId,
-  OAUTH_SCOPES as a string constant)
-- `readiness-check`: mock `@/app/auth` + `@mollie/api-client` (imported directly in the route,
-  not via _lib/mollie) + `vi.stubGlobal('fetch', vi.fn())` for the methods/all HTTP call
-- `setup-test-merchant`: mock `@/app/auth` + `@/app/api/_lib/mollie` (bootstrapMollieAccount)
-- `checkout` / `portal`: mock `@/app/auth` + `@/app/api/_lib/stripe` (getStripeClient)
-**CSRF verdict (callback route):** IMPLEMENTED CORRECTLY. The callback checks
-`request.cookies.get('mollie_oauth_state')?.value !== state` and redirects with
-`error=invalid_state` when the cookie is missing or mismatched. Tests confirm both rejection
-paths and the happy path. `stripe.ts`'s `getStripeClient` stays at 0% coverage by design —
-the function is always mocked to avoid real Stripe calls in unit tests.
-**Prevention:** When a route handler imports `@repo/data/mollie-tokens` or `@mollie/api-client`
-directly (not via `_lib/mollie`), they're NOT aliased in vitest.config.ts and must be explicitly
-`vi.mock()`ed. Redirects return status 307; check `response.headers.get('location')`. To pass
-cookies, use the `cookie` header in the `NextRequest` constructor options (NextRequest parses it
-via `RequestCookies`).
-
-### 2026-06-17: Testing mollie.ts: mocking boundary + scope separator
-**Problem:** `app/api/_lib/mollie.ts` imports three different external concerns: raw `fetch`
-(for OAuth token endpoints), the `@mollie/api-client` SDK (for clientLinks, profiles,
-profileMethods, payments, paymentRefunds), and `@repo/data/mollie-tokens` (centralized
-token manager that imports Prisma). The file also has a dynamic `import('@repo/data/PrismaCient')`
-inside `bootstrapMollieAccount`. Getting all of these mocked without a real DB took three separate
-strategies.
-**Solution:**
-- `vi.mock('@mollie/api-client', () => ({ default: vi.fn() }))` — replaces the SDK entirely.
-  Each test sets `mockCreateMollieClient.mockReturnValue({ payments: {...}, ... })` locally.
-- `vi.mock('@repo/data/mollie-tokens', ...)` + `vi.mock('@repo/data/env', ...)` — prevents
-  the centralized token manager (which imports Prisma) from loading. Both resolved as mocked
-  module paths, not as aliased paths.
-- `vi.stubGlobal('fetch', vi.fn())` in `beforeEach` + `vi.unstubAllGlobals()` in `afterEach` —
-  intercepts all raw `fetch(...)` calls at the global level.
-- The dynamic `import('@repo/data/PrismaCient')` inside `bootstrapMollieAccount` resolves via the
-  vitest.config.ts alias (no extra work needed — alias applies to dynamic imports too).
-**Observation:** `OAUTH_SCOPES` joins scope names with `+`, but `URLSearchParams` encodes `+`
-as `%2B`. The authorization URL ends up with `scope=payments.read%2Bpayments.write%2B...`.
-Mollie's parser accepts this in production (partners connect successfully), so this is
-functionally correct but non-standard (RFC 6749 specifies space-separated). If Mollie changes
-behavior, switching `OAUTH_SCOPES` to use space (` `) as separator would produce the standard
-form (`scope=payments.read+payments.write`).
-**Prevention:** For any `app/api/_lib/` utility that mixes raw fetch + SDK + a @repo/data helper:
-stub fetch globally, vi.mock the SDK and the data helper; let vitest.config.ts alias handle
-Prisma. Don't use `vi.importActual` for @repo/data paths — aliases redirect them to mocks anyway.
-
-## Component decomposition
-
-### 2026-06-17: Decomposing view.tsx manage monolith — shared state boundary
-**Problem:** The 1043-line `view.tsx` manage monolith mixed zoom/pinch/drag gesture state,
-per-parcel reversed-order state, inventory grouping logic, summary computation, sectioned vs
-scroll rendering paths, pool section, rental section, and modals all in one component. The
-sectioned view used `containerWidth`/ResizeObserver to compute `chunkSize`; removing it meant
-also dropping the ResizeObserver (the ref itself was still needed for the wheel-zoom handler).
-**Solution:** Keep in `ManageView`: zoom state + refs (zoomRef, containerRef), pinch handler,
-drag-to-pan handlers (passed as props to each `ParcelView`), reversed-parcel state,
-inventory-grouping logic, summary computation, modal state. Extract to `ManageToolbar.tsx`
-(occupancy pips + zoom buttons), `ParcelView.tsx` (one parcel's scroll grid + PoolSection),
-`RentalsSection.tsx` (rental block). `PoolCell`/`PoolSection` live inside `ParcelView.tsx`
-(colocated — they depend on bed-state helpers only used within the scroll grid).
-**Gotcha:** The pinch handler finds the scroll container via
-`(e.target).closest('.overflow-x-auto')`. Each `ParcelView` scroll div must keep that class
-name for pinch-scroll-nudge to work. Verified kept in the `overflow-x-auto` div in ParcelView.
-**Prevention:** When decomposing, map which gesture handlers reference which refs/state before
-splitting. The drag-to-pan handler uses `e.currentTarget` (the scroll div) but is safe to pass
-as a prop callback since the element capture (`el.setPointerCapture`) is inside the handler.
-
-## Restaurant query tests
-
-### 2026-06-17: Mocking @repo/table-reservations-core for queries.ts tests
-**Problem:** `app/restaurants/[id]/queries.ts` imports read helpers (`getRestaurantById`,
-`listTablesForRestaurant`, etc.) from `@repo/table-reservations-core`. That package uses the
-aliased `@repo/data/PrismaCient`, so importing it in tests triggers the mock — but the core
-functions still run real code, making test setup non-deterministic.
-**Solution:** Fully mock `@repo/table-reservations-core` with `vi.mock('@repo/table-reservations-core', () => ({ ... }))`, listing only the functions used by the file under test. The `lib/auth-helpers.ts` is intentionally NOT mocked — it runs its real ownership logic through `auth()` + the mocked Prisma client, which is the actual regression guard.
-**Pattern:** Mock only the "outbound calls" (core data helpers), but keep the "inbound gate" (`requireRestaurantOwner`) real. This way the tests prove that the ownership check actually runs and controls data access, not just that a mock returns null.
-**Return shape:** The queries return `null` on failure (not `{ status: 'error' }`) — assert `toBeNull()`, not `res.status`. Spy on the core mock with `.not.toHaveBeenCalled()` to prove the gate fires before any data fetch.
-**Prevention:** See `app/restaurants/[id]/queries.test.ts`. File is named `queries.ts`, not `*actions*.ts`, so the coverage-contract glob does NOT scan it — no allowlist entry needed.
-
-## Manage page — hold/reserve/rent naming
-
-### 2026-06-17: "Reserve" vs "Rent" vs "Hold" terminology on the manage page
-**Context:** The manage page had a single "Reserve" button that was actually a paid walk-in
-(status=`paid-in-cash`, operationalStatus=`walked-in`, `checkedInAt: now`). Adding a lightweight
-hold (Alonso's `reservada` concept) required distinguishing the two.
-**Decision (with user):**
-- The old "Reserve" button → renamed **"Rent"** (`reserveItem` unchanged — paid walk-in, orange).
-- A new **"Reserve"** button → lightweight hold (`holdBed`, yellow, today-only, no payment).
-- Action row: Block | Comp | Reserve | Rent (left to right: maintenance, free, hold, paid).
-**Hold implementation:** `status=RESERVATION_HELD` (`held`), `operationalStatus=OP_EXPECTED`
-(`expected`). No new bed-state/color/`Item.tsx`/`ManageToolbar` changes — the hold renders as the
-existing yellow "booked" lane and resolves via the existing check-in / no-show buttons. `RESERVATION_HELD`
-is already in `BLOCKING_STATUSES` so a hold occupies the bed correctly. No DB migration — the
-`status` column is a plain String.
-**Cleanup:** Expired holds cleaned by the cron alongside stale walk-ins (same `createdAt < today-start
-+ to < now` guards). Add `RESERVATION_HELD` to the `status: { in: [...] }` clause in
-`app/api/reservations-cleanup/route.ts`.
-**Prevention:** When extending the manage-page with a new lightweight state that maps to an existing
-`operationalStatus`, check whether it needs any of the 7-file state-add checklist. A `held` hold
-maps to `OP_EXPECTED` — zero state-file changes — but still needs: `actions.ts` action, gated-actions
-registry, cleanup cron update, i18n, tests.
-
-## Multiselect subset split
-
-### 2026-06-21: Generalising per-seat split to multi-seat MULTISELECT subset
-**Pattern:** `markDeparted(siteId, resId, accessKey, splitItemIds?: string[])` and `convertHoldToWalkIn(..., applyToGroup, splitItemIds?: string[])` now accept an array. When the array covers a PROPER SUBSET of the reservation's items, ONE new reservation is created with the whole subset (not one-per-seat). When the array covers ALL items, the action falls through to whole-depart/whole-convert.
-
-**Gotcha 1 — lazy splitSet:** Computing `splitSet = (splitItemIds ?? [...]).filter(id => reservation.items.some(...))` unconditionally crashes when existing tests mock `findFirst` without `items`. Fix: wrap in `!applyToGroup && reservation.items ? ... : []` so `.some()` is never called when `applyToGroup=true` or `items` is absent.
-
-**Gotcha 2 — existing callers must be updated to array form:** BedDetail.tsx passed `item.id` (string); integration tests passed `itemA.id` (string). Both must become `[item.id]` / `[itemA.id]`. TypeScript won't flag it because `string | undefined` matches `string[] | undefined` in some interpretations — only `(splitItemIds ?? []).filter is not a function` reveals the bug at runtime.
-
-**view.tsx helper:** `getSelectionGroups()` maps selectedIds → `{ anyItemId, selectedItemIds, isSubset }` per reservationId, using `inventoryItems` (full floor, not just selection) for `totalSeats`. `bulkRent` uses `isSubset` to pick `applyToGroup=false` + `splitItemIds` vs `applyToGroup=true`; `bulkDepart` uses it to pass `selectedItemIds` or no-ids.
-
-## Till conservation in per-seat walk-in operations
-
-### 2026-06-21: unreserveItem disconnect + splitWalkInSeat — till conservation pattern
-**Problem:** Freeing one seat of a multi-seat cash walk-in (Seat-unreserve or Seat-collect split) without reducing `paymentAmount` leaves the freed seat's cash counted in the till even though the guest is no longer there. The depart-split in `markDeparted` handled this correctly; the disconnect path in `unreserveItem` and the new `splitWalkInSeat` action needed the same treatment.
-
-**Fix — `unreserveItem` disconnect path:** The `findFirst` select was changed from `include: { items: true }` to `select: { id, from, to, items: { select: { id, price } }, site: { select: { type, price } } }`. On the `items.length > 1` branch, `computeWalkInAmount(remainingItems, site.price, from, to)` is called and the update now carries `paymentAmount: remainingAmount` alongside `items: { disconnect }`. The whole-delete path (single item or `applyToPair=true`) is unchanged — deleting removes all cash from the till naturally.
-
-**New action — `splitWalkInSeat(siteId, reservationId, itemId, accessKey)`:** "Peel without departing." Same `$transaction` shape as depart-split in `markDeparted` but without the depart transition — the new reservation stays `walked-in`. Returns `{ status: 'ok', reservationId: <newId> }`. Only valid for `paid-in-cash` + `walked-in` + `items.length > 1`. Returns errors for: online collected (complete), single-item, item not on reservation. Attribution (employeeId, guestName, userId, from, to, checkedInAt) is copied to the new reservation.
-
-**BedDetail wiring (Collect button):** Added `collectTargetId` state (default null). In Seat mode (`groupedReservation && !applyToGroup`): call `splitWalkInSeat` inside a transition, set `collectTargetId = result.reservationId`, then open the modal. In Group mode: set `collectTargetId = reservation.id` directly. `CollectPaymentModal` actions now bind to `collectTargetId`. On close: reset both `setShowCollect(false)` AND `setCollectTargetId(null)` — if only one resets, a stale id leaks into the next open.
-
-**Till conservation invariant:** `original.paymentAmount + new.paymentAmount == originalTotal` when prices are unchanged. Assert this in integration tests, not just that the individual values are correct.
-
-**Registration:** `splitWalkInSeat` is a gated action — registered in `app/test/gated-actions.ts` as `token-or-session`, same as all other manage actions.
-
-**Test pattern for `$transaction` with captured tx args:** Mock `prisma.$transaction.mockImplementationOnce(async (fn: any) => fn({ reservation: { update: vi.fn().mockImplementation((args) => { captured = args; return {} }), create: vi.fn()... } }))`. This intercepts both sides of the transaction with independent captures.
-
-## Cash walk-in rental TillEntry (track 013 P3b)
-
-### 2026-06-21: createWalkInRental — genuine cash vs Card(QR) settlement distinction
-
-**Problem:** After P3a re-sourced the till from the ledger, cash walk-in rentals no longer hit the till because no `TillEntry` was recorded. The fix needed to call `recordSettlement` for genuine cash — but the Card(QR) path also calls `createWalkInRental` with `paymentType='cash'` (so paymentAmount is persisted before `collectRentalPayment`/Mollie). Recording a TillEntry on the card path would double-count: once as cash, once when Mollie settles.
-
-**Distinguishing signal — `recordCashSettlement: boolean` param:** `CreateRentalModal` distinguishes cash/card/free in its own state (`paymentType: 'cash' | 'free' | 'card'`). It wires `paymentType = paymentType === 'card' ? 'cash' : paymentType` for the action, then passes `recordCashSettlement: paymentType === 'cash'` (so card → false, cash → true, free → false because paymentType becomes 'free'). The action records a `TillEntry` per booking only when both `recordCashSettlement === true` AND `paymentType === 'cash'` AND `paymentAmount > 0`. Free bookings auto-skip even if the flag were somehow set (paymentAmount 0 guard).
-
-**Amount source:** Per-booking amount comes from `bookingInputs[i].paymentAmount` — the already-computed DB-fetched price passed to the guard. Never recomputed after guard returns (payments.md). Map booking index → amount before the Promise.all.
-
-**Mock update:** `voidSettlementsForRentalBooking` must be added to `apps/partner/__mocks__/@repo/data/till.ts` whenever the real `@repo/data/till` gains it — the mock-contract guard enforces this.
-
-**Test invariants:** (1) genuine cash → `recordSettlement` called with `rentalBookingId` + the per-booking amount; (2) card path (recordCashSettlement omitted) → `recordSettlement` NOT called; (3) free → NOT called. Assert all three in unit tests. Integration: cash → `TillEntry` exists with `voidedAt: null`, `getTillStatus` reflects it; card path / free → zero entries.
-
-## BedDetail state-machine patterns
-
-### 2026-06-17: convertHoldToWalkIn — in-place UPDATE vs delete+create; multi-day extension
-**Today-only path:** When a held guest arrives (staff taps "Rent" in the Held panel with no `until`),
-the hold is converted IN PLACE via `prisma.reservation.update` — same row, same items, same today
-range. NO conflict re-check is needed: the seat is already occupied by this hold.
-**Multi-day extension (`until` param):** A hold only covers TODAY. Extending `to` into future days
-opens a race window: a concurrent consumer booking on those days could land between the `findFirst` and
-the `update`. Fix: run find + conflict-check + update in one `prisma.$transaction` with a `SELECT ...
-FOR UPDATE` lock on the item rows (same pattern as `reserveWithConflictGuard`). The conflict query
-excludes the hold's own id (`id: { not: hold.id }`) — otherwise the hold itself (which overlaps today)
-appears as a false-positive conflict.
-**$transaction mock:** The PrismaCient mock implements `$transaction: vi.fn((arg) => arg(prisma))`
-(i.e. the tx callback receives the same mock prisma client). Unit tests can therefore wire up
-`reservation.findFirst` call sequences (first: hold lookup, second: conflict check) and
-`reservation.update` on the same mock without any extra setup.
-**Contract:** `toDate` is always written (including today-only), so the walk-in has an authoritative
-`to` regardless of what the original hold stored.
-
-### 2026-06-17: shared confirmPanel + pendingConfirm — extending to walk-in actions
-**Gotcha:** `runPendingConfirm` previously required a non-null `reservation` as a precondition
-before dispatching any case. When `'unreserve'` was added (which targets `item.id`, not
-`reservation.id`), the top-level null-guard had to be removed from `runPendingConfirm` and moved to
-the individual branches that actually need the reservation object (`'no-show'`, `'depart'`). The
-`'cancel'` and `'unreserve'` branches use `item.id` and don't need `reservation`.
-**Prevention:** When adding a new `PendingConfirm` case that doesn't need `reservation`, guard
-per-branch, not at the top of `runPendingConfirm`.
-
-### 2026-06-17: inSync-gated toggle + walk-in disconnect depart
-**Invariant (group/pair scope toggle):** The two-option [Group/Pair | Seat] toggle in `BedDetail`
-must only render when `inSync` (all `groupItems` share the same active reservation id as the
-selected item, or all are free). An out-of-sync group (e.g. one seat walked-in, one seat free) must
-collapse to a single non-interactive "Seat" indicator. Otherwise:
-- The "Group" button is shown for a state where only one seat can be acted on → staff confusion.
-- Attempting a Group walk-in/block/comp on a partially occupied pair hits the conflict guard.
-**Implementation:** Move `thisResId`/`inSync` computation BEFORE `pairNumber`. Use `reservation?.id`
-(not a second `getActiveReservation(item)` call — `reservation` is already computed). Gate
-`pairNumber` on `inSync` by adding `|| !inSync` to its undefined condition.
-`applyToPair` defaults to `inSync` and can only be toggled via the Group button; when `!inSync` no
-Group button renders, so `applyToPair` stays `false` even if it happens to equal the old `true` value
-from a prior `useState(inSync)` call before the item change — the `useEffect` re-sets it on `item.id`.
-
-**Walk-in Depart dispatch:** A paired walk-in shares ONE reservation row (all seats in the group are
-connected to the same Reservation record). When staff pick "Seat" mode (`!applyToPair`) and confirm
-Depart, calling `markDeparted(reservationId)` would set `operationalStatus=departed` on the whole
-row, immediately freeing the other seat. The correct "one seat left" semantic is to disconnect just
-this item: `unreserveItem(itemId, ..., false)`. Condition: `state === 'walked-in' && !applyToPair &&
-inSync && groupItems.length > 0`. All other depart paths (Group mode, non-grouped walk-in, checked-in
-depart, out-of-sync seat reservation) keep `markDeparted(reservationId)`.
-
-**`cancelReservation` applyToPair removal:** Cancel is whole-reservation by design (the status update
-covers all items in the booking). The `applyToPair` param was never used by any call site that
-actually passed it — it was always the default. Remove it so the signature is honest and the
-auth-matrix invoke and test call sites can stay simple.
-
-## Bug patterns & fixes
-
-### 2026-06-21: Prisma upsert is not atomic — RSC-prefetch concurrency crash on manage page
-**Problem:** `prisma.reservationDay.upsert()` with `update: {}` (no-op) is implemented as SELECT-then-INSERT/UPDATE inside Prisma — NOT a single atomic statement. Next.js RSC prefetch fires the manage page route 4× simultaneously. Two renders both see "no row" for the same `(reservationId, date)` pair, both attempt INSERT, and the loser throws `PrismaClientKnownRequestError: P2002 Unique constraint failed`. The error surfaced at `resolveTodayRow` inside `ManagePage` — page crashed for all concurrent prefetch requests.
-**Fix (two cases):**
-- **`resolveTodayRow`** — `update: {}` is a no-op; the row the winner wrote is exactly what we want. Wrap the upsert in try/catch; on `P2002` re-fetch with `findUniqueOrThrow` on the same composite key and return that. Never re-throw P2002 from this path.
-- **`applyDayTransition`** — `update` carries real state; re-fetching the winner's row would lose our transition. Wrap the entire `$transaction` call in a helper `runTransaction()`, catch P2002 at the outer level, and RETRY (call `runTransaction()` again). The retry finds the row and takes the update branch. The legacy mirror write stays inside the same transaction — both writes happen together or not at all.
-**P2002 detection idiom** (repo convention): `(err as { code?: string }).code === 'P2002'` — duck-typed, no `PrismaClientKnownRequestError` import needed (follows `packages/data/src/impersonation.ts`).
-**File:** `apps/partner/app/sites/[id]/manage/reservation-day.ts`
-**Test:** Added two bug-revealing integration tests in `actions.integration.test.ts` (describe `resolveTodayRow — concurrent upsert race safety`): `Promise.all` on the same reservation+date asserts both calls resolve to the same row id without throwing; a second test confirms different-reservation concurrent calls all succeed.
-**Prevention:** Any lazy get-or-create (`upsert` with `update: {}`) that runs under RSC-prefetch or other concurrent request patterns hits this race. Either (a) add a DB-level partial unique index + `INSERT ... ON CONFLICT DO NOTHING RETURNING *` via `$queryRaw`, or (b) use the try/catch P2002 + re-fetch pattern above. Option (b) keeps Prisma ergonomics and is the established repo pattern.
-
-## Manage surface routing
-
-### 2026-07-10: Token-gated sub-routes and admin-tier gating on the manage surface
-**Pattern:** The manage surface uses a shared `validateManageToken` (in `manage/token.ts`) that
-returns `{ ok, isAdmin, site: { id, name } }`. Sub-routes follow a uniform server-page convention:
-1. Call `validateManageToken(params.id, key)` — render `<ErrorCard showBackLink={false} />` on failure.
-2. For admin-only pages: additionally check `!result.isAdmin` — render another `ErrorCard` (defense-in-depth; the actions gate too).
-3. Pass `accessKey`, `siteId`, `siteName`, `backHref` down to the client view component.
-
-`DailySummaryView.tsx` is the admin-only full-page till view at `/manage/summary`. The action gate is
-`verifySiteAdmin` (requires `'admin'` in token resources) — stricter than the standard
-`verifySiteAccess` (`['all','manage_site']`) used by the floor-staff manage and orders surfaces.
-
-**Token scope tiers:**
-- `['all']` or `['manage_site']` → floor staff operations (sunbeds, orders)
-- `+ ['admin']` → admin summary operations (`getOpenTills`, `getTillDayReport`, `closeTill`, `closeDay`)
-
-**Prevention:** When adding future admin-only manage sub-routes, use the same two-check pattern
-(ok check + isAdmin check) in the server page, `DailySummaryView` as the reference client impl.
-
-### 2026-07-10: closeDay — cash-up only, does not touch the floor
-**Contract (pinned 2026-07-10):** `closeDay` is **cash-up only** — it calls `closeAllOpenTills(siteId)` and returns `{ status, closedCount, totalClosed }`. It does NOT mutate any `Reservation` row. A real calendar-day change in Sunbnb mutates no reservations automatically (occupants age out of the date window, stayovers carry over, blocks persist), so `closeDay` matching "same effect as a day change" means leaving the floor completely untouched.
-**Why the depart step was removed:** The original implementation bulk-updated `CHECKED_IN`/`WALKED_IN` reservations to `DEPARTED` via `prisma.reservation.updateMany`. This was wrong — it treated end-of-day as a hard checkout, conflicting with multiday stays and stayover semantics. The cleanup cron + per-day `ReservationDay` rows handle expiry automatically.
-**Return shape:** `{ status: 'ok', closedCount: number, totalClosed: number }`. No `departedCount` field — its absence is the contract. Unit test asserts `(result as any).departedCount` is `undefined`.
-**Regression test:** integration test seeds `CHECKED_IN` and `WALKED_IN` reservations, calls `closeDay`, and asserts they remain `CHECKED_IN` / `WALKED_IN` afterwards. This pins the cash-up-only contract against regressions.
-**Idempotency:** `closeAllOpenTills` re-runs safe (no-op when all tills at zero) — `closedCount: 0, totalClosed: 0` on re-run.
-**Employee fixture gotcha (integration tests):** `Employee.accountId` → FK to `PartnerAccount`, NOT `User`. Always call `createTestPartnerAccount(user.id)` before `prisma.employee.create({ data: { accountId: user.id } })`.
-
-### 2026-07-23: Wiring a data-layer signature change requiring a new required param into manage/actions.ts
-**Context:** `@repo/data/till` (track 016 P1) added a required `dayStart: Date` param to `getOpenTill`/`getOpenTillsByEmployee`/`getOpenTillItemsByEmployee`/`closeAllOpenTills`, breaking partner typecheck until the action layer (P3) caught up.
-**Reuse before inlining:** `manage/actions.ts` already has a private `siteTodayBounds(siteId)` helper (`async function siteTodayBounds(siteId) { ...; return siteDayBounds(buildSiteTimezone(site ?? {})) }`) used by every on-site create action to anchor from/to to the venue's civil day. When a data-layer function needs the SAME "venue-local start of today" value, call this helper (`const { start: dayStart } = await siteTodayBounds(siteId)`) rather than re-deriving `siteDayBounds(buildSiteTimezone(site), new Date())` inline — one fewer place to get the pattern wrong, and it's already exercised by every other today-anchored action in the file.
-**Type split gotcha:** When a data-layer type gets split (here: `EmployeeTill` (bucketed: `today`/`carryOver`) vs the new `EmployeeCashTotal` (plain, for the civil-day-range report `getTillByEmployee`/`getTillDayReport`)), grep every UI file importing the OLD type name (`grep -rl "EmployeeTill\b" app`) — a function whose real return shape didn't change at all (like `getTillDayReport`) can still fail typecheck purely because its TS type annotation now points at the wrong shape. Fix is a **type-only import rename** in the consuming UI file (e.g. `DayCloseView.tsx`'s `import type { EmployeeTill }` → `import type { EmployeeCashTotal }` + matching `useState<...>`), not a UI edit — confirm first that the file only accesses the shared fields (`employeeId`/`name`/`total`/`count`), never `.today`/`.carryOver`.
-**Mock default shape matters, not just presence:** `mock-contract.test.ts` only checks export parity (does the mock file export everything the real module exports) — it does NOT check that a mock's *default resolved value* matches the new return shape. Tests that call the action end-to-end and read `.today`/`.carryOver` off the (unmocked-per-test) default will get `undefined` silently unless the mock's `mockResolvedValue` is updated to the new bucketed shape (`{ total: 0, count: 0, today: {total:0,count:0}, carryOver: {total:0,count:0,oldestAt:null} }`) alongside adding the new export.
-**Test assertion decay:** existing `toHaveBeenCalledWith(SITE_ID)` assertions on a mocked data-layer fn silently start failing (not silently passing) the moment the caller adds a second positional arg — that's a feature, not a footgun, but the fix is `toHaveBeenCalledWith(SITE_ID, expect.any(Date))`, not asserting the literal Date (real-time-derived, would be flaky).
-**Prevention:** When a shared `@repo/data/*` signature gains a required param, work outward in this order: (1) grep the app for every import of the changed function AND every import of any type it returns; (2) update the mock's default resolved value to the new shape, not just add missing exports; (3) fix `toHaveBeenCalledWith` call-site assertions with `expect.any(Date)` for time-derived args; (4) only then touch UI files, and only via type-only renames unless the task scope explicitly includes UI.
-
-### 2026-07-23: Day-anchored till UI (track 016 P4) — headline vs. close-anchor split, and locale date formatting
-**Pattern (which number leads vs. which number the close action uses):** When a data shape carries both a "headline" bucket (`today`) and a "what actually gets swept" bucket (sweepable `total` = today + carryOver), don't let the reframed headline silently change what the close/confirm action reports. `TillSheet.tsx` and `DailySummaryView.tsx`'s open-tills tab both switched their big number to `today.total`, but left `confirmBody`/`hasBalance`/the close-button gate on the sweepable `total` — the invariant is "what gets closed = sweepable", stated in the track design and worth re-deriving explicitly rather than assuming the headline switch should cascade everywhere. When you re-point a headline number's *count* pairing too (e.g. `employeeSalesCount` from `till.count` → `till.today.count`), do it deliberately — an unpaired total+count (today total next to sweepable count) reads as a bug to the next reader even though both are individually correct.
-**Locale-aware short dates:** `useLocale()` from `next-intl` was previously only used in `app/header.tsx`. For a carry-over "since <date>" label, use `useLocale()` + `new Date(x).toLocaleDateString(locale, { day: 'numeric', month: 'short' })` — don't hardcode `'en'` or `'default'` like the pre-existing `calendar/view.tsx`/`TrendsView.tsx` date formatters do (those predate the locale-aware pattern and are now inconsistent with it, but out of scope to fix opportunistically).
-**Prevention:** When a track's design doc states an invariant ("X always uses the sweepable total"), grep every place the reframed headline touches (button gates, confirm copy, paired count labels) before editing, not just the obvious lead number — the invariant is easy to violate by pattern-matching "replace total with today everywhere".
-
-### 2026-07-10: DayCloseView — todayIso derivation and dual-fetch pattern
-**Pattern:** The `close/page.tsx` server page must derive the venue-local `YYYY-MM-DD` string to pass to `DayCloseView`. Use `siteDayKey(buildSiteTimezone(siteMeta))` — exactly the same helper `sunbeds/page.tsx` uses with `siteDayBounds`. `validateManageToken` returns only `{id, name}`, so one extra `prisma.site.findFirst({ select: { timeZone, locationLat, locationLng } })` is needed.
-**Client fetch strategy:** `DayCloseView` fires both `getTillDayReport(siteId, todayIso, accessKey)` and `getOpenTills(siteId, accessKey)` in a single `Promise.all` on mount. The report shows today's per-employee totals; `getOpenTills` provides the open-till count for the pre-close note. After a successful `closeDay`, re-fetch only the day report (open tills become zero).
-**Two-step confirm state:** `ClosePhase = 'idle' | 'confirming' | 'closing' | 'done'` — mirrors `DailySummaryView`'s `ClosePhase` pattern. 'done' hides the confirm section and shows the success card with back-to-menu link.
-**Pre-close note copy:** Cash-up only — note says how many open tills will be closed. Only rendered when `openTillsCount > 0` (hide when all already closed; no "all tills already closed" variant needed). Success state shows tills closed + total; no guest/depart line.
-
-## Dual-scope dashboards (dine-in v2 Phase 5)
-
-### 2026-07-25: Restaurant-scoped orders dashboard — scope-prop view reuse + new gate type
-**Pattern:** Reusing a single client component across two differently-owned resources (site vs
-restaurant) without duplicating it: give it a `scope: { kind: 'site' | 'restaurant'; id: string }`
-prop instead of a bare `siteId`, and write small `scopedX(scope, ...)` dispatcher functions at the
-top of the view file that call `siteActions.x(scope.id, ...)` or `restaurantActions.x(scope.id, ...)`
-based on `scope.kind`. Every internal subcomponent takes `scope` instead of `siteId` and passes it
-straight through. The two server-action modules (`sites/[id]/orders/actions.ts`,
-`restaurants/[id]/orders/actions.ts`) stay separate 'use server' files (different auth gate, different
-`where` clause) but share their status-machine + tab-summary logic via a third **non-'use server'**
-`shared.ts` module (`VALID_TRANSITIONS`, `isValidTransition`, `TAB_STATUSES`, `TabSummary` + its mapper,
-`computeTabAmountDue`) — `shared.ts` doesn't match the coverage-contract's `*actions*.ts` glob, so it
-needs no allowlist entry despite living in the same directory as a gated actions file.
-
-**Auth-matrix gotcha — existing token-fixtures appliers are resource-specific, not generic:** The
-existing `'token-or-session'` gate's scenario appliers (`applyValidToken`, `applyForeignSiteToken`, etc.
-in `token-fixtures.ts`) stub `prisma.site.findUnique` — they do NOT also stub `prisma.restaurant.findUnique`.
-A new `verifyRestaurantAccess` helper (near-copy of `verifySiteAccess`, comparing
-`restaurant.partnerAccountId` instead of `site.userId`) needs its OWN gate type
-(`'restaurant-token-or-session'`) with its own scenario appliers (`applyRestaurantValidToken`,
-`applyRestaurantExpiredToken`, `applyRestaurantWrongScopeToken`, `applyRestaurantForeignToken`) that
-call `stubOwnerRestaurant()` instead of `stubOwnerSite()`. Reused the existing
-`applyRestaurantNonOwnerSession`/`applyRestaurantOwnerSession` (already built for the separate
-`'restaurant-owner'` gate) for the session-path scenarios — they were already restaurant-shaped.
-**Prevention:** When gating a new restaurant-scoped action with a token-or-session pattern, don't
-assume the site-flavored gate type covers it — check what `prisma.*.findUnique` the fixture appliers
-stub, and add a parallel gate type + appliers if the owning entity differs.
-
-**Deliberate resource-vocabulary reuse:** `verifyRestaurantAccess` intentionally checks the SAME
-`resources: { hasSome: ['all', 'manage_site'] }` as `verifySiteAccess` rather than introducing a new
-`manage_restaurant` scope — existing staff `SecurityToken`s (provisioned for the site manage/orders
-surfaces) work against the new restaurant dashboard with zero re-provisioning. Flagged as an open
-item in the plan, not a design flaw to fix opportunistically.
-
-**Layout gate check before assuming a route needs a layout change:** `app/restaurants/layout.tsx` only
-calls `isFlagEnabled('restaurants')` — a **global feature flag** check, no session/auth. `isFlagEnabled`
-→ `getFlags()` → `isSudoUser()` calls `auth()` but only to decide whether to also enable sudo-only flag
-states; an unauthenticated (token-only) request resolves `auth()` to `null` and falls through fine. So
-a token-gated public page nested under `/restaurants/[id]/*` (mirroring the already-public
-`/sites/[id]/orders`) needs **no layout change** — verify this by reading `flags.ts`, not by assuming a
-route-group layout implies a session boundary.
-
-## Shared local dev environment
-
-### 2026-07-25: Concurrent-session interference — git stash and shared local Postgres
-**Problem:** Used `git stash -u` mid-task to snapshot a "before" auth-matrix test count for reporting
-purposes, then `git stash pop`. The pop reported `"already exists, no checkout"` for several
-`apps/user/app/tables/[tableId]/*` files and left a stale stash entry — because a **different agent
-session was concurrently editing `apps/user`** (a parallel Phase 4 dispatch) in the very same working
-tree. `git diff stash@{0}` afterward showed one real content divergence (a route file where the
-concurrent session had made further edits between the stash and the pop). Separately, `npm run
-test:integration` in `apps/partner` started throwing non-deterministic FK-constraint-violated /
-`deadlock detected` errors across files unrelated to the current change (calendar, manage, rentals) —
-traced via `docker exec sunbnb-postgres psql ... pg_stat_activity` to live concurrent connections to
-`sunbnb_test`, and once to the Postgres container physically restarting mid-run (`docker logs` showed
-`FATAL: the database system is starting up` for ~20s) — almost certainly the same concurrent session
-running its own `migrate:local`/`test:integration` against the shared local DB.
-**Solution:** (1) Never `git stash` in this repo to get a "before" baseline when other agents may be
-active in the same working tree — use `git show HEAD:path/to/file.ts` or a targeted `git diff
-HEAD -- path` to inspect a single file's committed state instead; if a stash is unavoidable, `git
-stash show -p` and diff carefully before dropping. (2) When `test:integration` fails with FK
-violations/deadlocks in files you didn't touch, don't assume a regression — check
-`docker exec sunbnb-postgres psql -U postgres -c "SELECT datname, count(*) FROM pg_stat_activity GROUP
-BY datname;"` for live concurrent connections to `sunbnb_test` (or `docker logs sunbnb-postgres --tail
-30` for a restart), and re-run once activity clears. Isolate first: run just the integration test
-file(s) you actually touched (`npx vitest run path/to/your.integration.test.ts --config
-vitest.integration.config.ts`) — if that's consistently green across repeated runs while the full
-suite flakes non-deterministically on unrelated files, that's the signature of external contention,
-not your change.
-**Prevention:** Treat the local Docker Postgres and the working tree itself as shared, mutable state
-across concurrent agent sessions — the same discipline the repo already applies to the *deployed*
-shared test DB (`.claude/rules/migrations.md`) applies locally too when multiple sessions run in
-parallel. Diagnose (isolate the touched file, check `pg_stat_activity`/container logs) before
-reporting a failure as caused by your change.
-
-## Cross-package boolean-toggle plumbing (dine-in v2 Phase 6)
-
-### 2026-07-25: Adding a new Restaurant boolean toggle end-to-end — four touch points, not two
-**Problem:** A task packet named only two `packages/table-reservations-core` files to touch when adding
-`Restaurant.dineInEnabled` (an already-migrated schema column) as a settings-form toggle:
-`types.ts` (the `RestaurantInput` shape) and `restaurant/actions.ts` (`createRestaurant`'s persisted
-`data` + `updateRestaurant`'s patch whitelist). That covers the WRITE side only. The core package has a
-**separate** read-side file, `restaurant/queries.ts`, with its own `restaurantSelect` Prisma select object
-and `RestaurantRecord` return type — if the new field isn't added there too, the write silently succeeds
-but every subsequent read (including the very `getRestaurantById` call `updateRestaurant`/`createRestaurant`
-make to return the updated row) omits the field, so the UI never sees the toggle's persisted state after
-save/reload even though the DB column is correct.
-**Solution:** For any new `RestaurantInput` boolean, touch exactly these four places, in this order:
-(1) `types.ts` `RestaurantInput`, (2) `restaurant/actions.ts` create `data` + update patch whitelist
-(`if (input.x !== undefined) data.x = input.x`), (3) `restaurant/queries.ts` `restaurantSelect` +
-`RestaurantRecord` (the read side — easy to miss because it's a sibling file, not inside `actions.ts`),
-(4) the consuming app's own DTO mapping (`apps/partner/app/restaurants/[id]/queries.ts` `RestaurantDetail`
-+ the `getRestaurant` mapper) and its General-tab `view.tsx` (`initialSettings` + the `RestaurantSettingsForm`
-`labels` prop). The shared UI toggle itself (`packages/table-reservations-ui/.../RestaurantSettingsForm.tsx`)
-needs the field added to `RestaurantSettingsLabels` + `RestaurantSettingsValues` + a new `<Toggle>` block
-mirroring the existing `guestSelectionEnabled` one (border-t divider, same `save()`/`scheduleSave()` wiring).
-**Regression guard:** a "pass-through" unit test asserting the new field survives `getRestaurant`'s mapping
-(mirrors the existing `guestSelectionEnabled`/`publicOnStandaloneApp` fixture fields in
-`app/restaurants/[id]/queries.test.ts`) is the cheapest way to catch step (3) being skipped — it fails
-immediately if `restaurantSelect`/`RestaurantRecord` don't carry the field, even though the write-side
-tests (`objectContaining` assertions in `actions.test.ts`) pass regardless.
-**No React component tests in apps/partner:** `vitest.config.ts`'s `include` is `['app/**/*.test.ts',
-'lib/**/*.test.ts']` only — no `.tsx` glob, no `environment: 'jsdom'`, no `@testing-library/react`
-dependency. Every existing test file in the app (50+ files) is server-action/route/query logic, never a
-rendered component. A task asking for "component test updates" on a client `.tsx` file (e.g.
-`DineInQRButton.tsx`, a jsPDF/qrcode-driven button with no separable pure-logic module) has no established
-pattern to extend — introducing jsdom + RTL for one component is a testing-infrastructure decision, not a
-one-file addition. Verify such changes via `tsc --noEmit` (catches prop-signature breakage) + manual source
-review instead of inventing a new test harness mid-task; flag the gap explicitly rather than silently
-skipping or silently expanding scope.
-**Prevention:** When a task names "the two files to touch" in a package for an input-shape change, grep the
-package for the OTHER file(s) selecting/returning that same record shape (`grep -rn "guestSelectionEnabled"
-packages/table-reservations-core/src` — every sibling boolean toggle shows exactly which files it already
-touches) before assuming the named list is complete.
-
-## Viva merchant connect + terminal registry (track 024, W8, packet C1)
-
-### 2026-08-30: Viva connect page idempotency, session-gated action coverage, terminal upsert guard
-**Idempotency constraint the UI has to work around:** Viva's `POST /isv/v1/accounts` mints a
-BRAND NEW `accountId` on every call — there is no "get or create" semantics, and the connected-
-accounts API has no "reissue invitation" endpoint. So `connectViva()` must never call
-`createConnectedAccount` a second time once `PartnerAccount.vivaAccountId` is set (would orphan
-the first connected account at Viva), but that means a partner who didn't finish the FIRST
-onboarding link has no way to get a fresh one from this client — the literal packet brief's
-"pending (open onboarding link again + Refresh)" UI copy cannot be built as a real re-open action.
-Resolved by making the idempotent path a pure status refresh (`redirectUrl: null,
-alreadyConnected: true`) and having the pending-state UI point at email guidance instead ("check
-your inbox for the invitation Viva sent you") + a Refresh button — never re-derive or fabricate a
-clickable re-open link client-side.
-**Session-gated (not token-gated) actions need the UNGATED_ALLOWLIST, not GATED_ACTIONS:**
-`connectViva`/`refreshVivaStatus`/`disconnectViva` are `auth()`-only (mirrors
-`disconnectMollie`/`refreshMollieTokens` in `app/account/mollie/actions.ts`), scoped to
-`session.user.id` — NOT `verifySiteOwnership`/`accessKey`. `coverage-contract.test.ts` fails the
-build ("UNGOVERNED server action") if a new `'use server'` export isn't in either `GATED_ACTIONS`
-(`app/test/gated-actions.ts`) or `UNGATED_ALLOWLIST` (inside `coverage-contract.test.ts` itself,
-with a one-line justification string) — for session-only account actions the entry goes in the
-latter, right next to the Mollie precedent.
-**VivaTerminal upsert needs an explicit cross-site guard `upsert` alone doesn't give you:**
-`terminalId` is globally `@unique` (a physical device belongs to one site at a time), so
-`registerVivaTerminal` must `findUnique` first and reject when `existing.siteId !== siteId` —
-otherwise the upsert would silently re-parent a terminal from one venue to another on a typo'd id.
-**`@repo/data/viva` needs no vitest.config.ts alias** — like `@/app/api/_lib/mollie`, it has no
-prisma import (server-only `fetch`), so partner unit tests `vi.mock('@repo/data/viva', () => ({
-getVivaAccountsClient: vi.fn() }))` directly rather than routing through `__mocks__/@repo/data/`.
-Server actions that DO touch `prisma.vivaTerminal` (the manage-actions.ts terminal registry) still
-need the `vivaTerminal` delegate added to `__mocks__/@repo/data/PrismaCient.ts` — `mock-contract.
-test.ts` enforces this via `Prisma.dmmf` model-delegate parity, independent of the submodule check.
-**Auth-matrix "ok" scenarios reach real business logic, not just the auth gate:** for
-`token-or-session` actions, `SCENARIOS` includes `owner session → ok` / `valid token → ok`
-branches that execute the function body past the gate. Since the global `PrismaCient` mock's
-`vi.fn()` delegates return `undefined` by default (no per-scenario stub), any new action must
-defensively guard `?? []` / `if (!x) return {status:'error',...}` rather than assume a truthy
-DB row — otherwise the "ok" scenario throws (a raw exception, not a `{status:'error'}`) and the
-matrix runner's assertion fails on a scenario that has nothing to do with auth. The matrix's
-reject/ok predicate checks the error *message* against a fixed auth-error set (see the existing
-"auth-matrix ok/reject predicate" entry above), so a business-logic error like `'Viva not
-connected'` is correctly read as "auth passed" — only an unhandled throw is a problem.
-**Pre-existing, out-of-scope failure found during verification — do not "fix" it from an
-unrelated packet:** `mock-contract.test.ts`'s reservation-payment submodule check was already RED
-on this branch before this packet touched anything — `packages/data/src/reservation-payment.ts`
-carries uncommitted `cancelReservationVivaPayment`/`refundReservationVivaPayment` exports from the
-concurrent collect-transition work (track 024 P2/C2, `viva-collect.integration.test.ts` also
-present untracked) that hadn't updated `apps/partner/__mocks__/@repo/data/reservation-payment.ts`
-yet. Confirmed via `git diff --stat` that the file was modified outside this packet's edits before
-touching anything. Left alone deliberately — the collect/machine surface is explicitly out of
-scope for C1 ("Do NOT touch manage/actions.ts collect functions... packet C2, after the
-data-package machine work lands"), and patching someone else's in-flight mock is exactly the kind
-of collision a shared working tree creates. Report it, don't silently absorb it into an unrelated
-diff.
-**Prevention:** When a packet brief describes UI copy assuming an API capability, verify the
-capability exists in the actual client (accounts.ts's real interface, not the brief's prose)
-before writing the component — an idempotent "connect" and a re-issuable "invitation link" are
-not the same guarantee, and only one of them is buildable here. When `npm run test` surfaces a
-failure in a file you never touched, `git diff --stat <path>` before spending any time on it —
-a shared-tree session may have concurrent in-flight packets leaving intermediate red states that
-are not yours to fix.
-
-## Card-present Collect leg: action contract + modal chooser (track 024, W8, packet C2)
-
-### 2026-08-30: collectReservationPayment/cancelCollection card branch, terminals-present as the chooser flag, cancel()'s "still processing" branch
-
-**Fixed contract, packet dependency:** This packet shipped in parallel with the mobile app's own
-collect-leg packet, both consuming the SAME `applyTransition('collect.start'/'collect.abandon', {
-collect: {...} })` contract landed by A3 (`ApplyOpts.collect.method`/`terminalId`/`abortPollMs`).
-Neither surface could change the action's positional signature or field names without breaking the
-other — `collectReservationPayment(siteId, reservationId, accessKey?, opts?: { method, terminalId
-})` and `cancelCollection(siteId, reservationId, accessKey?, opts?: { terminalId })` are additive-only
-(new 4th param), so every existing call site (bulk collect in view.tsx, rentals, the auth-matrix
-fixture which invokes with only `accessKey`) kept compiling untouched.
-
-**Result-shape mapping is generic, not branched on the caller's requested method:** the demo path
-short-circuits card entirely inside the machine (`runCollectStart`'s `collect.method === 'card' &&
-!collect.demo` guard — see data-dev's A3 entry), so a card-method request can still come back with
-`data.demo: true` (never `data.card`). The action must inspect the RETURNED `result.data` shape, not
-echo back what it asked for:
-```
-if (data.demo) return { status: 'ok', amount, demo: true }
-if (data.card) return { status: 'ok', amount, card: true }
-return { status: 'ok', amount, checkoutUrl }
-```
-**Terminal-id validated before the machine call:** `method === 'card'` with no `terminalId` returns
-`{status:'error'}` in the action itself (`mockApply` never called) — cheaper failure than letting
-`runCollectStartCard`'s own `!terminalId` guard fire after a full `applyTransition` load+derive+resolve
-round trip, and gives a clean early-return unit test (`expect(mockApply).not.toHaveBeenCalled()`).
-**CONSUMER_APP_URL precondition is QR-only:** card never redirects the guest's browser anywhere, so
-the `!DEMO_MODE && !consumerAppUrl` check must be skipped when `isCard` — gate it as `!isCard &&
-!DEMO_MODE && !consumerAppUrl`, not by removing the check.
-
-**Modal chooser flag: terminals-present, not an env var.** `CollectPaymentModal`'s new `terminals:
-{terminalId, label}[]` prop defaults to `[]` — an empty array skips the QR/Tap-card chooser phase
-entirely and the modal behaves byte-identically to its pre-card form (auto-starts QR on mount, same
-phases). This means a rental caller (`CreateRentalModal.tsx`, `RentalBookingCard.tsx`) that never
-passes the prop needs ZERO changes even though `CollectActions.create`'s type gained a required
-`choice` parameter — a function with fewer declared params (`() => collectRentalPayment(...)`) is
-still assignable to a callback type expecting one, so the existing rental call sites type-check
-unmodified. Only the two reservation callers (`view.tsx`'s bulk-collect modal, `BedDetail.tsx`) load
-`listVivaTerminals(siteId, accessKey)` once (client-side `useEffect` in `ManageView`) and thread the
-result down as `collectTerminals` / `terminals`.
-
-**`cancel()`'s new "still processing" branch is a modal-stays-open state, not a close path:** a card
-abort that raced the terminal reading the card returns `{status:'ok', paymentStatus:'processing'}`
-from `cancelCollection` (mirrors `runCollectAbandonCard`'s poll branch in the A3 machine). The modal's
-`handleClose` must special-case this: set a `raced` flag, flip phase BACK to `'awaiting'` (not close),
-disable further close attempts (`canDismiss = phase !== 'canceling' && !raced`), and keep the existing
-poll `useEffect` running — the next poll tick resolves it to `complete`/`failed` for real. Closing
-anyway (or re-issuing another cancel) would either strand a charge the guest's bank already approved
-or double-cancel a resolving session.
-
-**Existing `toHaveBeenCalledWith` assertion decay:** `cancelCollection` calling `applyTransition`
-unconditionally with a 3rd `{ collect: { terminalId } }` arg (even when `opts` is undefined, so
-`terminalId: undefined`) broke a pre-existing exact-args assertion
-(`toHaveBeenCalledWith(RES_ID, 'collect.abandon')`, no 3rd arg) — same class of decay as the
-2026-07-23 till-day-anchoring entry above (a callee gains an argument, the caller's mock assertion
-must widen to `expect.objectContaining`/the literal new shape, not just "still passes"). Fixed by
-updating the assertion to `toHaveBeenCalledWith(RES_ID, 'collect.abandon', { collect: { terminalId:
-undefined } })` rather than loosening it — the exact shape IS the contract other packets (mobile) are
-coding against.
-
-**Mock-contract fix was pre-existing red, not caused by this packet:** `packages/data/src/
-reservation-payment.ts` had picked up `cancelReservationVivaPayment`/`refundReservationVivaPayment`
-exports from the concurrent A3 work before this session started (see the 2026-08-30 C1 entry's
-"pre-existing failure" note) — extending `__mocks__/@repo/data/reservation-payment.ts` with both
-(`vi.fn().mockResolvedValue({status:'canceled'})` / `{status:'ok'}`) was step 0 of this packet, not a
-regression to chase down.
-
-**Prevention:** When a shared action contract is being consumed by two parallel in-flight packets
-(web + mobile here), treat the signature as frozen the moment it's stated in the brief — additive
-params only, and map on the CALLEE's returned shape rather than the CALLER's requested intent,
-since a short-circuit branch inside the callee (demo-overrides-card here) can silently produce a
-different shape than what was asked for. When adding a required param to a thunk type consumed by
-multiple call sites, check whether the existing call sites are arrow functions with fewer params
-before assuming they all need updating — TS structural typing accepts them unchanged.
+### 2026-06-21: Prisma upsert races under RSC prefetch (P2002)
+tags: entities=reservation-day,prisma,race · files=apps/partner/app/sites/[id]/manage/reservation-day.ts
+**Problem:** `upsert({ update: {} })` is SELECT-then-INSERT inside Prisma; Next prefetches the manage route ~4× at once, the loser throws `P2002` and the page crashed at `resolveTodayRow`.
+**Solution:** `resolveTodayRow` (no-op update): catch `P2002`, re-fetch with `findUniqueOrThrow`. `applyDayTransition` (real update): wrap the `$transaction` in `runTransaction()` and RETRY on `P2002` (the retry takes the update branch). Idiom: `(err as { code?: string }).code === 'P2002'` (as `packages/data/src/impersonation.ts`). Pin it with a `Promise.all` integration test on the same key.
+**Prevention:** Any lazy get-or-create under concurrent requests needs `INSERT ... ON CONFLICT DO NOTHING RETURNING *` via `$queryRaw` or this catch-and-refetch/retry (repo convention).
+
+### 2026-07-05: Emoji glyphs ignore CSS font-size and clip in small tiles
+tags: entities=bed-state,grid · files=packages/floor-core/src/bed-state.ts
+**Problem:** A 💳 marker in the grid tile rendered at OS emoji size (16–20 px) regardless of `text-[10px]` and clipped.
+**Solution/Prevention:** `paymentGlyph` returns a `'card'` sentinel that `Item.tsx` renders as `CreditCardIcon`, or the text glyph `'€'`. In tile/badge contexts use text glyphs or icon components; emoji cannot be sized by Tailwind text classes.
+
+## Cross-package plumbing
+
+### 2026-07-25: Restaurant boolean toggle — four touch points, not two
+tags: entities=restaurant,settings · files=packages/table-reservations-core/src/restaurant/queries.ts · track=002
+**Problem:** The packet named only the WRITE side (`types.ts` `RestaurantInput`, `restaurant/actions.ts`) for `dineInEnabled`; the core READ side (`restaurant/queries.ts` `restaurantSelect` + `RestaurantRecord`) omitted the field, so writes succeeded but every read dropped it.
+**Solution:** (1) `RestaurantInput`; (2) create `data` + `if (input.x !== undefined) data.x = input.x`; (3) `restaurantSelect` + `RestaurantRecord` in `packages/table-reservations-core/src/restaurant/queries.ts`; (4) the app DTO (`restaurants/[id]/queries.ts` `RestaurantDetail` + mapper), the General tab, and `packages/table-reservations-ui/src/partner/RestaurantSettingsForm.tsx` (`RestaurantSettingsLabels` + `RestaurantSettingsValues` + a `<Toggle>` mirroring `guestSelectionEnabled`). Cheapest guard: a pass-through test that the field survives `getRestaurant`'s mapping.
+**Prevention:** `grep -rn "guestSelectionEnabled" packages/table-reservations-core/src` — a sibling boolean shows every file a new one touches.
+
+## Card-present payments (Viva, track 024)
+
+### 2026-08-30: Viva connect idempotency, account actions, terminal upsert guard
+tags: entities=viva,partner-account,viva-terminal · files=apps/partner/app/account/viva/actions.ts · track=024
+**Problem:** Viva's `POST /isv/v1/accounts` mints a NEW `accountId` per call and there is no "reissue invitation" endpoint — a brief assuming "open the onboarding link again" is unbuildable.
+**Solution:** `connectViva` never calls `createConnectedAccount` once `PartnerAccount.vivaAccountId` is set; the idempotent path is a status refresh (`{ redirectUrl: null, alreadyConnected: true }`) and the pending UI points at Viva's invitation email + Refresh (never fabricate a re-open link). The Viva account actions are `auth()`-only like the Mollie ones → `UNGATED_ALLOWLIST` with a justification. `registerVivaTerminal` (`apps/partner/app/sites/[id]/manage/actions.ts#registerVivaTerminal`) must `findUnique` and reject `existing.siteId !== siteId` — `terminalId` is globally unique, a bare upsert re-parents a device on a typo. `@repo/data/viva` has no prisma import → `vi.mock('@repo/data/viva', ...)` directly.
+**Prevention:** Verify an API capability in the real client (`accounts.ts`) before building UI copy that assumes it — "idempotent connect" ≠ "re-issuable invitation".
+
+### 2026-08-30: Card-present Collect leg — frozen contract, returned-shape mapping
+tags: entities=collect,reservation-payment,viva-terminal · files=apps/partner/app/sites/[id]/manage/CollectPaymentModal.tsx · track=024
+**Problem:** Web and mobile collect legs shipped in parallel against one `applyTransition('collect.start'|'collect.abandon', { collect })` contract, and the demo path short-circuits card inside the machine, so a card request can return `data.demo`.
+**Solution:** `collectReservationPayment(..., opts?: { method, terminalId })` / `cancelCollection(..., opts?: { terminalId })` are additive 4th params, so every caller compiled untouched. Map on the RETURNED `result.data` (`demo` → `{demo:true}`, `card` → `{card:true}`, else `checkoutUrl`), never on the requested method. Reject `method==='card' && !terminalId` before `applyTransition`. The `CONSUMER_APP_URL` precondition is QR-only (`!isCard && ...`). `CollectPaymentModal`'s `terminals` prop defaults to `[]` → chooser skipped, byte-identical for rental callers (TS accepts thunks with fewer params, so `CollectActions.create` gaining `choice` changed no rental call site). A cancel that raced the card read returns `paymentStatus:'processing'`: set `raced`, flip phase back to `'awaiting'`, block dismiss, keep polling — closing would strand an approved charge or double-cancel.
+**Prevention:** An exact-args assertion broken by a callee gaining an argument is updated to the exact new shape, not loosened — the shape IS the contract the other surface codes against. Concurrent packets can leave `__mocks__/@repo/data/*` behind the real exports; extending the mock is step 0, not a regression.
+
+## Partner AI assistant (track 030)
+
+Architecture (gates, routes, kinds, act-immediately, staleness rule) is canon: `apps/partner/CLAUDE.md` § AI assistant and `.claude/wiki/subsystems/partner-assistant.md`. Entries here hold only what bit in practice.
+
+### 2026-10-11: `/api/assistant` route and tool plumbing
+tags: entities=assistant,security · files=apps/partner/lib/assistant/tools/helpers.ts · track=030
+**Solution:** Cheap rejections (kill-switch → `auth()` → body → flag → `requireSiteOwner`) run BEFORE `allowAssistantTurn` so bad requests never spend the shared budget; conversations are keyed by the SITE OWNER's account id (a sudo has none), limits by the signed-in user. `siteId` lives in the tool ctx, never in a schema; `defineTool` (`apps/partner/lib/assistant/tools/helpers.ts#defineTool`) wraps `requireSiteOwner` and turns a throw into `{ ok:false, error:'tool_failed' }` because `runAgentLoop` does not catch. Anything reaching `@/app/auth` needs `vi.mock('@/app/auth')`. Real statuses: items `active|disabled|pool` (+ `new`), sites `active|hidden`, categories `food|drink|snack|accessory` — "inactive" does not exist.
+**Prevention:** Knowledge docs are read from disk (`outputFileTracingIncludes`); `knowledge.ts`'s test pins topic ids. New env vars must also be listed in `turbo.json`.
+
+### 2026-10-11: Proposal lifecycle gotchas (apply / undo / sudo)
+tags: entities=assistant,proposal,undo,sudo · files=apps/partner/lib/assistant/proposals/lifecycle.ts · track=030
+**Solution:** (1) `AssistantAction.payload` is `jsonb` and drops key order — mocks passed, only the integration run showed `stale` on every multi-field apply; `diffBasis` (`apps/partner/lib/assistant/proposals/types.ts#diffBasis`) sorts. (2) Child-row actions (`updateWorkingHours`, `updateProduct`, …) had no sudo bypass → `lib/owner-or-sudo.ts` (their tests mock `@/lib/auth-helpers` wholesale, so the helper lives elsewhere). (3) `lib/account-fields.ts#applyAccountPatch` has NO auth (callers own it) so a sudo apply patches the SITE OWNER's account; `updateAccountFields` stays session-only. (4) The auth matrix mocks `@repo/data/assistant` so `getProposalForAccount` returns a proposal for any caller. (5) Partial failure restores finished steps, then `markFailed` (no failed→undo). (6) `saveBrand` defaults null colours, so brand undo can't restore a literal null; a brand row CREATED by apply is deleted on undo.
+**Prevention:** New writable field → planner + `diff` + `execute` + `restore` + `validator-parity.test.ts` case (+ registry entry for a new kind); payloads hold NAMES — never route a model-supplied id into an action.
+
+### 2026-10-11: Inventory ghost preview on map and schematic
+tags: entities=assistant,ghost-preview,schematic · files=apps/partner/components/assistant/preview-store.ts · track=030
+**Solution:** The active preview is DERIVED (`selectActivePreview`: latest `proposed` `inventory_batch` with parseable geometry), so Apply/Undo/Reject clear ghosts with no explicit call. Geo ghosts are native `google.maps.Polygon/Polyline` (`clickable:false`), not AdvancedMarkers — 300+ stay cheap. Schematic ghosts are extra `SchematicItem`s with id `ghost:*` added to `selection.itemIds` (fill only renders when selected); every `SchematicCanvas` handler must filter `ghost:` ids. Resync after Apply is the plain `refresh()` (no parcel-summary query exists). QR PDF needs a user gesture (`qr_print` SSE → button); `printQrCards` (`inventory/qr-pdf.ts`) is dynamically imported to keep jspdf out of the drawer bundle.
+
+### 2026-10-11: Inventory proposals — simulate with the actions' own geometry
+tags: entities=assistant,inventory,parcel · files=apps/partner/lib/assistant/proposals/inventory-sim.ts · track=030
+**Solution:** `inventory-sim.ts` runs ops IN ORDER on an in-memory copy using the SAME pure code the actions run (`inventory/geometry.ts`) and returns the `Diff`, the exact action `calls` (execute performs them, so preview == applied) and the after-state `expect` (undo staleness: seats equal `expect` within 1e-7; apply staleness: `Diff.basis` hash). (1) `pairGap > 0` is NOT "paired" (the form keeps 0.4 when unpaired) — use `parcelIsPaired(seats, pairGap)`; `buildParcelConfig` is the one rebuild for parcel-ops AND the sim (editor `view.tsx` still has the old derivation). (2) `assignChairPairings` never splits units — unpairing silently no-ops; refuse it. (3) `setItemStatusByGroup`/`saveInventoryItemProperties` are id-only/no-sudo — use site-scoped `parcel-ops.setSeatsStatus`. (4) `deleteItemsByGroup` orphans the ItemGroup row. (5) `syncChairsWithLayout('create')` stamps `userId: session.user.id` (a sudo would own the seats). (6) `{selection:true}` resolves from `ctx.pageContext` and is stored as `{ids}` — the context is gone at apply.
+**Prevention:** New op = sim method (mutate + push `ExecCall` + changes) + `ExecCall` arm in `perform` + planner/tool; never re-implement geometry in the handler.
+
+### 2026-10-11: Schematic layout proposals (elements + canvas)
+tags: entities=assistant,schematic,layout-element · files=apps/partner/lib/assistant/proposals/handlers/layout.ts · track=030
+**Solution:** Handles are `elementHandle(id)` (id tail) resolved in-site at PROPOSE time; the payload stores real ids and `execute` re-verifies them because `updateLayoutElement`/`deleteLayoutElement` check id-only. Created ids are unknown until apply, so undo finds them as "in this site, not in `snapshot.existingIds`, same type+rect" (multiset). Deletes never mix with other ops; undo is refused when a proposal has no changes/creates. `parseGeometry` must treat element-only previews (empty seat lists) as non-empty. `SchematicRenderer` got an `overlay({ worldPerPx })` render prop (drawn last, pointer-events none, world metres).
+**Prevention:** Unit mocks must return COPIES from `findMany` or snapshots alias live rows and undo tests pass vacuously.
+
+### 2026-10-11: Photo placement (`place_image`)
+tags: entities=assistant,image,blob · files=apps/partner/lib/assistant/proposals/handlers/place-image.ts · track=030
+**Solution:** Apply `put()`s PUBLIC at the deterministic `sites/{siteId}/assistant/{uploadId}.{ext}` and writes via `lib/site-images.ts` setters (siteId-scoped, no session — callers own auth). Undo's `diff(applied:true)` cannot see the snapshot, so "slot still shows what apply wrote" = slot URL pathname equals `destPath` (`isPlacedCopy`) — hence the deterministic path; undo never loads the (possibly purged) upload. `Diff.image.imageUrl` may be a private blob, so the card needs a text fallback. `Site.bgImageUrl` (underlay) is stretched over the whole canvas — the proposal warns.
+
+### 2026-10-11: Spatial tools — one local frame, generic relate/measure
+tags: entities=assistant,geo,osm · files=apps/partner/lib/assistant/geo/features.ts · track=030
+**Solution:** ONE local frame (x east, y north, metres; schematic y NEGATED) so `by_m` from any tool feeds `propose_move` directly; `relate(a,b)` + `moveToGap` are generic over polygon/line/point/shoreline. (1) Overpass `fetch` is raced over 3 mirrors → assert "no new calls", never `toHaveBeenCalledTimes(1)`. (2) The prisma mock ignores `where` — a `layoutElement.findMany` returning all rows turns bars into "water"; filter on `args.where.type` in the mock. (3) Coincident points still report overlap/containment (`Relation.degenerate`); only the move is refused. (4) OSM ids are cached per siteId — a `{osm}` ref only resolves in the site it was listed for.
+**Prevention:** New spatial question = feature kind in `features.ts` + a ref in `spatial-data.ts` `resolveRef`, not a new tool.
+
+### 2026-10-11: Inspect tool — providers generate from live registries
+tags: entities=assistant,inspect · files=apps/partner/lib/assistant/inspect/tool-source.ts · track=030
+**Solution:** Providers (`inspect/*.ts`, 8 KB cap in `fit.ts`) GENERATE from live registries and keep hand-written knowledge in ONE table each (`RELATIONSHIPS`, `OP_META`) that tests cross-check (columns exist, example SQL runs, every propose tool has `OP_META`, cited `explain_feature` ids exist). (1) `tools/index` → `tools/inspect` → providers → `tools/index` is a cycle: providers read the registry at call time via `inspect/tool-source.ts` (dynamic import), which tests mock. (2) `getSiteFeeContext` returns the whole PartnerAccount row (bank account, Mollie token) — project explicit fields and assert no fixture secret in the JSON. (3) Keep inspect tests independent of optional tools (`run_js`) other agents registered.
+**Prevention:** New propose tool → `OP_META` entry; new `_id` column in `snapshot/schema.ts` → `RELATIONSHIPS` entry (tests fail otherwise).
+
+### 2026-10-11: Act-immediately — createAndApply test wiring
+tags: entities=assistant,proposal · files=apps/partner/lib/assistant/proposals/act.ts · track=030
+**Solution:** `createAndApply` (`act.ts`) = create + the lifecycle's `applyProposal(id, { note:false })`; `ctx.applied` caps 5/turn. Tests mocking `@repo/data/assistant.createProposal` must also `vi.mock('./lifecycle', () => ({ applyProposal: vi.fn() }))` and reset `ctx.applied = 0` in `beforeEach` (the cap leaks across tests); multi-card tool tests mock `../proposals/act`. No transcript note mid-turn (`note:false`) — it would land before the turn's own messages. The negligible-move guard in `InventorySim.run` fires only for an all-moves batch, so scripts with a tiny nudge still work.
 
 ## Rejected approaches
 
-### 2026-06-15: React onWheel prop for wheel zoom (passive listener no-op)
-**Problem:** React's synthetic `onWheel` prop attaches a passive listener. Calling `e.preventDefault()` inside it is silently ignored by the browser — the native page zoom fires anyway (and on macOS, ctrl+wheel triggers OS-level zoom).
-**Solution:** Register via `el.addEventListener('wheel', handler, { passive: false })` inside a `useEffect` on the element ref, with cleanup `removeEventListener`. This is what `SchematicRenderer.tsx` does (lines 340–363).
-**Prevention:** Any time you need to `preventDefault()` on a wheel event, skip `onWheel` prop and use the manual `addEventListener` pattern. The eslint-disable comment on the empty dep array is standard for this pattern — the handler reads a ref, not state.
-
-## Assistant route + tools (track 030 S2)
-
-### 2026-10-11: shape of `/api/assistant` and its tools
-**Pattern:** Gate order kill-switch -> `auth()` -> body shape -> flag `assistant` (`getFlagStates({isSudo, accountId})`) -> `requireSiteOwner` -> `allowAssistantTurn` -> conversation. Cheap rejections come BEFORE limits so malformed/foreign requests never spend the shared budget. Conversations are keyed by the SITE OWNER's account id (FK is `PartnerAccount.userId`; a sudo has none), limits by the signed-in user. `siteId` lives in the tool ctx, never in a tool schema; every tool wraps `requireSiteOwner` (`tools/helpers.ts defineTool`) and a thrown error becomes `{ok:false,error:'tool_failed'}` because `runAgentLoop` does not catch tool throws.
-**Gotchas:** (1) `@repo/agent` imports use `.ts` extensions -> partner `tsconfig` needs `allowImportingTsExtensions` and `next.config` `transpilePackages: ['@repo/agent']`. (2) Route handlers are not in the auth matrix (`kind:'route'` has no runner): register in `UNGATED_ALLOWLIST` and put the 401/403/sudo/flag/kill-switch cases in the route's own test, running the REAL `requireSiteOwner` over prisma mocks. (3) Tool code needs prisma-mock delegates that did not exist (`inventoryItem.groupBy`, `*.count`, `siteBrand.findUnique`) - add them, mock-contract only checks model keys. (4) Importing anything that reaches `@/app/auth` needs `vi.mock('@/app/auth')` or next-auth fails to resolve `next/server`. (5) Real item statuses are `active|disabled|pool` (+ transient `new`), site statuses `active|hidden`, product categories `food|drink|snack|accessory` - the brief's "inactive" does not exist.
-**Prevention:** Knowledge docs are read from disk (`outputFileTracingIncludes` in next.config); a `knowledge.ts` test pins topic ids. Env vars must also be listed in `turbo.json`.
-
-### 2026-10-11: Assistant proposals: propose / apply / undo (track 030 S3)
-**Pattern:** `lib/assistant/proposals/`: a `KindHandler` per kind (`site_fields`, `working_hours`, `brand`, `slug`, `products`, `rental_items`, `account_fields`) with `diff / snapshot / execute / undoBlocker / restore`; payloads hold NAMES not ids. `lifecycle.ts` (`applyProposal/rejectProposal/undoProposal`, wrapped by `app/assistant/actions.ts`) re-authorises every call: `auth()` -> account-scoped `getProposalForAccount` (sudo falls back to the owner via `assistantAction.findUnique`) -> `requireSiteOwner(action.siteId)` -> site still belongs to the proposal's account. **Staleness is ONE idea**: apply = `diffBasis(handler.diff(payload))` equals the stored preview's basis; undo = `handler.diff(payload, {applied:true})` is EMPTY (what the proposal wrote is intact). Partial failure rolls the finished steps back from the snapshot (`restore(..., only=done)`), then `markFailed` (the data layer has no failed->undo transition).
-**Gotchas:** (1) `AssistantAction.payload` is `jsonb`, which does NOT preserve object key order - a diff rebuilt from the stored payload lists changes in another order; unit tests with mocks passed, only the integration run showed `stale` on every multi-field apply. `diffBasis` sorts. (2) Child-row actions (`updateWorkingHours`, `deleteWorkingHours`, `updateProduct/deleteProduct/toggleProductSoldOut/updateProductImage`) checked `site.userId !== session.user.id` with NO sudo bypass; fixed via `lib/owner-or-sudo.ts` (their tests mock `@/lib/auth-helpers` wholesale, so the helper must live elsewhere). (3) `submitForm` replaces 10 fields; the patch lives in `lib/account-fields.ts` (`applyAccountPatch(accountId, patch)`, NO auth - callers own it) so the assistant can patch the SITE OWNER's account when a sudo applies; the public `updateAccountFields` is session-only. (4) Auth-matrix 'reject' needs an auth message in `errors` (`Not authenticated`/`Not authorized`): lifecycle returns `['forbidden','Not authorized']`; the matrix mocks `@repo/data/assistant` so `getProposalForAccount` returns a proposal for any caller. (5) Propose-time validators duplicate action bounds; `proposals/validator-parity.test.ts` drives the real action and the planner over the same boundary values - extend it when adding a field. (6) `saveBrand` defaults null colours to `#faf9f6/#111827`, so brand undo cannot restore a literal null colour; a brand row CREATED by apply is removed on undo with a direct `siteBrand.delete` (no action exists).
-**Prevention:** New writable field -> planner + `diff` + `execute` + `restore` + parity test + (if it is a new kind) registry entry; never route a model-supplied id into an action, match by name inside the site.
-
-### 2026-10-11: Assistant inventory preview on map/schematic (track 030 S4b)
-**Pattern:** `components/assistant/preview-store.ts` holds only user overrides (forced/hidden/peek/focusNonce); the active preview is *derived* by `selectActivePreview(conversation proposals, ui)` = latest `proposed` `inventory_batch` with parseable `preview.geometry`. Apply/Undo/Reject therefore clear ghosts for free (status leaves `proposed`) - no explicit clear call. Editors call `useGhostPreview(siteId, mode, seatLookup)`; fit-to-bounds runs only when `focusKey` (`actionId:focusNonce`) changes, never on site refresh.
-**Geo:** `inventory/GhostLayer.tsx` paints native `google.maps.Polygon/Polyline` (`clickable:false`) - not AdvancedMarkers - so 300+ ghosts stay cheap; dashes need `Polyline` + `icons` (Polygon has no dash). `removed` arrives as ids only -> position resolved from loaded items (`SeatLookup`); unloaded parcels are covered by `parcels[].footprint`.
-**Schematic:** `@repo/schematic` renderer has no ghost layer and is not ours to edit, so ghosts are extra `SchematicItem`s with id `ghost:*`, tinted via `parcelColor` and added to `selection.itemIds` (the only way to get a visible fill: fill alpha is `parcelColor+'88'` only when selected). Every handler in `SchematicCanvas` filters `ghost:` ids. No dashed outline / connector / parcel footprint / auto-fit there (needs a renderer overlay prop).
-**Gotcha:** `getSite` returns the FULL seat array and no `parcels` summaries (no `getParcelSummaries` exists) - the editors' resync after Apply is the plain `refresh()`.
-**QR:** `qr_print` SSE event -> `ChatMessage.qrPrints` -> button (PDF download needs a user gesture); PDF logic extracted to `inventory/qr-pdf.ts` (`printQrCards`), dynamically imported to keep jspdf out of the drawer bundle.
-
-
-### 2026-10-11: Assistant inventory proposals (track 030 S4a)
-**Pattern:** `lib/assistant/proposals/inventory-sim.ts` runs the ops IN ORDER on an in-memory copy of the touched parcels using the SAME pure code the actions run (`inventory/geometry.ts`: `generateLayout/shiftToExistingCentroid/matchSeats/rotatePositions/spacePositions/reversedNumbers`, extracted from `actions.ts` which now calls them). It returns the `Diff` (+ `geometry`, `basis`), the exact action `calls` and the after-state `expect`. `handlers/inventory.ts`: `diff` = sim, `execute` = perform `sim.calls` (preview args == applied args by construction), stale(apply) = `Diff.basis` (hash of every loaded seat/ItemGroup row, part of `diffBasis`), stale(undo) = touched seats equal payload `expect` within 1e-7, snapshot = touched seats + ItemGroups + units + pre-apply ids of grown parcels, restore = per-seat `updateMany` (site-scoped) + delete extras via `deleteInventoryItems` + recreate pruned units + `recomputeSeatLabels`; undoBlocker refuses when a shrink removed seats or added seats have reservations/devices.
-**Gotchas:** (1) `pairSeats = ig.pairGap > 0` re-paired unpaired parcels (the form keeps pairGap 0.4 when unpaired): pairing is now `parcelIsPaired(seats)` from unit membership, `buildParcelConfig` is the single rebuild used by parcel-ops AND the sim; the editors' `view.tsx` still have the old derivation (UI, out of scope). (2) `syncChairsWithLayout` keeps existing seat numbers on grow/shrink, so reshapes rarely renumber: QR warning = seats whose number changed + all seats on a pair toggle + reverse numbering; moves/rotates never warn (labels are unit-ordinal based). (3) `assignChairPairings` never splits units, so unpairing a paired parcel silently does nothing - the assistant refuses it. (4) `setItemStatusByGroup`/`saveInventoryItemProperties` are id-only/no-sudo: new `parcel-ops.setSeatsStatus` (site-scoped) is used instead. (5) `deleteItemsByGroup` leaves the ItemGroup row orphaned (undo of a created parcel deletes it explicitly). (6) `syncChairsWithLayout('create')` stamps `userId: session.user.id` (a sudo applying would own the seats). (7) the prisma mock needed `reservation.count`, `inventoryItem.aggregate`, `itemGroup.deleteMany`, `sunbedGroup.createMany`; `@repo/data/unit` is aliased to a mock whose `deviceRemovalError` returns 'blocked'. (8) `{selection:true}` resolves from `ctx.pageContext` (route passes `req.context`), ids re-verified in-site, stored as `{ids}` because the context is gone at apply time.
-**Prevention:** new inventory op = sim method (mutate in-memory + push `ExecCall` + changes) + `ExecCall` arm in `perform` + planner/tool; keep the sim on shared pure geometry, never re-implement math in the handler.
-
-### 2026-10-11: Assistant schematic layout proposals (track 030 S4c)
-**Shape:** `proposals/handlers/layout.ts` holds two kinds (`layout_elements`, `layout_canvas`); tools in `tools/propose-layout.ts` (registered via `layoutTools` in `propose.ts`). Handles are `elementHandle(id)` (id tail) resolved in-site at PROPOSE time; the payload stores real ids, and `execute` re-verifies them in the site because `updateLayoutElement`/`deleteLayoutElement` check id-only.
-**Non-obvious:** created element ids are unknown until apply, so undo/restore finds them as "in this site, not in `snapshot.existingIds`, same type+rect" (multiset match). Deletes are never mixed with other ops: lifecycle refuses undo when a proposal has no changes/creates. Preview rides in `Diff.geometry.elements` (mode 'schematic', empty seat lists); `parseGeometry` must treat element-only previews as non-empty. `@repo/schematic` renderer got an optional `overlay({worldPerPx})` render prop (drawn last, pointer-events none, world metres) -- ghosts need no screen transform. Unit mocks must return COPIES from `findMany` or snapshots alias live rows and undo tests pass vacuously/fail confusingly.
-
-### 2026-10-11: Assistant photo placement (track 030 S6a)
-**Pattern:** kind `place_image` (`proposals/handlers/place-image.ts`, tool `propose_place_image`). Payload = `{target, handle?(name), uploadId, destPath}`; apply reads the AssistantUpload, strips EXIF + caps 2400 px (`lib/assistant/image-process.ts`), `put()`s PUBLIC at the deterministic `sites/{siteId}/assistant/{uploadId}.{ext}` (`addRandomSuffix:false, allowOverwrite:true`) and writes via `lib/site-images.ts` (`setSiteCover/setProductImage/setRentalItemImage/setBrandImage/setSchematicUnderlay`, siteId-scoped, no session: callers own auth; `uploadContentImage`/`updateProductImage` now use them). Undo's `diff(applied:true)` cannot see the snapshot, so "slot still shows what apply wrote" = the slot URL's PATHNAME equals `destPath` (`isPlacedCopy`); that is why the path must be deterministic, and why undo verification never loads the (possibly purged) upload. New blob is not deleted on undo (v1).
-**Gotchas:** (1) The model was never told upload ids: images carry no label. They now ride in `renderPageContext(..., attachments)` (stripped from the transcript with the rest of the page context). (2) Uploads may be private blobs, so `Diff.image.imageUrl` may not be fetchable by the browser; the card needs the text fallback. (3) `Site.bgImageUrl` (underlay) had NO writer and is stretched over the whole canvas (`preserveAspectRatio slice` on world size), so the proposal warns. (4) macOS `sed -i` needs `-i ''`; a bare `-i` silently misparses the script as a suffix.
-
-### 2026-10-11: Assistant spatial tools: shared frame + describe/measure (track 030 G2)
-**Pattern:** Pure maths lives in `lib/assistant/geo/{frame,shapes,features,osm,describe}.ts`; IO in `tools/{spatial-data,osm-source,spatial}.ts`. Everything is in ONE local frame (x east, y north, metres; schematic canvas y is NEGATED, so `by_m` from any tool feeds `propose_move` directly). `relate(a,b)` + `moveToGap` are generic over polygon/line/point/shoreline (`SeaModel`); `measureParcels` and `measure_to_sea` are thin users of the same code. A polyline `b` is approached along the perpendicular (closest point), a polygon `b` along the centre line.
-**Gotchas:** (1) `fetch` to Overpass is raced over 3 mirrors, so one load = 3 `fetch` calls - assert "no new calls", never `toHaveBeenCalledTimes(1)`. (2) The prisma mock ignores `where`; a `layoutElement.findMany` mock returning all rows silently turns bars into "water" - filter on `args.where.type` in the mock. (3) Coincident reference points (a seat at a 1x1 parcel's centre) must still report overlap/containment: `Relation.degenerate`, only the move is refused. (4) `r1`/`r2` add `+ 0` so `-0` never prints. (5) OSM ids are cached per siteId (30 min, 60 s negative cache) - a `{osm}` ref only resolves inside the site it was listed for.
-**Prevention:** new spatial question types = new feature kind in `features.ts` + a ref in `spatial-data.ts#resolveRef`, not a new tool.
-
-### 2026-10-11: Assistant inspect tool (track 030 G3)
-**Pattern:** `tools/inspect.ts` + `lib/assistant/inspect/{catalog,data,editor,space,features,readiness,money}.ts`, registry `inspect/index.ts`, 8 KB cap in `inspect/fit.ts`. Providers GENERATE from live registries (snapshot `schema.ts`, registered propose tools' JSON schemas) and keep hand-written knowledge in ONE table each (`RELATIONSHIPS`, `OP_META`) that tests cross-check (columns exist, example SQL executes on `buildDatabase(emptyRows)`, every propose tool has an OP_META entry, no stale entries, cited `explain_feature` ids exist).
-**Gotchas:** (1) `tools/index` -> `tools/inspect` -> providers -> `tools/index` is a cycle: providers read the registry only at call time through `inspect/tool-source.ts` (dynamic `import('../tools')`), which tests mock to inject fake tools / hide `run_js`. (2) `getSiteFeeContext` returns the whole PartnerAccount row (bank account, Mollie token): project explicit fields only, and assert the JSON contains no fixture secret. (3) The partner `@repo/data/subscription` mock lacked `SUBSCRIPTION_FEATURES` / `TIER_FEATURE_DEFAULTS` — add constants to the mock when a provider reads them (mock-contract allows supersets). (4) Test the real registry list in `tools.test.ts` AND make inspect tests independent of which optional tools (run_js) other agents have registered.
-**Prevention:** new propose tool -> add its `OP_META` entry (test fails otherwise); new `_id` column in `snapshot/schema.ts` -> add a `RELATIONSHIPS` entry (test fails otherwise).
-
-
-### 2026-10-11: Assistant act-immediately (track 030 D2 superseded)
-**Pattern:** `lib/assistant/proposals/act.ts` `createAndApply` = `createProposalFor(..., {emit:false})` + the lifecycle's own `applyProposal(id, {note:false})` + emit the card as `status:'applied'`. A diff with `deletes` stays `proposed` (typed confirm). `ctx.applied` counts per turn (cap 5). Every multi-card tool (`extract-plan`, `propose-aerial`, `run_js`) goes through it too.
-**Gotchas:** (1) tests that drive tools with `@repo/data/assistant.createProposal` mocked must also `vi.mock('./lifecycle', () => ({ applyProposal: vi.fn() }))` and reset the shared `ctx.applied = 0` in `beforeEach` (the 5/turn cap leaks across tests otherwise); tests that mock `createProposalFor` for the multi-card tools now mock `../proposals/act` `createAndApply`. (2) No transcript note mid-turn: `note:false`, a note would land before the turn's own messages are saved. (3) The "long streak" ghost was per-seat connector arrows in `buildGhostModel` (`links`), not box geometry. (4) Negligible-move guard lives in `InventorySim.run` and only fires for an all-moves batch, so layout scripts with a tiny nudge still work.
+### 2026-06-15: React `onWheel` prop for wheel zoom (passive listener no-op)
+tags: entities=schematic,zoom · files=packages/schematic/src/SchematicRenderer.tsx
+**Problem:** React's synthetic `onWheel` is passive; `e.preventDefault()` is ignored and native page zoom (macOS ctrl+wheel) fires anyway.
+**Solution/Prevention:** `el.addEventListener('wheel', handler, { passive: false })` in a `useEffect` on the element ref with cleanup — what `SchematicRenderer.tsx` does. The handler reads a ref, so the empty dep array + eslint-disable is standard.

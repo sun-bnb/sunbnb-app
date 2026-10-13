@@ -1,3 +1,8 @@
+---
+parent: 002-table-reservations
+title: Manual test plan — P1.5 dine-in tabs
+---
+
 # Manual test plan — P1.5 dine-in tabs (track 002)
 
 End-to-end manual verification of the QR order-&-pay-at-the-table loop shipped in

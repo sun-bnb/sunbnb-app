@@ -2,13 +2,11 @@
 
 How to use the AI context metadata tools for this project. Organized by what you're trying to do.
 
-## One-time setup
+## Setup
 
-```sh
-.claude/wiki/scripts/install-hook.sh
-```
-
-Installs the pre-push drift check. From here on, every `git push` runs `/context check` automatically — warn-only, never blocks.
+None. The committed `.claude/settings.json` prints a one-line context-health summary at every
+session start, and `.githooks/pre-push` prints the same line on every push (warn-only, never
+blocks). `/context check` is the full report behind that line.
 
 ## Quick reference
 
@@ -24,6 +22,8 @@ Installs the pre-push drift check. From here on, every `git push` runs `/context
 | `/wiki prune` | Actively remove dead content | LLM, scoped | After lint surfaces medium-tier findings |
 | `/wiki review` | Strategic re-pass — is each page earning its keep? | LLM | Monthly, or post-major-release |
 | `/update-knowledge [scope]` | Sync the CLAUDE.md tree + `.claude/rules/` | LLM, scoped | After a non-trivial rule/convention change |
+| `/recall <query> [--surface <agent>]` | Cross-layer semantic recall: wiki → playbook → track → past sessions, tiered by trust; `--credit <ids>` when a hit helped | ~0 tokens | Task start; any "have we hit this before?" |
+| `/groom <agent>` | Curate one playbook: dedupe, verify stale vs code, v2 format, regenerate index, promotion proposals both ways | LLM, one playbook | When the health line says a playbook is over budget |
 | `/review` | Pre-push code review against project rules | LLM | Before pushing |
 | `/test`, `/migrate` | Test runner / migration assistant | — | As needed (pre-existing) |
 
@@ -74,9 +74,9 @@ Installs the pre-push drift check. From here on, every `git push` runs `/context
 
 ## What you don't need to invoke
 
-- **Auto-loaded** every session: root `CLAUDE.md` + the `@` chain (app + package CLAUDE.md files) + `.claude/rules/*.md` + your memory index.
-- **Auto-dispatched** when judgment says useful: sub-agents (user-dev, partner-dev, admin-dev, data-dev), the Explore agent for code search, Plan agent for non-trivial design.
-- **Auto-fired** post-setup: the pre-push drift check.
+- **Auto-loaded** every session: root `CLAUDE.md` + `.claude/rules/*.md` + your memory index. A directory's `CLAUDE.md` (`apps/<app>/`, `packages/<pkg>/`) loads when a file under it is read; `TESTING.md` / `UI.md` siblings are pulled on demand.
+- **Auto-dispatched** when judgment says useful: sub-agents (user-dev, partner-dev, admin-dev, data-dev, sunbed-inventory), the Explore agent for code search, Plan agent for non-trivial design.
+- **Auto-fired:** the context-health summary line at session start and on every push.
 
 Everything else is on-demand. The system is deliberately user-controlled at the metadata-write boundary — the gate works because *you* decide when to apply it.
 

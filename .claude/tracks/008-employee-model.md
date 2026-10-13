@@ -1,9 +1,9 @@
 ---
 id: 008-employee-model
 title: Employee Model — floor-staff attribution & per-worker till
-status: active
+status: done
 created: 2026-06-19
-updated: 2026-06-19
+updated: 2026-10-12
 worktree: null
 ---
 

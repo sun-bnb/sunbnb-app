@@ -313,9 +313,18 @@ function distillChunk(compactText, cfg) {
   // Non-array output (empty, refusal, or garbled) is a transient failure -> caller retries.
   // Treating it as "no knowledge" here is what silently dropped real records.
   if (!Array.isArray(arr)) throw new Error(`non-array distill output: "${txt.slice(0, 100)}"`);
-  return arr
-    .filter(x => x && x.text && x.type)
-    .map(x => ({ type: String(x.type), text: String(x.text).trim(), entities: Array.isArray(x.entities) ? x.entities.map(String) : [] }));
+  // Enforce the kb: vocabulary on insert (track 031): the model occasionally invents types
+  // ("regression-gap", "open_decision"); map the known aliases, drop the rest with a note.
+  const TYPE_ALIAS = { 'regression-gap': 'gotcha', 'open_decision': 'decision', 'open-decision': 'decision', 'bug': 'incident', 'learning': 'observation' };
+  const out = [];
+  for (const x of arr) {
+    if (!x || !x.text || !x.type) continue;
+    let type = String(x.type).toLowerCase().trim();
+    if (!KB_TYPES.has(type)) type = TYPE_ALIAS[type];
+    if (!type) { console.error(`  dropped record with unknown type "${x.type}"`); continue; }
+    out.push({ type, text: String(x.text).trim(), entities: Array.isArray(x.entities) ? x.entities.map(String) : [] });
+  }
+  return out;
 }
 
 // ---- embedding (local transformers.js — no key, no egress) ----
@@ -428,6 +437,12 @@ async function main() {
   try {
     if (has('--sweep')) await sweep(client, cfg, opts);
     else if (has('--embed-pending')) await embedPending(client, cfg);
+    else if (has('--index-curated')) {
+      // Curated/canonical layers → the same store, labelled by source (see knowledge-curated.mjs).
+      const { indexCurated } = await import('./knowledge-curated.mjs');
+      const r = await indexCurated(client, cfg, { dryRun: has('--dry-run') });
+      console.log(`curated index: ${r.total} units — insert ${r.insert}, delete ${r.delete}${r.changed ? '' : ' (no change)'}`);
+    }
     else if (has('--session')) {
       const transcript = val('--session');
       const res = await ingestSession(client, transcript, val('--session-id'), cfg, opts);
@@ -444,7 +459,7 @@ async function main() {
         }
       }
     } else {
-      console.error('usage: --session <path> [--session-id id] [--with-subagents] | --sweep | --embed-pending  [--force]');
+      console.error('usage: --session <path> [--session-id id] [--with-subagents] | --sweep | --embed-pending | --index-curated [--dry-run]  [--force]');
       process.exit(2);
     }
   } finally { await client.end(); }

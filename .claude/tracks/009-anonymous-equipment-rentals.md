@@ -1,9 +1,9 @@
 ---
 id: 009-anonymous-equipment-rentals
 title: Anonymous Equipment Rentals
-status: active
+status: done
 created: 2026-06-19
-updated: 2026-06-19
+updated: 2026-10-12
 worktree: null
 ---
 

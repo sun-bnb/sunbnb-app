@@ -1,7 +1,17 @@
+---
+id: 016-day-anchored-till
+title: Day-anchored till (per-day till the operator expects)
+status: done
+created: 2026-07-23
+updated: 2026-10-12
+worktree: null
+---
+
 # Track 016 — Day-anchored till (per-day till the operator expects)
 
-**Status:** active · **Surface:** `packages/data` + `apps/partner` (manage) · **Schema:** additive (`TillClose.carry_over_*`)
-**Created:** 2026-07-23 · **Updated:** 2026-07-23 (P4) · **Worktree:** null
+**Surface:** `packages/data` + `apps/partner` (manage) · **Schema:** additive (`TillClose.carry_over_*`)
+Closed 2026-10-12 (track 031 status pass): P1–P4 committed 2026-07-23, browser-verified, and
+ingested into wiki `subsystems/employee-till.md` the same day.
 
 ## Goal
 

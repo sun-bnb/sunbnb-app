@@ -1,9 +1,9 @@
 ---
 id: 010-floor-reservation-lookup
 title: Floor Reservation Lookup & Arrivals — the "Guests" host stand
-status: proposed
+status: done
 created: 2026-06-19
-updated: 2026-06-19
+updated: 2026-10-12
 worktree: null
 ---
 

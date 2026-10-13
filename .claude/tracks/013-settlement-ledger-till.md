@@ -1,6 +1,15 @@
+---
+id: 013-settlement-ledger-till
+title: Settlement ledger — offline cash till source of truth
+status: active
+created: 2026-06-21
+updated: 2026-06-21
+worktree: null
+---
+
 # Track 013 — Settlement ledger (offline cash till source of truth)
 
-**Status:** Building (P0) · **Surface:** `packages/data` + `apps/partner` · **Schema:** additive (new `TillEntry`)
+**Surface:** `packages/data` + `apps/partner` · **Schema:** additive (new `TillEntry`)
 
 ## Goal
 

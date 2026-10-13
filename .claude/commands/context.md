@@ -6,10 +6,11 @@ Multi-layer operations across the AI context metadata: wiki, CLAUDE.md tree, `.c
 
 ## Usage
 
-- `/context check` — **stateless probe.** Runs the mechanical drift detector on all layers (or a specific scope). Read-only, ~0 tokens. Same script the pre-push hook runs.
-  - `/context check --scope wiki` — wiki only
-  - `/context check --scope canonical` — canonical only (CLAUDE.md tree, rules, PROJECT_CONTEXT.md)
-  - `/context check --scope all` (default) — both
+- `/context check` — **stateless probe.** Runs `context-health.mjs`, the mechanical health check over every layer (or one scope). Read-only, ~0 tokens, < 1 s. The same script prints its one-line `--summary` at every session start (`.claude/settings.json`) and on every `git push` (`.githooks/pre-push`); `check` is the full report behind that line. `/context health` is an alias.
+  - `/context check --scope wiki|canonical|playbooks|tracks|agents` — one layer
+  - `/context check --with-store` — also query the knowledge store (needs the Docker Postgres)
+  - `/context check --scope all` (default) — every layer
+  - Budgets (byte caps, freshness windows, entry limits) live in `.claude/context/budgets.json`
 - `/context sync` — **stateful tracker.** Reads `.claude/context/state.json`, computes `git log <cursor>..HEAD`, plans updates (dispatches to `/wiki ingest` and `/update-knowledge`), asks for confirmation, advances the cursor only on success.
 - `/context status` — show the current cursor state (last synced SHA + timestamp + branch + by). Read-only.
 - `/context help` — print the full operating manual (`.claude/context/help.md`). Read-only.
@@ -22,7 +23,7 @@ Parse `$ARGUMENTS` to get the subcommand (first whitespace-delimited token) and 
 
 | Subcommand | Workflow file | Behavior |
 |---|---|---|
-| `check`  | `.claude/context/workflows/check.md` | Run `node .claude/scripts/detect-drift.mjs [--scope <s>]`; report stdout verbatim. No LLM analysis. |
+| `check` / `health` | `.claude/context/workflows/check.md` | Run `node .claude/scripts/context-health.mjs [--scope <s>] [--with-store]`; report stdout verbatim. No LLM analysis. |
 | `sync`   | `.claude/context/workflows/sync.md`  | Read state, plan, ask, execute, advance cursor. **Plan-first — never write without user confirmation.** |
 | `status` | (no workflow file — trivial)         | Read `.claude/context/state.json` and pretty-print. If missing, report "never synced." |
 | `help`   | (no workflow file)                   | Read `.claude/context/help.md` and print verbatim. No analysis, no synthesis — just display the manual. |
@@ -34,7 +35,7 @@ If no subcommand was provided, inspect state and recommend ONE operation:
 
 1. Read `.claude/context/state.json` if present
 2. Compute commits since `lastSyncedSha` (if any)
-3. Run `node .claude/scripts/detect-drift.mjs` quickly
+3. Run `node .claude/scripts/context-health.mjs --summary` quickly
 4. Suggest the most relevant:
    - Drift findings ≥ 1 → `/context check` (and surface the broken count)
    - Commits since cursor ≥ 5 (or never synced and not on a clean main) → `/context sync`
@@ -83,4 +84,5 @@ Brief report back to the user: what was done, what was skipped (with reasons), n
 - `.claude/wiki/README.md` § Maintenance discipline — defines the five-qualities gate
 - `.claude/commands/wiki.md` — wiki-specific operations (ingest, lint, prune, review)
 - `.claude/commands/update-knowledge.md` — canonical-layer ingest
-- `.claude/scripts/detect-drift.mjs` — the script invoked by check and the pre-push hook
+- `.claude/scripts/context-health.mjs` — the script behind check, the session-start line and the pre-push line
+- `.claude/context/budgets.json` — the budgets every layer is checked against

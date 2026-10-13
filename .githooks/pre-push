@@ -19,6 +19,10 @@ ZERO="0000000000000000000000000000000000000000"
 ROOT="$(git rev-parse --show-toplevel)"
 DATA="$ROOT/packages/data"
 
+# AI-context health (track 031): one warn-only line about the context layers — stale wiki
+# pages, over-budget playbooks/CLAUDE.md, registry drift. Never blocks; `/context check` for detail.
+node "$ROOT/.claude/scripts/context-health.mjs" --summary >&2 2>/dev/null || true
+
 # Collect the main ref being pushed (and its sha range), if any.
 main_local=""
 main_remote=""

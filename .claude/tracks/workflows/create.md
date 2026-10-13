@@ -6,5 +6,5 @@
    Open decisions, Links.
 3. Write the **Goal** and an initial **Roadmap** (phases/steps). Set **Resume here → Next
    action** to the first concrete step a cold agent could execute.
-4. Add a row under **Proposed / backlog** in `index.md`.
-5. Flip `status: active` (and move the index row to **Active**) when work actually starts.
+4. Regenerate the registry: `node .claude/scripts/tracks-index.mjs`.
+5. Flip `status: active` when work actually starts, and regenerate again.

@@ -8,5 +8,6 @@ The step that keeps a track resumable. Do it every time you stop, even mid-step.
    context it needs. This is the most important step — write it for someone with zero memory.
 4. Bump `updated:` in frontmatter; change `status:` if it moved (e.g. → `blocked`, with the
    blocker stated in Resume here).
-5. Update the track's row in `index.md` (next action, status, updated).
+5. Regenerate the registry: `node .claude/scripts/tracks-index.mjs` (the first line of
+   **Resume here** becomes the row's "next action" — write it so it reads well alone).
 6. (Optional) flag any durable learnings worth promoting to the wiki/memory.

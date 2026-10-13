@@ -3,7 +3,7 @@ id: 030-partner-ai-assistant
 title: Partner AI assistant — site tabs, inventory/schematic editing, documents, photos
 status: active
 created: 2026-10-11
-updated: 2026-10-11
+updated: 2026-10-12
 worktree: null
 ---
 
@@ -27,9 +27,10 @@ actions) produces the geometry, and every write is a reviewed proposal.
 
 ## Resume here
 
-- **State 2026-10-11:** **all slices S0–S8 built — uncommitted** on `main`'s working tree (plus
-  docs pass: `apps/partner/{CLAUDE,TESTING}.md`, `packages/data/CLAUDE.md`, root `CLAUDE.md`, wiki
-  `subsystems/partner-assistant.md`). Only S7e's eval harness remains unbuilt.
+- **State 2026-10-12:** all slices S0–S8 **committed and pushed** on `main` (`534d9c3`, `c978ce3`,
+  `e218917`, 2026-10-11; both assistant migrations applied to the test DB by the pre-push guard),
+  with the docs pass (`apps/partner/{CLAUDE,TESTING}.md`, `packages/data/CLAUDE.md`, root
+  `CLAUDE.md`, wiki `subsystems/partner-assistant.md`). Only S7e's eval harness remains unbuilt.
 - **Before any push:** `cd packages/data && npm run migrate:test` — applies BOTH migrations
   `20261011064712_assistant_models` and `20261011083109_assistant_upload_aerial_georef` to the Neon
   test DB (the pre-push hook blocks otherwise). Commit is founder-requested only.
@@ -165,6 +166,14 @@ founder say-so.
   `packages/data/CLAUDE.md` (assistant, coastline-lookup, coastline-overpass), wiki
   `subsystems/partner-assistant.md`. All slices built, nothing committed; push needs `migrate:test`
   for both migrations first.
+- **2026-10-12** — Folded `030-d1-progress.md` (data-dev packet D1 scratch note) into this log and
+  deleted it. D1 outcome: migration `20261011120000_assistant_reader_role_and_views` (reader role,
+  `assistant` schema, 13 views, claim fn, RLS on 13 tables, column grants) applied local + sunbnb_test,
+  93 integration tests green. Decisions kept: real cuids exposed only where views join; view names
+  `sunbed` / `reservation_seat(sunbed_id)`; `paid_via` via a SECURITY DEFINER helper (payment_ref
+  ungranted); runner pins timeout/search_path per transaction; setup script is `.cjs` because
+  `packages/data/scripts/*.mjs` is gitignored.
+
 
 ## Open decisions
 

@@ -4,7 +4,7 @@ slug: context-sync
 status: stable
 sources:
   - .claude/context/state.json
-  - .claude/scripts/detect-drift.mjs
+  - .claude/scripts/context-health.mjs
   - .claude/commands/wiki.md
   - .claude/commands/update-knowledge.md
 related:

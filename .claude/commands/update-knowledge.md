@@ -10,7 +10,7 @@ Update the **CLAUDE.md tree** and **`.claude/rules/`** files to reflect current 
 > | **2. Canonical schema docs** | `CLAUDE.md` tree, `.claude/rules/*.md` | **auto-loaded into every session** | **THIS COMMAND** |
 > | **3. Synthesis wiki** | `.claude/wiki/` (entities, flows, subsystems) | on-demand via `index.md` lookup | `/wiki ingest` |
 >
-> Adjacent artifacts (not owned by this command): `PROJECT_CONTEXT.md` (stable human narrative — leave alone), `.claude/knowledge/<agent>.md` (sub-agent learnings — appended by those agents).
+> Adjacent artifacts (not owned by this command): `PROJECT_CONTEXT.md` (stable human narrative — leave alone), `.claude/knowledge/<agent>.md` (playbooks — written by the owning agent's retrospective and curated by `/groom <agent>`; promotions to canon arrive here as proposals from a groom).
 >
 > **Key fact:** layer 2 is auto-loaded, so every line costs tokens in every future session. Bloat here is more expensive than bloat in the wiki. Discipline is correspondingly stricter.
 
@@ -47,7 +47,7 @@ The constraint side bites harder for this layer than for the wiki: **layer-2 (au
 - Typo, formatting, dep bump, lint fix → never
 - One-off task / migration / temporary script
 - A new flow narrative or end-to-end concept landed → that's **`/wiki ingest`**, not this command
-- A subtle implementation detail you're worried about losing → that's `.claude/knowledge/<agent>.md` (the sub-agents' append-only logs)
+- A subtle implementation detail you're worried about losing → that's `.claude/knowledge/<agent>.md` (the owning agent's playbook; `/groom` curates it)
 
 ## Procedure
 
@@ -145,7 +145,7 @@ If you're unsure where an update goes:
 | Per-package: exports, key functions, conventions, schema overview, testing | `packages/*/CLAUDE.md` |
 | Cross-cutting declarative rules (auth, data access, payments) | `.claude/rules/*.md` |
 | End-to-end flow narratives, entity deep-dives, subsystem walkthroughs | **wiki** (defer via `/wiki ingest`) |
-| Hard-earned per-task learnings, novel bug fixes, gotchas surfaced while solving a problem | `.claude/knowledge/<agent>.md` (the sub-agent appends, not this command) |
+| Hard-earned per-task learnings, novel bug fixes, gotchas surfaced while solving a problem | `.claude/knowledge/<agent>.md` (the owning agent appends; `/groom <agent>` curates — not this command) |
 | Stable system-wide narrative reference | `PROJECT_CONTEXT.md` (don't auto-edit; human-curated) |
 
 ### Step 6 — Verify
@@ -183,7 +183,7 @@ Skip the hint if all updates were rule-level (auto-loaded layer only) and don't 
 - **Duplicating a rule across multiple CLAUDE.md files.** If it applies broadly, move it to `.claude/rules/` once.
 - **Creating `ARCHITECTURE.md` or `SECURITY.md`.** This command no longer does that. Their content lives in the wiki, `.claude/rules/`, and `PROJECT_CONTEXT.md`.
 - **Editing `PROJECT_CONTEXT.md`.** It's human-curated. Suggest manual edits if needed.
-- **Editing `.claude/knowledge/<agent>.md`.** That's append-only by the matching sub-agent.
+- **Editing `.claude/knowledge/<agent>.md`.** Playbooks are written by the matching agent's retrospective and edited only by `/groom <agent>`. When a groom proposes a curated → canon promotion, *this* command applies the canon side; the playbook entry is then trimmed to a pointer by the next groom.
 - **Updating for a typo / refactor / dep bump.** Skip.
 - **Logging "as of <date>" change history in the doc.** Git owns that.
 - **Bumping every CLAUDE.md "just in case" when only one app changed.** Scope tightly.

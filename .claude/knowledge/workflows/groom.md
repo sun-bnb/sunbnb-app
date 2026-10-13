@@ -22,8 +22,9 @@ revise the entry instead of deleting it.
 - **Threshold** — an agent's playbook crosses a size/staleness threshold (an agent may
   *suggest* a groom when its playbook feels heavy; it does not groom mid-task).
 - **After a refactor** — code changed enough that documented patterns may be stale.
-- **On demand** — invoked by the orchestrator/human, scoped to one agent's playbook.
-  (May later be wrapped as a `/groom <agent>` command — not required to run the workflow.)
+- **On demand** — `/groom <agent>` (`.claude/commands/groom.md`), scoped to one agent's playbook.
+  The health check (`context-health.mjs --scope playbooks`) names the playbooks over budget
+  (`.claude/context/budgets.json`); that nag is the normal trigger.
 
 ## What to groom
 
@@ -48,6 +49,16 @@ revise the entry instead of deleting it.
   re-trying the wrong thing. Recurrence isn't the test; *would re-trying it waste time?*
 - An entry that should be canon — **promote** it, don't just delete it.
 
+## Script assistance (track 031)
+
+- `context-health.mjs --scope playbooks` — the mechanical findings (budget, duplicate sections,
+  dated `##` entries, missing `tags:`, broken citations).
+- `knowledge-recall.mjs --candidates <agent>` — **inbound** promotion candidates: episodic
+  records on this surface that recur across sessions or were credited, minus what the playbook
+  already covers. Written as v2 entries when they pass the gate; sources then credited.
+- `playbook-index.mjs <agent>` — regenerates the navigation index; the hand-maintained index is gone.
+- Entries must be in the v2 format (`tags:` line) — grooming migrates the ones that are not.
+
 ## Procedure
 
 1. **Read the whole playbook** section by section against "What to groom".
@@ -56,9 +67,10 @@ revise the entry instead of deleting it.
 3. **Verify stale candidates against current code** before deleting — open the cited
    `path/file.ts#symbol`; the code is the authority.
 4. **Apply** — merge/delete/revise high-confidence, low-cost candidates.
-5. **Rebuild the navigation index** to match the post-groom sections.
+5. **Regenerate the navigation index** (`node .claude/scripts/playbook-index.mjs <agent>`).
 6. **Record promotions** — for each promotion candidate, note what should go to canon and
-   where, so the follow-up `/wiki ingest` or canon edit is unambiguous.
+   where, so the follow-up `/wiki ingest` or canon edit is unambiguous. Curated → canon is
+   always proposed, never applied inside a groom.
 
 ## Anti-patterns
 

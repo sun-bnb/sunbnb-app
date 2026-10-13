@@ -1,3 +1,8 @@
+---
+parent: 030-partner-ai-assistant
+title: S7 design — aerial/drone photo → map parcels
+---
+
 # Track 030 · S7 design — aerial/drone photo → map parcels (Plan agent, 2026-10-11)
 
 Reuses the `inventory_batch` kind (`create_parcel` ops → ChairConfig → generateChairs → syncChairsWithLayout), so preview/apply/undo are unchanged. Model returns pixel-space intent; deterministic fit makes geometry.

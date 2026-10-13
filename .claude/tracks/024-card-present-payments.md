@@ -1,7 +1,7 @@
 ---
 id: 024-card-present-payments
 title: Card-present payments — Viva as the card rail, and the floor app that hosts it
-status: active
+status: blocked
 created: 2026-08-28
 updated: 2026-10-08
 worktree: null

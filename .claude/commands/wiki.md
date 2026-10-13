@@ -31,7 +31,7 @@ Map to a workflow file:
 | `review` | `.claude/wiki/workflows/review.md` |
 | (none)   | see Step 1a |
 
-**Special case `lint --quick`:** if the second token is `--quick`, do NOT load the full lint workflow. Instead, run `node .claude/scripts/detect-drift.mjs --scope wiki` directly via Bash and report its stdout verbatim. No LLM analysis, no synthesis. This is equivalent to `/context check --scope wiki` and matches what the pre-push git hook runs.
+**Special case `lint --quick`:** if the second token is `--quick`, do NOT load the full lint workflow. Instead, run `node .claude/scripts/context-health.mjs --scope wiki` directly via Bash and report its stdout verbatim. No LLM analysis, no synthesis. This is equivalent to `/context check --scope wiki`; the same script's `--summary` line prints at session start and in the pre-push hook.
 
 ### Step 1a — Auto-suggest (no subcommand)
 

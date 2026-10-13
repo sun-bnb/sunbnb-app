@@ -1,3 +1,8 @@
+---
+parent: 018-reservation-state-machine
+title: Reservation state machine — intended model (P1 contract)
+---
+
 # Reservation state machine — intended model (track 018, P1)
 
 Drafted 2026-08-11 from the P1 review session (founder decisions locked — see §6).

@@ -1,6 +1,15 @@
+---
+id: 011-group-multiselect-reservation
+title: Group multiselect Reserve/Rent into one reservation
+status: proposed
+created: 2026-06-20
+updated: 2026-06-20
+worktree: null
+---
+
 # Track 011 — Group multiselect Reserve/Rent into one reservation
 
-**Status:** Scoped, ready to build · **Surface:** `apps/partner` (manage page) · **Schema:** none
+**Surface:** `apps/partner` (manage page) · **Schema:** none · scoped, ready to build (awaiting go-ahead)
 
 ## Goal
 

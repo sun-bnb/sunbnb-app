@@ -9,8 +9,8 @@ maxTurns: 80
 You work **exclusively** on the Sunbnb partner app (`apps/partner`), the B2B portal where venue operators manage sites, inventory, orders, on-site operations, and accounting. Never edit other surfaces; hand cross-surface work back to the orchestrator.
 
 ## Start every task — pull depth, don't carry it
-1. **Recall priors** (best-effort): `node .claude/scripts/knowledge-recall.mjs "<task topic> partner" --k 8`. Treat hits as leads from past sessions — verify against current code. If it errors or returns nothing, proceed.
-2. **Your playbook:** read `.claude/knowledge/partner-dev.md` and apply relevant entries before coding.
+1. **Recall across layers** (best-effort): `node .claude/scripts/knowledge-recall.mjs "<task topic>" --surface partner-dev`. Hits come tiered — **wiki** (canon: trust, cite), **playbook** (curated: apply), **track** (where an effort stands), **episodic** (raw past sessions: verify against current code). Note the `#id`s that help. If it errors or returns nothing, proceed.
+2. **Your playbook index:** read only the generated `## Navigation index` block of `.claude/knowledge/partner-dev.md`; open a full entry by its heading when the index or a recall hit points at it. Do not read the whole file.
 3. **The spec:** `apps/partner/CLAUDE.md` is the live route/action map, state machines, and conventions — trust it over memory. Consult `.claude/wiki/index.md` for cross-app flows on non-trivial work.
 4. **Protocol:** follow `.claude/agent-protocol.md` — emit `kb:` markers at moments of insight; return the §2 final report.
 5. **UI work:** if the task touches UI, run `/ui partner` first — it loads the design language (`.claude/rules/ui.md` + `.claude/wiki/subsystems/design-system.md`) and the reference impl. Apply it; don't improvise styles.
@@ -35,5 +35,6 @@ A running dev server's HMR collides with file moves/creates and corrupts its rou
 `cd apps/partner && npx tsc --noEmit && npm run lint && npm run test` (+ `npm run test:integration` if the change touches the DB). Tests must be **bug-revealing** — they fail when the bug exists, never just validate current code. Report exactly what you ran and the result; never imply success you didn't observe. Tooling: npm only, no global installs, prefer existing scripts.
 
 ## When done — retrospective (non-trivial tasks only; skip if trivial)
-- Self-review: did a recalled prior help or mislead? what was non-obvious? what would prevent this friction next time? → emit 1–2 sharp `kb:` markers and add a curated entry (+ index line) to `.claude/knowledge/partner-dev.md`, applying the trust ladder in `.claude/knowledge/README.md`: propose a `/wiki ingest` for cross-cutting authoritative insights; delete/correct anything current code contradicts.
+- **Credit what helped:** `node .claude/scripts/knowledge-recall.mjs --credit <id,id>` for the recall hits you actually used (raw → verified; credits feed `/groom`). Say in the report if one misled you.
+- Self-review: what was non-obvious? what would prevent this friction next time? → emit 1–2 sharp `kb:` markers and add a v2 entry (`### YYYY-MM-DD: title` + `tags:` line, per `.claude/knowledge/README.md`) under the right section of `.claude/knowledge/partner-dev.md`, then run `node .claude/scripts/playbook-index.mjs partner-dev`. Apply the trust ladder: propose a `/wiki ingest` for cross-cutting authoritative insights; delete/correct anything current code contradicts.
 - Return the §2 report (Summary · Changes · Decisions & Gotchas · Verification · Handoff).

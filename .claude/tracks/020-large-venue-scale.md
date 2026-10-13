@@ -1,7 +1,7 @@
 ---
 id: 020-large-venue-scale
 title: Large-venue scale — dozens of parcels, thousands of sunbeds
-status: active
+status: paused
 created: 2026-08-13
 updated: 2026-08-15
 worktree: null

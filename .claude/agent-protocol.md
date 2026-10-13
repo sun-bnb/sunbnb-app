@@ -101,9 +101,13 @@ the incident under **Decisions & Gotchas** and the blocker under **Handoff**.
 
 ## 4. Reuse the existing canon — don't duplicate it
 
-Before writing anything, the order of consult is: your `.claude/knowledge/<agent>.md`
-(hard-won past learnings) → the wiki `.claude/wiki/index.md` (cross-cutting context)
-→ `.claude/rules/` + `CLAUDE.md` tree (declarative rules) → source.
+Before writing anything, the order of consult is: one cross-layer recall
+(`node .claude/scripts/knowledge-recall.mjs "<topic>" --surface <agent>` — wiki, your playbook,
+tracks and past sessions in one tiered answer) → the generated navigation index of your
+`.claude/knowledge/<agent>.md` (open entries by heading, never the whole file) →
+`.claude/rules/` + `CLAUDE.md` tree (declarative rules) → `.claude/wiki/index.md` for a
+cross-app flow the recall did not surface → source. Credit the hits that helped
+(`--credit <id,id>`) in your retrospective.
 
 When you reference code, **cite `path/file.ts#symbol` or `path:line`** — do not paste
 code into reports or markers. Server actions return `{ status: 'ok' | 'error', errors?: string[] }`;
