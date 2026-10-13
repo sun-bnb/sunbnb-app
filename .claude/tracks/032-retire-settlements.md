@@ -47,6 +47,14 @@ reporting is the partner accounting page + invoices, which is what the merchant 
   production together with the 43-commit test backlog (Next 16/React 19, partner AI assistant,
   GA4 — founder-approved); prod migrate had nothing pending (the assistant migrations were already
   applied). Step 2 written and verified the same day: admin 224, partner 3,362, data 1,206 tests.
+- **2026-10-13** — Step 2 shipped. First promote aborted at the integration gate: the three
+  hand-written `cleanDatabase` TRUNCATE lists (`packages/data/src/test/setup.ts`,
+  `apps/{partner,user}/app/test/setup.ts`) still named "Settlement" → 42P01 in every file; fixed in
+  `1fdef70` (unit suites had passed — only `test:integration` exercises the setup). Second attempt
+  aborted on transient lock contention on the shared `sunbnb_test` (till file 8–15 min, passes in
+  22 s alone; no other connection by the time it was checked). Third attempt green. Production
+  migrated with `20261013101617_drop_legacy_settlement` and deployed; verified in prod: no
+  `Settlement` table, no `settlement_batch_id`, no enum, `Invoice.settlement_id` intact.
 
 ## Links
 
