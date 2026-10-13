@@ -13,7 +13,6 @@
 
 import { readFileSync, readdirSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 const STATUS_ORDER = ['active', 'blocked', 'paused', 'proposed', 'done', 'abandoned'];
@@ -61,7 +60,7 @@ export function loadTracks(repoRoot) {
   const tracks = [];
   const subdocs = [];
   const orphans = [];
-  for (const f of readdirSync(dir).sort()) {
+  for (const f of existsSync(dir) ? readdirSync(dir).sort() : []) {
     if (!f.endsWith('.md') || f === 'README.md' || f === 'index.md') continue;
     const content = readFileSync(join(dir, f), 'utf8');
     const { fm, body } = parseFrontmatter(content);
@@ -144,9 +143,9 @@ export function render(repoRoot, opts = {}) {
 
 // ---- CLI ----
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
-  const budgetsPath = join(repoRoot, '.claude/context/budgets.json');
-  const budgets = existsSync(budgetsPath) ? JSON.parse(readFileSync(budgetsPath, 'utf8')) : {};
+  const { repoRoot: resolveRoot, loadBudgets } = await import('./context-config.mjs');
+  const repoRoot = resolveRoot();
+  const budgets = loadBudgets(repoRoot);
   const rendered = render(repoRoot, { nextActionMaxChars: budgets.tracks?.nextActionMaxChars });
   const indexPath = join(repoRoot, '.claude/tracks/index.md');
   const args = process.argv.slice(2);

@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 // SessionEnd hook entry. Reads the hook payload on stdin, spawns the ingest worker
 // DETACHED, and exits immediately so a slow distill/embed never blocks the CLI.
-// Wire in .claude/settings.local.json:
-//   "hooks": { "SessionEnd": [ { "hooks": [ { "type": "command",
-//     "command": "node \"$CLAUDE_PROJECT_DIR/.claude/scripts/knowledge-hook.mjs\"" } ] } ] }
+// Wired in the committed .claude/settings.json (SessionEnd).
 
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';

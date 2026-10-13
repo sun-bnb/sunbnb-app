@@ -10,9 +10,10 @@
 import { spawn, spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { repoRoot, loadProject } from './context-config.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const C = 'sunbnb-knowledge-postgres';
+const C = loadProject(repoRoot()).store.container;
 const WAIT_MS = 120_000;   // Docker Desktop cold start is typically 15–40 s
 const POLL_MS = 2_000;
 

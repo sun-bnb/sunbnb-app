@@ -1,0 +1,12 @@
+{
+  "_doc": "Context-system instance identity (track 033), read only via .claude/scripts/context-config.mjs. project = slug the store defaults derive from; store = the local pgvector container the episodic layer writes to (omitted keys derive from the slug); entities = the domain nouns the session distiller tags records with. Thresholds live in budgets.json.",
+  "project": "sunbnb",
+  "store": {
+    "container": "sunbnb-knowledge-postgres",
+    "volume": "sunbnb-knowledge-data",
+    "port": 5434,
+    "password": "sunbnb",
+    "database": "sunbnb_knowledge"
+  },
+  "entities": ["reservation", "invoice", "payment", "order", "rental", "site"]
+}

@@ -12,7 +12,6 @@
 
 import { readFileSync, readdirSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { parsePlaybook } from './knowledge-curated.mjs';
 
@@ -51,7 +50,7 @@ export function applyNav(content) {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
+  const repoRoot = (await import('./context-config.mjs')).repoRoot();
   const dir = join(repoRoot, '.claude/knowledge');
   const args = process.argv.slice(2);
   const check = args.includes('--check');

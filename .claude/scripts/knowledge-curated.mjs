@@ -19,11 +19,11 @@
 import { readFileSync, readdirSync, existsSync, statSync } from 'fs';
 import { createHash } from 'crypto';
 import { join, relative } from 'path';
-import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { parseFrontmatter, loadTracks } from './tracks-index.mjs';
+import { repoRoot } from './context-config.mjs';
 
-const REPO_ROOT = (() => { try { return execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim(); } catch { return process.cwd(); } })();
+const REPO_ROOT = repoRoot();
 const MAX_CHUNK = 1600;      // chars per embedded unit (bge-small truncates ~512 tokens anyway)
 const MAX_STORED = 6000;     // chars kept in `text` for display
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');

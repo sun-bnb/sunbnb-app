@@ -1,9 +1,9 @@
 {
-  "name": "sunbnb-knowledge-scripts",
+  "name": "context-system-scripts",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Phase 0 knowledge-store tooling (ingest, recall). Isolated from the app dependency tree.",
+  "description": "Context-system engine scripts (health, registries, knowledge store). Isolated from the app dependency tree; instance config in .claude/context/.",
   "dependencies": {
     "@huggingface/transformers": "^3.3.0",
     "dotenv": "^16.4.7",

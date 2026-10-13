@@ -14,10 +14,9 @@
 // --k bounds the episodic tier; --kc bounds each curated tier.
 
 import pg from 'pg';
-import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { execSync } from 'child_process';
 import { loadConfig, embedTexts, toVec } from './knowledge-ingest.mjs';
+import { repoRoot, loadBudgets } from './context-config.mjs';
 
 const args = process.argv.slice(2);
 const flags = {};
@@ -34,9 +33,8 @@ const query = positional.join(' ').trim();
 const num = (v, d) => { const n = parseFloat(v); return Number.isFinite(n) ? n : d; };
 const json = !!flags.json;
 
-const REPO_ROOT = (() => { try { return execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim(); } catch { return process.cwd(); } })();
-const budgetsPath = join(REPO_ROOT, '.claude/context/budgets.json');
-const BUDGETS = existsSync(budgetsPath) ? JSON.parse(readFileSync(budgetsPath, 'utf8')) : {};
+const REPO_ROOT = repoRoot();
+const BUDGETS = loadBudgets(REPO_ROOT);
 
 const TIER_ORDER = ['wiki', 'playbook', 'track', 'episodic'];
 const TIER_LABEL = {

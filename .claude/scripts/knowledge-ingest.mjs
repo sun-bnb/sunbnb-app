@@ -15,7 +15,7 @@
 //   node knowledge-ingest.mjs --embed-pending      # fill embeddings for rows where embedding IS NULL
 //
 // Config (.claude/.env.knowledge or process.env — all optional, sane defaults):
-//   KNOWLEDGE_DB_URL  default postgres://postgres:sunbnb@localhost:5434/sunbnb_knowledge
+//   KNOWLEDGE_DB_URL  default derived from .claude/context/project.json `store` (context-config.mjs)
 //   EMBED_MODEL       default Xenova/bge-small-en-v1.5  (384-dim)
 //   DISTILL_MODEL     default claude-haiku-4-5
 //   CLAUDE_BIN        default 'claude'
@@ -32,19 +32,19 @@ import { tmpdir, homedir } from 'os';
 import pg from 'pg';
 import dotenv from 'dotenv';
 import { pipeline } from '@huggingface/transformers';
+import { repoRoot, loadProject, storeUrl, pathAnchors } from './context-config.mjs';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = (() => {
-  try { return execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim(); }
-  catch { return process.cwd(); }
-})();
+const REPO_ROOT = repoRoot();
+const PROJECT = loadProject(REPO_ROOT);
+const escRe = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const ANCHOR_RE = new RegExp(`/((?:${pathAnchors(REPO_ROOT).map(escRe).join('|')})/.+)$`);
 
 // ---- config ----
 
 export function loadConfig() {
-  dotenv.config({ path: join(HERE, '..', '.env.knowledge'), quiet: true });
+  dotenv.config({ path: join(REPO_ROOT, '.claude', '.env.knowledge'), quiet: true });
   return {
-    dbUrl: process.env.KNOWLEDGE_DB_URL || 'postgres://postgres:sunbnb@localhost:5434/sunbnb_knowledge',
+    dbUrl: storeUrl(PROJECT.store),
     embedModel: process.env.EMBED_MODEL || 'Xenova/bge-small-en-v1.5',
     distillModel: process.env.DISTILL_MODEL || 'claude-haiku-4-5',
     claudeBin: process.env.CLAUDE_BIN || 'claude',
@@ -100,8 +100,9 @@ function rel(p) {
   if (!p) return p;
   if (p.startsWith(REPO_ROOT + '/')) return p.slice(REPO_ROOT.length + 1);
   // Sessions run in a git worktree have a different absolute root; normalize to the first
-  // apps/ or packages/ segment so paths are comparable across worktrees.
-  const m = p.match(/\/((?:apps|packages)\/.+)$/);
+  // workspace-root segment (apps/, packages/, … from package.json workspaces) so paths are
+  // comparable across worktrees.
+  const m = p.match(ANCHOR_RE);
   return m ? m[1] : p;
 }
 const cap = (s, n) => (s.length > n ? s.slice(0, n) + '…' : s);
@@ -215,7 +216,7 @@ const DISTILL_SYSTEM = `You are an episodic-memory distiller for a software proj
 Output ONLY a JSON array (no prose, no markdown code fences) of objects:
   { "type": one of "decision" | "incident" | "gotcha" | "dead-end" | "observation",
     "text": a self-contained 1-4 sentence statement including the WHY,
-    "entities": array of domain nouns it concerns (reservation, settlement, invoice, payment, order, rental, site), or [] }
+    "entities": array of domain nouns it concerns${PROJECT.entities.length ? ` (${PROJECT.entities.join(', ')})` : ''}, or [] }
 
 - "type" MUST be exactly one of those five strings.
 - Keep only durable, reusable knowledge: decisions made (and why), incidents (symptom -> root

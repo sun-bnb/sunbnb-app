@@ -21,9 +21,14 @@ import { join, relative } from 'path';
 import { execSync } from 'child_process';
 import { render as renderTracksIndex, loadTracks } from './tracks-index.mjs';
 import { applyNav } from './playbook-index.mjs';
+import { repoRoot, loadBudgets, loadProject, workspaceDirs } from './context-config.mjs';
 
-const REPO_ROOT = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
-const BUDGETS = JSON.parse(readFileSync(join(REPO_ROOT, '.claude/context/budgets.json'), 'utf8'));
+const REPO_ROOT = repoRoot();
+// The SessionStart / pre-push summary stays silent in a repo without an instance (a plugin's
+// hooks fire in every repo); the full report says how to create one.
+const BUDGETS = process.argv.includes('--summary') && !existsSync(join(REPO_ROOT, '.claude/context/budgets.json'))
+  ? process.exit(0)
+  : loadBudgets(REPO_ROOT, { required: true });
 const TODAY = new Date();
 const DAY = 86_400_000;
 
@@ -243,11 +248,7 @@ function budgetFor(relPath) {
 function canonicalFiles() {
   const files = [];
   for (const f of ['CLAUDE.md', 'AGENTS.md', 'PROJECT_CONTEXT.md']) if (existsSync(join(REPO_ROOT, f))) files.push(join(REPO_ROOT, f));
-  for (const base of ['apps', 'packages']) {
-    const dir = join(REPO_ROOT, base);
-    if (!existsSync(dir)) continue;
-    for (const sub of readdirSync(dir)) { const c = join(dir, sub, 'CLAUDE.md'); if (existsSync(c)) files.push(c); }
-  }
+  for (const ws of workspaceDirs(REPO_ROOT)) { const c = join(REPO_ROOT, ws, 'CLAUDE.md'); if (existsSync(c)) files.push(c); }
   files.push(...walk(join(REPO_ROOT, '.claude/rules')));
   return files;
 }
@@ -285,17 +286,8 @@ function checkCanonical() {
     if (inst && inst[1] !== m[1]) add('canonical', 'CLAUDE.md', 'WARN', `tech table says '${m[0]}' but ${c.from} has ${c.dep} ${spec}`, '/update-knowledge CLAUDE.md (fix the version claim)');
   }
   // workspaces without a CLAUDE.md
-  const missing = [];
-  for (const base of ['apps', 'packages']) {
-    const dir = join(REPO_ROOT, base);
-    if (!existsSync(dir)) continue;
-    for (const sub of readdirSync(dir)) {
-      const ws = `${base}/${sub}`;
-      if (!existsSync(join(dir, sub, 'package.json')) || existsSync(join(dir, sub, 'CLAUDE.md'))) continue;
-      if ((B.optionalWorkspaces || []).includes(ws)) continue;
-      missing.push(ws);
-    }
-  }
+  const missing = workspaceDirs(REPO_ROOT).filter((ws) =>
+    !existsSync(join(REPO_ROOT, ws, 'CLAUDE.md')) && !(B.optionalWorkspaces || []).includes(ws));
   if (missing.length) add('canonical', 'CLAUDE.md', 'WARN', `workspaces without a CLAUDE.md: ${missing.join(', ')}`, 'add a pointer CLAUDE.md or list the workspace under budgets.canonical.optionalWorkspaces');
   metrics.canonical = { autoLoadedBytes: autoLoaded, sizes };
 }
@@ -307,7 +299,7 @@ function checkPlaybooks() {
   const B = BUDGETS.playbooks;
   const dir = join(REPO_ROOT, '.claude/knowledge');
   const per = {};
-  for (const f of readdirSync(dir)) {
+  for (const f of existsSync(dir) ? readdirSync(dir) : []) {
     if (!f.endsWith('.md') || f === 'README.md') continue;
     const agent = f.replace(/\.md$/, '');
     const p = join(dir, f);
@@ -438,7 +430,7 @@ async function checkStore() {
       if (last && daysSince(last) > 7) add('store', 'ingested_session', 'WARN', `last ingest ${daysSince(last)} d ago — SessionEnd hook may be unwired`, 'check .claude/settings.json hooks + Docker');
     } finally { await client.end(); }
   } catch (e) {
-    add('store', 'knowledge_record', 'INFO', `store unreachable (${(e.message || '').split('\n')[0].slice(0, 80)})`, 'docker start sunbnb-knowledge-postgres');
+    add('store', 'knowledge_record', 'INFO', `store unreachable (${(e.message || '').split('\n')[0].slice(0, 80)})`, `docker start ${loadProject(REPO_ROOT).store.container}`);
   }
 }
 

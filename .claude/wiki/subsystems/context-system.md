@@ -5,12 +5,12 @@ status: stable
 sources:
   - CLAUDE.md
   - .claude/context/budgets.json
+  - .claude/scripts/context-config.mjs
   - .claude/scripts/context-health.mjs
   - .claude/scripts/knowledge-recall.mjs
   - .claude/scripts/knowledge-curated.mjs
   - .claude/scripts/knowledge-ingest.mjs
   - .claude/settings.json
-  - .claude/commands/groom.md
 related:
   - workflow:ingest
   - workflow:lint
@@ -72,7 +72,8 @@ the record of whether the system is actually getting better.
 ## Invariants
 
 1. **One statement per fact.** Loading model in root `CLAUDE.md`; budgets in `budgets.json`;
-   rules in `.claude/rules/`. Everything else points at them.
+   identity, store and entity vocabulary in `.claude/context/project.json`; rules in
+   `.claude/rules/`. Everything else points at them.
 2. **Registries are generated, never hand-edited** — `tracks/index.md` (`tracks-index.mjs`),
    playbook nav blocks (`playbook-index.mjs`). The health check flags drift.
 3. **Auto-loaded bytes are the scarce resource.** A surface `CLAUDE.md` keeps compact tables;
@@ -82,6 +83,10 @@ the record of whether the system is actually getting better.
 5. **Promotion upward is proposed, not applied** by the layer below.
 6. **The pipeline is keyless and local** — distillation via `claude -p`, embeddings via a local
    model; the store is optional (every hook exits 0 without Docker).
+7. **Engine vs instance** ([[track:033]]). `.claude/scripts/` is the engine: it names no repo,
+   resolves the repo from git/`CLAUDE_PROJECT_DIR`/cwd, and reads the instance only through
+   `context-config.mjs`. A repo-specific value in a script is a bug — move it to `project.json`
+   or `budgets.json`.
 
 ## Cadence
 

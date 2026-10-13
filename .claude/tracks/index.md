@@ -10,6 +10,7 @@ drift. Regenerate after every `handoff` / `close`.
 
 | ID | Track | Next action | Worktree | Updated |
 |---|---|---|---|---|
+| [033](033-context-system-plugin.md) | Package the context system as a distributable Claude Code plugin | **Next action:** step 2 — create the plugin repo (`.claude-plugin/plugin.json`, `scripts/`, | — | 2026-10-13 |
 | [032](032-retire-settlements.md) | Retire the legacy admin settlement feature (expand/contract) | **Next action:** after 2026-11-12, delete `.claude/wiki/entities/settlement.md` and | — | 2026-10-13 |
 | [030](030-partner-ai-assistant.md) | Partner AI assistant — site tabs, inventory/schematic editing, documents, photos | **State 2026-10-12:** all slices S0–S8 **committed and pushed** on `main` (`534d9c3`, `c978ce3`, | — | 2026-10-12 |
 | [027](027-beach-mockup-lead-agent.md) | Beach mockup lead agent — marketing landing page that builds a prospect's beach | **State 2026-10-09:** P0–P6, P8–P10 (+ P8b tracking stack) and the coastline DB are committed | — | 2026-10-09 |
