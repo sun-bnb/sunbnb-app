@@ -274,7 +274,7 @@ describe('assistant_reader: denied data', () => {
     'SELECT * FROM password_reset_token',
     'SELECT * FROM "Employee"',
     'SELECT * FROM "RentalBooking"',
-    'SELECT * FROM "Settlement"',
+    'SELECT * FROM invoice_chain',
     'SELECT * FROM device',
     'SELECT * FROM lead',
     'SELECT * FROM assistant_conversation',

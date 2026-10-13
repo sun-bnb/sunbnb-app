@@ -65,7 +65,6 @@ export async function cleanDatabase() {
       "SubscriptionPlan",
       "password_reset_token",
       "PartnerAccount",
-      "Settlement",
       "SiteBrand",
       "SiteWorkingHours",
       "SecurityToken",

@@ -164,7 +164,7 @@ export function siteDayBounds(
  * Returns the UTC instants for the civil-day start (00:00:00.000) and end
  * (23:59:59.999) in the site's venue-local timezone for an explicit civil date
  * given as a `YYYY-MM-DD` key (as chosen in a `<input type="date">` or stored
- * as a `Reservation`/`Settlement` period boundary).
+ * as a `Reservation` or reporting-period boundary).
  *
  * This is the civil-date-keyed sibling of `siteDayBounds` (which keys off an
  * instant). Use it wherever a query window is defined by a calendar date rather
