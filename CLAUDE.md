@@ -43,16 +43,24 @@ tracks — is pulled on demand. Keep auto-loaded files inside their budgets
 **Layers** (each has its own spec; trust rises down the list, authority rises up it):
 - **Canon** — this tree + `.claude/rules/` (declarative rules, always on).
 - **Wiki** `.claude/wiki/` — entity/flow/subsystem synthesis. Start at `index.md` for any
-  "how does X work end-to-end" question; after shipping something non-trivial run `/wiki ingest`.
+  "how does X work end-to-end" question; after shipping something non-trivial run
+  `/context-loop:wiki ingest`.
 - **Tracks** `.claude/tracks/` — multi-session work: goal, roadmap, log, **Resume here**. Check
-  `index.md` (generated) before non-trivial work; run the `handoff` workflow before stopping.
-- **Playbooks** `.claude/knowledge/<agent>.md` — each dev agent's curated lessons; `/groom <agent>`
-  curates them.
+  `index.md` (generated) before non-trivial work; `/context-loop:track handoff` before stopping.
+- **Playbooks** `.claude/knowledge/<agent>.md` — each dev agent's curated lessons;
+  `/context-loop:groom <agent>` curates them.
 - **Recall** — one pgvector store holding all of the above plus distilled past sessions, tiered by
-  trust: `/recall <query> [--surface <agent>]`; credit hits that helped with `--credit <ids>`.
+  trust: `/context-loop:recall <query> [--surface <agent>]`; credit hits that helped with
+  `--credit <ids>`.
+
+**Engine.** The machinery is the `context-loop` plugin ([[track:033]]), enabled in
+`.claude/settings.json`; this repo holds only the instance (`.claude/context/{budgets,project}.json`
+and the layers above). Each session links `.claude/context/engine` to the installed plugin, so
+scripts run as `node .claude/context/engine/scripts/<script>.mjs` and the layer specs are in
+`.claude/context/engine/specs/`.
 
 **Health.** `context-health.mjs` prints a one-line summary at session start and on every push;
-`/context check` is the full report with a fix command per finding. Nothing blocks — the line nags.
+`/context-loop:context check` is the full report with a fix command per finding. Nothing blocks.
 
 **Agents.** Per-surface generalists (`user-dev`, `partner-dev`, `admin-dev`, `data-dev`) plus
 specialists (`sunbed-inventory`) in `.claude/agents/`. Lean definitions, pulled depth: one tiered

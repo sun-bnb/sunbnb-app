@@ -14,18 +14,10 @@ Status legend: **stable** verified · **draft** new, unverified · **stub** plac
 
 ## Workflows — how the LLM uses & maintains the wiki
 
-Invokable via `/wiki <op>` (see `.claude/commands/wiki.md`).
+Maintenance and query are plugin operations: `/context-loop:wiki ingest | query | lint | prune |
+review` (procedures ship with the plugin; schema in `.claude/context/engine/specs/wiki.md`).
+Sunbnb's dev-process workflows:
 
-**Maintenance loop** (lint → prune → ingest, with periodic review):
-
-- [`workflow:ingest`](workflows/ingest.md) — **stable** — decision-led; fold new info into the wiki (or decide it's not wiki-worthy)
-- [`workflow:lint`](workflows/lint.md) — **stable** — read-only health check; classifies findings by severity
-- [`workflow:prune`](workflows/prune.md) — **stable** — actively remove dead / low-value content
-- [`workflow:review`](workflows/review.md) — **stable** — periodic strategic re-pass: are pages still earning their keep?
-
-**Per-task use:**
-
-- [`workflow:query`](workflows/query.md) — **stable** — answer a question from the wiki
 - [`workflow:feature-design`](workflows/feature-design.md) — **stable** — design a feature using the wiki for context
 - [`workflow:debugging`](workflows/debugging.md) — **stable** — diagnose a problem using the wiki for orientation
 - [`workflow:implementation`](workflows/implementation.md) — **stable** — implement a designed feature
@@ -58,7 +50,7 @@ Invokable via `/wiki <op>` (see `.claude/commands/wiki.md`).
 - [`subsystem:employee-till`](subsystems/employee-till.md) — **draft** — floor-staff roster (`/account/staff`) + automatic per-worker attribution + per-worker cash till/close (`TillSheet`) + manager monthly breakdown (accounting); `@repo/data/till`. Track 008
 - [`subsystem:migrations`](subsystems/migrations.md) — **stable** — environment topology (`main`+`test` share ONE test DB, production isolated) and the laptop-run migration sequence. The declarative rules stay canonical + auto-loaded in `.claude/rules/migrations.md`; this page holds the narrative you need only when actually running one
 - [`subsystem:partner-assistant`](subsystems/partner-assistant.md) — **draft** — partner AI assistant (track 030): `@repo/agent` core, proposal lifecycle (propose → apply/reject/undo), kind registry, vision flows (documents, plan → schematic, aerial → map), invariants
-- [`subsystem:context-system`](subsystems/context-system.md) — **stable** — the AI-context machinery itself: six layers (canon, pulled siblings, wiki, playbooks, tracks, episodic store), trust ladder, tiered recall + credits, `/groom`, the health check and `budgets.json`. Read before changing any of `.claude/`
+- [`subsystem:context-system`](subsystems/context-system.md) — **stable** — the AI-context machinery itself: six layers (canon, pulled siblings, wiki, playbooks, tracks, episodic store), trust ladder, tiered recall + credits, `/context-loop:groom`, the health check and `budgets.json`. Read before changing any of `.claude/`
 - [`subsystem:venue-timezone`](subsystems/venue-timezone.md) — **stable** — every date boundary anchors to the venue's civil day (track 017): `@repo/data/site-day` primitives (day/month bounds, write anchor, tz derivation) + `tz.ts` wall-clock converters; `Site.timeZone` auto-derived on save + backfill. Never hand-roll day math
 
 ---
@@ -93,7 +85,7 @@ The wiki points to these; it does not duplicate them.
 | Per-surface architecture | `apps/*/CLAUDE.md`, `packages/{data,agent,ui}/CLAUDE.md` + their pulled siblings (root `CLAUDE.md` § Context system) |
 | Data package conventions | `packages/data/CLAUDE.md` |
 | Declarative rules | `.claude/rules/{architecture,auth,commits,data-access,deploys,migrations,payments,ui}.md` |
-| Per-agent curated playbooks | `.claude/knowledge/<agent>.md` (generated nav index; `/groom`) |
+| Per-agent curated playbooks | `.claude/knowledge/<agent>.md` (generated nav index; `/context-loop:groom`) |
 | Agent profiles | `.claude/agents/<agent>.md` |
 | Slash commands | `.claude/commands/<command>.md` |
 | Architecture deep-dive (human) | `ARCHITECTURE.md` (root, when present) |

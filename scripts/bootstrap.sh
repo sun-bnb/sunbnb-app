@@ -13,7 +13,8 @@ echo "✓ docker + node present"
 
 say "Dependencies"
 npm install
-( cd .claude/scripts && npm install )
+# The AI-context engine is the context-loop plugin (.claude/settings.json); Claude Code installs
+# its dependencies itself. It is reachable at .claude/context/engine after the first session.
 
 say "Git hooks (.githooks)"
 # pre-commit guards direct commits to test/production; pre-push guards the shared
@@ -38,7 +39,11 @@ else
     -v sunbnb-knowledge-data:/var/lib/postgresql/data pgvector/pgvector:pg17
   for i in $(seq 1 30); do docker exec sunbnb-knowledge-postgres pg_isready -U postgres >/dev/null 2>&1 && break; sleep 1; done
   docker exec sunbnb-knowledge-postgres psql -U postgres -c "CREATE DATABASE sunbnb_knowledge;" 2>/dev/null || true
-  docker exec -i sunbnb-knowledge-postgres psql -U postgres -d sunbnb_knowledge < .claude/scripts/knowledge-schema.sql
+  if [ -f .claude/context/engine/scripts/knowledge-schema.sql ]; then
+    docker exec -i sunbnb-knowledge-postgres psql -U postgres -d sunbnb_knowledge < .claude/context/engine/scripts/knowledge-schema.sql
+  else
+    echo "  schema not applied yet: start one Claude Code session (installs context-loop), then re-run"
+  fi
 fi
 
 say "Environment files (from the master)"

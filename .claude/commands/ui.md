@@ -46,5 +46,5 @@ invoke it.
 ## While you work
 
 Follow `.claude/agent-protocol.md`: emit `kb:` markers for UI gotchas you hit. If you evolve the
-language, update `.claude/rules/ui.md` (canonical) **and** fold it into the wiki via `/wiki ingest`
+language, update `.claude/rules/ui.md` (canonical) **and** fold it into the wiki via `/context-loop:wiki ingest`
 (`subsystems/design-system.md`, bump `last_verified`; promote `draft`→`stable` once verified).

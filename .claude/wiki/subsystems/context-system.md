@@ -4,115 +4,54 @@ slug: context-system
 status: stable
 sources:
   - CLAUDE.md
-  - .claude/context/budgets.json
-  - .claude/scripts/context-config.mjs
-  - .claude/scripts/context-health.mjs
-  - .claude/scripts/knowledge-recall.mjs
-  - .claude/scripts/knowledge-curated.mjs
-  - .claude/scripts/knowledge-ingest.mjs
   - .claude/settings.json
+  - .claude/context/budgets.json
+  - .claude/context/project.json
+  - .githooks/pre-push
 related:
-  - workflow:ingest
-  - workflow:lint
-  - workflow:context-check
-  - workflow:context-sync
+  - track:033-context-system-plugin
+  - track:031-context-system-v2
 last_verified: 2026-10-13
 ---
 
-# Context system — how knowledge reaches, and stays fit for, every session
+# Context system — Sunbnb's instance of context-loop
 
-The machinery that gives each Claude Code task the sharpest relevant context and keeps that
-context correct as the code moves. Built over tracks 001 (episodic store) and 031 (curation
-loop). The **one** statement of what loads when lives in root `CLAUDE.md` § Context system;
-this page is the mental model behind it.
+How knowledge reaches every Claude Code session here and stays current. The machinery is the
+**context-loop plugin** (github.com/vhalme/context-loop), extracted from this repo in
+[[track:033]]. Its architecture — the six layers, trust ladder, tiered retrieval, health check,
+invariants and cadence — is specified once in `.claude/context/engine/specs/context-system.md`.
+This page covers only what is specific to Sunbnb. The loading model is stated in root
+`CLAUDE.md` § Context system.
 
-## The six layers
+## Engine vs instance
 
-| Layer | Lives in | Written by | Curated by | Loaded |
-|---|---|---|---|---|
-| Canon | root + per-surface `CLAUDE.md`, `.claude/rules/` | `/update-knowledge`, feature work | `/update-knowledge` within `budgets.json` | root + rules every session; a surface's `CLAUDE.md` when its files are read |
-| Pulled siblings | `apps/*/{TESTING,UI,PATTERNS,…}.md`, `packages/data/{EXPORTS,REFERENCE}.md` | same | same | on demand only |
-| Wiki | `.claude/wiki/` | `/wiki ingest`, `/groom` proposals | `/wiki lint` → `prune` → `review` | on demand; indexed into recall |
-| Playbooks | `.claude/knowledge/<agent>.md` | the agent's retrospective | `/groom <agent>` | nav index at agent task start; indexed into recall |
-| Tracks | `.claude/tracks/` | `create` / `handoff` / `close` workflows | the health check (status, staleness) | registry on demand; resume-heres indexed into recall |
-| Episodic | pgvector store (`sunbnb-knowledge-postgres`, :5434) | SessionEnd hook distils every session + subagent | `--credit`, `--candidates` → `/groom` | via `/recall` only |
-
-User-level memory (`~/.claude/projects/<repo>/memory/`) sits beside these and holds only what
-the repo cannot: who the user is and how they want to work. Anything the repo documents is
-deleted from memory, not duplicated.
-
-## Trust and authority
-
-Trust rises episodic → playbook → wiki → canon; authority runs the same way — canon always wins,
-and a lower layer that contradicts the code is the bug. Knowledge moves **up** by recurring and
-being verified: a credited or recurring episodic record becomes a playbook entry (inbound, in
-`/groom`); an authoritative, cross-cutting playbook entry is **proposed** for the wiki or canon
-(outbound, never applied silently — changing what every session loads is a human decision).
-
-## Retrieval: one query, tiered
-
-All of wiki (per `##` section), playbooks (per entry, `source=playbook:<agent>`), track
-resume-heres and episodic records sit in **one** store, labelled by `source` and `status`
-(`promoted` / `verified` / `raw`). `knowledge-recall.mjs "<topic>" --surface <agent>` returns them
-grouped by tier with a status boost and recency decay; agents read that plus their playbook's
-generated nav index, and open full entries by heading only when pointed at them. The curated
-index refreshes detached at session start (`knowledge-curated.mjs`, SHA-upsert — only changed
-units re-embed). Hits that helped are credited (`--credit <id,id>`: hits+1, raw → verified).
-
-## Health: one signal, nag never block
-
-`context-health.mjs` checks every layer mechanically in < 1 s (citations and symbols, budgets,
-freshness, status vocabulary, edited-after-verified, generated-index drift, version claims,
-workspaces without a `CLAUDE.md`; `--with-store` adds store counts). Its `--summary` line prints
-at **SessionStart** (`.claude/settings.json`) and in **pre-push** (`.githooks/pre-push`), with the
-fix command for the worst findings. Every threshold lives in `.claude/context/budgets.json`.
-Curation workflows end with `--snapshot`, appending to `.claude/context/health-history.jsonl` —
-the record of whether the system is actually getting better.
-
-## Invariants
-
-1. **One statement per fact.** Loading model in root `CLAUDE.md`; budgets in `budgets.json`;
-   identity, store and entity vocabulary in `.claude/context/project.json`; rules in
-   `.claude/rules/`. Everything else points at them.
-2. **Registries are generated, never hand-edited** — `tracks/index.md` (`tracks-index.mjs`),
-   playbook nav blocks (`playbook-index.mjs`). The health check flags drift.
-3. **Auto-loaded bytes are the scarce resource.** A surface `CLAUDE.md` keeps compact tables;
-   narrative goes to a pulled sibling or the wiki, leaving a one-line pointer.
-4. **Curation verifies against code before it deletes.** Grooms and lint passes open the cited
-   file; low-confidence cuts are listed for the human, not made.
-5. **Promotion upward is proposed, not applied** by the layer below.
-6. **The pipeline is keyless and local** — distillation via `claude -p`, embeddings via a local
-   model; the store is optional (every hook exits 0 without Docker).
-7. **Engine vs instance** ([[track:033]]). `.claude/scripts/` is the engine: it names no repo,
-   resolves the repo from git/`CLAUDE_PROJECT_DIR`/cwd, and reads the instance only through
-   `context-config.mjs`. A repo-specific value in a script is a bug — move it to `project.json`
-   or `budgets.json`.
-
-## Cadence
-
-| When | What runs |
+| Engine (plugin, `.claude/context/engine` → installed copy) | Instance (this repo) |
 |---|---|
-| Every session start | health summary; Docker + store check; curated re-index (detached) |
-| Every session end | ingest of the session + its subagents |
-| Agent task start / end | tiered recall + nav index / `kb:` markers, credits, v2 playbook entry |
-| Every push | health summary (warn-only) |
-| Playbook over budget | `/groom <agent>` |
-| After shipping something non-trivial | `/wiki ingest`; track `handoff` / `close` |
-| Weekly-ish | `/context sync` (catch canon + wiki up to commits since the cursor) |
-| Wiki feels heavy / monthly | `/wiki lint` → `prune`; `/wiki review` |
+| `scripts/` — health check, registries, knowledge store | `.claude/context/budgets.json` — thresholds, version claims, agent surfaces |
+| `skills/` — `context`, `recall`, `groom`, `wiki`, `update-knowledge`, `track` | `.claude/context/project.json` — slug `sunbnb`, store, entity vocabulary |
+| `specs/` — wiki, playbooks, tracks, context-system | `CLAUDE.md` tree, `.claude/rules/`, wiki pages, playbooks, tracks, agents |
+| `hooks/` — SessionStart health line + link + store, SessionEnd ingest | `.githooks/pre-push` (health line via the engine link), `.claude/agent-protocol.md` |
+
+The plugin is enabled for everyone through `.claude/settings.json` (`extraKnownMarketplaces` +
+`enabledPlugins`). `.claude/context/engine` is a git-ignored link refreshed each session; a fresh
+clone has it after its first session.
+
+## Sunbnb specifics
+
+- **Store:** `sunbnb-knowledge-postgres` on :5434, database `sunbnb_knowledge` (`project.json`);
+  `scripts/bootstrap.sh` provisions it. Embeddings are local, distillation uses `claude -p`.
+- **Surfaces:** five dev agents (`user-dev`, `partner-dev`, `admin-dev`, `data-dev`,
+  `sunbed-inventory`); their path prefixes in `budgets.json` `agents.surfaces` drive
+  `--surface` recall and `--candidates`.
+- **Pulled siblings:** `apps/*/{TESTING,UI,PATTERNS}.md`, `apps/user/HW-API.md`,
+  `apps/partner/ASSISTANT.md`, `packages/data/{EXPORTS,REFERENCE}.md`.
+- **Health in pre-push:** `.githooks/pre-push` prints the summary line before the shared-TEST-DB
+  migration guard; it never changes the hook's exit code.
 
 ## Pitfalls
 
-- **Writing without curating.** The failure mode track 031 fixed: every write path automated,
-  no curate path ever run. A new writer needs a matching curator and a health check.
-- **Copying canon into a lower layer** (playbook, agent definition, memory) — it drifts. Point.
-- **Bumping `last_verified` without re-checking** — the health check cannot tell; the page lies.
-- **Running the curated re-index or `--snapshot` from parallel agents** — the orchestrator runs
-  them once after a batch (concurrent store writes).
-- **Treating a recall hit as truth.** Episodic records describe the code as it was; verify.
-
-## Cross-refs
-
-- [[workflow:context-check]] · [[workflow:context-sync]] · [[workflow:ingest]] · [[workflow:lint]]
-- [[track:031-context-system-v2]] (design + history) · [[track:001-knowledge-store]] (the store)
-- Specs: `.claude/knowledge/README.md` (playbooks), `.claude/tracks/README.md`, `.claude/agent-protocol.md`
+- **Editing the engine here.** There is no local copy; change the plugin repo, release, and
+  let Claude Code update it. A repo-specific value belongs in `budgets.json` or `project.json`.
+- **A missing `.claude/context/engine`** (fresh clone, plugin not yet installed) makes the
+  pre-push health line silently skip and agents' `node .claude/context/engine/…` calls fail —
+  start a session with the plugin enabled first.

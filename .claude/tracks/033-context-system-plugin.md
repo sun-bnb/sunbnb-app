@@ -18,12 +18,13 @@ consumer, so the engine stays exercised by real work.
 
 ## Resume here
 
-- **Next action:** step 2 — create the plugin repo (`.claude-plugin/plugin.json`, `scripts/`,
-  `commands/`, `hooks/hooks.json`, `templates/`) and decide how commands call the scripts (see
-  Open decisions); then install it here and delete the local engine copies, checking that
-  `context-health.mjs --json --with-store` reports the same 23 findings as before.
-- **Plugin:** `context-loop`, repo https://github.com/vhalme/context-loop (public, empty as of
-  2026-10-13; no licence chosen yet). The repo is both the plugin and its marketplace.
+- **Next action:** step 3 — write `/context-loop:context init` in `vhalme/context-loop`
+  (`skills/context/workflows/init.md` + a script that detects workspaces and writes
+  `budgets.json` / `project.json` from `templates/`), then test it on a fresh repo and one
+  existing non-Sunbnb repo.
+- **State:** the plugin is live at https://github.com/vhalme/context-loop (MIT, 0.1.1) and
+  installed here at project scope; this repo holds only the instance. Local plugin checkout:
+  `~/projects/context-loop`.
 - **Blocked by:** nothing.
 
 ## Roadmap
@@ -45,7 +46,7 @@ consumer, so the engine stays exercised by real work.
     store total 3607). The curated index ran with no changes. The scripts work when copied
     outside the repo and run from a subdirectory or `/tmp`. Against a throwaway non-Sunbnb repo
     with `libs/*` workspaces, they give the right findings and the right derived store names.
-- ⬜ **Step 2 — extract the engine into `vhalme/context-loop`; Sunbnb installs it.** Move the
+- ✅ **Step 2 — extract the engine into `vhalme/context-loop`; Sunbnb installs it (2026-10-13).** Move the
   engine files in the inventory below. The engine commands become **skills** so Claude can
   invoke them from their descriptions. They are namespaced `/context-loop:<skill>`:
   - `context`: check, sync, help, and later init
@@ -90,18 +91,27 @@ consumer, so the engine stays exercised by real work.
   package renamed `context-system-scripts`. The name `context-loop` was chosen over
   `monorepo-context`, which would have excluded single-package repos, and the user created
   `vhalme/context-loop`. Skills, not commands, are the plugin's entry points.
+- 2026-10-13 — Step 2 shipped. Plugin `vhalme/context-loop` 0.1.0 → 0.1.1 (MIT): engine
+  scripts, six skills (context, recall, groom, wiki, update-knowledge, track), specs,
+  templates, hooks. The engine link `.claude/context/engine` (git-ignored, refreshed each
+  session) gives agents and git hooks one stable path. Hooks act only where `budgets.json`
+  exists; the store only where `project.json` opts in. Dependencies install automatically
+  (exact pins + lockfile at the plugin root; verified with `npm ci --ignore-scripts` plus a real
+  embedding run). 0.1.1 fixed the main-module guard: through a symlink, tracks-index,
+  playbook-index, knowledge-curated and knowledge-ingest silently did nothing.
+  Sunbnb: local engine, commands and workflows deleted; settings enable the plugin;
+  references point at the engine link and `/context-loop:` names. Verified with the
+  installed plugin: the health findings match the pre-move set except for edits made in
+  this switchover (table-reservations link edit, CLAUDE.md +0.5 KB). The curated index
+  dropped the 64 units of moved docs. The repo's `.claude/scripts/` copy is gone.
 
 ## Open decisions
 
-- **How commands call scripts.** `${CLAUDE_PLUGIN_ROOT}` expands in plugin hooks and plugin
-  commands, but the agent definitions and specs that live in a repo say `node .claude/scripts/…`.
-  Options: (a) the plugin commands are the only entry point and the specs name commands, not
-  scripts; (b) `/context init` writes a `.claude/scripts/ctx` shim that execs the plugin copy.
-  Leaning toward (a).
-- **Licence** for `context-loop`, needed before step 4. MIT is the usual choice for plugins.
-- **Where the specs live.** Option one: the plugin ships them and the instance points at them.
-  Option two: init copies them in, which lets a repo tune them but lets them drift. Leaning
-  toward shipping them, with init copying only the templates.
+- ~~How commands call scripts~~ — decided: SKILL.md bodies use `${CLAUDE_PLUGIN_ROOT}`;
+  everything read inside the repo (agents, specs, git hooks) uses the engine link
+  `.claude/context/engine`, which `engine-link.mjs` refreshes at every session start.
+- ~~Where the specs live~~ — decided: the plugin ships them (`specs/`); the instance READMEs
+  are pointers plus local conventions; init copies only `templates/`.
 
 ## Links
 

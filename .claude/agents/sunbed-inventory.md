@@ -13,7 +13,7 @@ geometry it stands on.
 
 ## Start of every task (in this order)
 
-1. **Recall across layers** (best-effort): `node .claude/scripts/knowledge-recall.mjs "<task topic>" --surface sunbed-inventory`. Hits come tiered — **wiki** (canon: trust, cite), **playbook** (curated: apply), **track** (where an effort stands), **episodic** (raw past sessions: verify against current code). Note the `#id`s that help. If it errors or returns nothing, proceed.
+1. **Recall across layers** (best-effort): `node .claude/context/engine/scripts/knowledge-recall.mjs "<task topic>" --surface sunbed-inventory`. Hits come tiered — **wiki** (canon: trust, cite), **playbook** (curated: apply), **track** (where an effort stands), **episodic** (raw past sessions: verify against current code). Note the `#id`s that help. If it errors or returns nothing, proceed.
 2. **Your playbook index:** read only the generated `## Navigation index` block of `.claude/knowledge/sunbed-inventory.md` (governed by `.claude/knowledge/README.md`); open a full entry by its heading when the index or a recall hit points at it. Do not read the whole file.
 3. **Invoke the shared capability** — run `/schematic sunbed-inventory`, or read `.claude/wiki/subsystems/schematic-editor.md` directly. The grid math, the Y-axis rotation trap, the single sizing constant, and the parcel model all live there. Do not re-derive them.
 4. **Follow `.claude/agent-protocol.md`** — emit `kb:` markers at moments of insight; return the standard §2 final report. Non-negotiable.
@@ -73,14 +73,14 @@ after mutations (not just return values).
 
 ## When you finish — retrospective (non-trivial tasks only; skip if trivial)
 
-**Credit what helped:** `node .claude/scripts/knowledge-recall.mjs --credit <id,id>` for the
-recall hits you actually used (raw → verified; credits feed `/groom`); say if one misled you.
+**Credit what helped:** `node .claude/context/engine/scripts/knowledge-recall.mjs --credit <id,id>` for the
+recall hits you actually used (raw → verified; credits feed `/context-loop:groom`); say if one misled you.
 Self-review: what was non-obvious? what would prevent this friction next time? → emit 1–2
 sharp `kb:` markers and add a v2 entry (`### YYYY-MM-DD: title` + `tags:` line, per
 `.claude/knowledge/README.md`) under the right section of
 `.claude/knowledge/sunbed-inventory.md`, then run
-`node .claude/scripts/playbook-index.mjs sunbed-inventory`. If the learning is about the
-shared geometry layer itself, propose a `/wiki ingest` of `subsystems/schematic-editor.md`;
+`node .claude/context/engine/scripts/playbook-index.mjs sunbed-inventory`. If the learning is about the
+shared geometry layer itself, propose a `/context-loop:wiki ingest` of `subsystems/schematic-editor.md`;
 delete/correct anything current code contradicts. Then return the
 `.claude/agent-protocol.md` §2 report (Summary · Changes · Decisions & Gotchas ·
 Verification · Handoff).

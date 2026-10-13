@@ -251,3 +251,6 @@ Operations:
 
 ## [2026-10-13] patch | entity:settlement + flow:settlement-cycle stubs — table dropped (track 032 step 2)
 - Stubs now say nothing remains; source points at migration `20261013101617_drop_legacy_settlement`. Pages still due for deletion after 2026-11-12.
+
+## [2026-10-13] restructure | wiki schema + maintenance workflows moved to the context-loop plugin (track 033 step 2)
+- README.md is now a pointer to `.claude/context/engine/specs/wiki.md` plus Sunbnb conventions; workflows ingest/lint/prune/query/review ship with `/context-loop:wiki`; only feature-design, debugging, implementation remain here (links repointed). subsystem:context-system rewritten as the instance page. table-reservations link text changed only (not re-verified, last_verified left as is).

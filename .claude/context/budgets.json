@@ -1,5 +1,5 @@
 {
-  "_doc": "Single source of size/freshness budgets for every AI-context layer. Read by .claude/scripts/context-health.mjs and quoted by /update-knowledge, the wiki README and the playbook spec. Bytes unless stated. soft = WARN, hard = BROKEN.",
+  "_doc": "Single source of size/freshness budgets for every AI-context layer. Read by .claude/context/engine/scripts/context-health.mjs and quoted by /update-knowledge, the wiki README and the playbook spec. Bytes unless stated. soft = WARN, hard = BROKEN.",
   "canonical": {
     "files": {
       "CLAUDE.md": {

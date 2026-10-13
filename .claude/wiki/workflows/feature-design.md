@@ -9,7 +9,6 @@ sources:
   - packages/data/src/payment-providers/index.ts
   - apps/user/app/api/_lib/payment-provider.ts
 related:
-  - workflow:query
   - workflow:implementation
   - subsystem:payments
   - subsystem:reservation-state-machine
@@ -33,7 +32,7 @@ Check `.claude/tracks/index.md` — if a track already owns this goal, design in
 
 ### 2. Map to existing concepts
 
-For each concept in the framing, find the wiki page (`[[workflow:query]]`: index + `/recall`):
+For each concept in the framing, find the wiki page (`/context-loop:wiki query`: index + `/context-loop:recall`):
 
 - "Affects bookings" → `[[entity:reservation]]` + `[[subsystem:reservation-state-machine]]`
 - "Involves payment" → `[[flow:reservation-payment]]` + `[[subsystem:payments]]`
@@ -96,7 +95,7 @@ For non-trivial changes, present the plan and wait for approval before writing c
 
 ### 9. After the feature ships
 
-Run `[[workflow:ingest]]` to fold new concepts and flows into the wiki.
+Run `/context-loop:wiki ingest` to fold new concepts and flows into the wiki.
 
 ## Anti-patterns
 

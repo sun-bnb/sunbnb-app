@@ -154,4 +154,4 @@ MCP can't write, and that's the right default. When a genuine data fix is warran
 Follow `.claude/agent-protocol.md` — emit `kb:` markers for data-shape gotchas (a surprising
 status value, a reconciliation quirk, a mapping trap). If you compose a query worth reusing or
 learn a durable truth about the data model, fold it into the planned `ops/database` wiki page
-via `/wiki ingest`.
+via `/context-loop:wiki ingest`.

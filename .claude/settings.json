@@ -1,20 +1,15 @@
 {
-  "_doc": "Committed Claude Code project settings. Hooks are the context system's automation: a one-line health summary at session start (context-health.mjs, <1 s, no DB) and the episodic knowledge-store ingest (SessionEnd, detached). Every script exits 0 silently when its prerequisite (git, Docker) is missing. Per-machine permissions stay in settings.local.json (gitignored).",
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/scripts/context-health.mjs\" --summary" },
-          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/scripts/knowledge-ensure.mjs\"" }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/scripts/knowledge-hook.mjs\"" }
-        ]
-      }
-    ]
-  }
+  "enabledPlugins": {
+    "context-loop@context-loop": true
+  },
+  "extraKnownMarketplaces": {
+    "context-loop": {
+      "source": {
+        "source": "github",
+        "repo": "vhalme/context-loop"
+      },
+      "autoUpdate": true
+    }
+  },
+  "_doc": "Committed Claude Code project settings. The AI-context system runs from the context-loop plugin (github.com/vhalme/context-loop): its hooks print the one-line health summary at session start, keep .claude/context/engine linked to the installed plugin, start the knowledge-store container, and ingest each session at its end. Per-machine permissions stay in settings.local.json (gitignored)."
 }

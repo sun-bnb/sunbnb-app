@@ -10,7 +10,6 @@ sources:
   - .claude/commands/test.md
 related:
   - workflow:feature-design
-  - workflow:ingest
   - subsystem:migrations
 last_verified: 2026-10-13
 ---
@@ -86,7 +85,7 @@ For UI changes, run the app and drive the golden path plus at least one failure 
 
 ### 7. Ingest
 
-Once verified and accepted, run `[[workflow:ingest]]` — part of "done", not optional. Agents emit `kb:` markers for surface lessons (`.claude/agent-protocol.md`); the wiki gets only what passes its gate. On a track, run the `handoff` workflow before stopping.
+Once verified and accepted, run `/context-loop:wiki ingest` — part of "done", not optional. Agents emit `kb:` markers for surface lessons (`.claude/agent-protocol.md`); the wiki gets only what passes its gate. On a track, run `/context-loop:track handoff` before stopping.
 
 ### 8. Commit
 

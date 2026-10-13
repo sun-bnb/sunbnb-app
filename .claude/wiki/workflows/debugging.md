@@ -9,7 +9,6 @@ sources:
   - apps/user/app/api/reconcile/route.ts
   - .claude/commands/db.md
 related:
-  - workflow:query
   - subsystem:payments
   - subsystem:auth
   - subsystem:reservation-state-machine
@@ -43,7 +42,7 @@ Strip interpretation; capture what was observed:
 | Login / "you don't own this" | `[[subsystem:auth]]` |
 | Webhook didn't fire / payment stuck | `[[subsystem:payments]]` → webhooks + reconciliation |
 
-Not listed? `/recall "<symptom>"` — past sessions often hold the same incident (episodic tier: a lead, verify it).
+Not listed? `/context-loop:recall "<symptom>"` — past sessions often hold the same incident (episodic tier: a lead, verify it).
 
 ### 3. Read the flow / subsystem page
 
@@ -74,9 +73,9 @@ Small and well understood: fix it and add a regression test that fails without t
 
 ### 8. Ingest the learning
 
-- Misleading or missing wiki page → `[[workflow:ingest]]` revise.
+- Misleading or missing wiki page → `/context-loop:wiki ingest` revise.
 - A class of bug worth remembering → **Common pitfalls** bullet on the page (bounded at 7).
-- A surface-specific gotcha → emit a `kb:gotcha` / `kb:incident` marker (`.claude/agent-protocol.md`); it reaches the agent's playbook through `/groom`.
+- A surface-specific gotcha → emit a `kb:gotcha` / `kb:incident` marker (`.claude/agent-protocol.md`); it reaches the agent's playbook through `/context-loop:groom`.
 
 Bump `last_verified` only on pages whose claims you re-verified.
 

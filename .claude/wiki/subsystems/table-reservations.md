@@ -129,7 +129,7 @@ the deposit **money collection** (provider capture/refund + invoice cascade + co
 reminders/notify, the embeddable widget UI, **Google/Instagram Reserve** (external), and several
 consumer/partner UIs (section/feature + combo pickers, waitlist join + view, modify UI). The
 standalone-extraction sequencing also lives in `.claude/tracks/002-table-reservations.md`. Update this
-page via `[[workflow:ingest]]` as the seams close.
+page via `/context-loop:wiki ingest` as the seams close.
 
 ## Related
 

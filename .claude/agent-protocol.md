@@ -3,7 +3,7 @@
 Shared rules for **every** agent working in this repo (the main session, the dev
 generalists, and the feature specialists). Read this once at the start of a task.
 It governs *how you emit output* so that downstream agents and the episodic
-knowledge store (`.claude/scripts/knowledge-ingest.mjs` → `/recall`) can capture
+knowledge store (`.claude/context/engine/scripts/knowledge-ingest.mjs` → `/context-loop:recall`) can capture
 your reasoning **deterministically** instead of inferring it.
 
 It does **not** restate project rules — those live in `.claude/rules/`, the
@@ -102,7 +102,7 @@ the incident under **Decisions & Gotchas** and the blocker under **Handoff**.
 ## 4. Reuse the existing canon — don't duplicate it
 
 Before writing anything, the order of consult is: one cross-layer recall
-(`node .claude/scripts/knowledge-recall.mjs "<topic>" --surface <agent>` — wiki, your playbook,
+(`node .claude/context/engine/scripts/knowledge-recall.mjs "<topic>" --surface <agent>` — wiki, your playbook,
 tracks and past sessions in one tiered answer) → the generated navigation index of your
 `.claude/knowledge/<agent>.md` (open entries by heading, never the whole file) →
 `.claude/rules/` + `CLAUDE.md` tree (declarative rules) → `.claude/wiki/index.md` for a

@@ -39,6 +39,6 @@ session) can invoke it.
 ## While you work
 
 Follow `.claude/agent-protocol.md`: emit `kb:` markers for geometry/coordinate gotchas you
-hit, and if you learn something durable about this layer, fold it back via `/wiki ingest`
+hit, and if you learn something durable about this layer, fold it back via `/context-loop:wiki ingest`
 (update `subsystems/schematic-editor.md`, bump `last_verified`, and promote it from `draft`
 to `stable` once you've verified the cited sources).

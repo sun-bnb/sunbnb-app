@@ -105,8 +105,8 @@ If the review found changes that introduce or substantially modify:
 
 …append a one-line hint to the verdict:
 
-> Substantive changes detected — consider `/wiki ingest` after merging to keep the synthesis layer current.
+> Substantive changes detected — consider `/context-loop:wiki ingest` after merging to keep the synthesis layer current.
 
-Do NOT run `/wiki ingest` yourself. The wiki has a worthiness gate (see `.claude/wiki/workflows/ingest.md`) and the user decides.
+Do NOT run `/context-loop:wiki ingest` yourself. The wiki has a worthiness gate (`.claude/context/engine/specs/wiki.md` § Maintenance discipline) and the user decides.
 
 Skip this hint for pure bug fixes, refactors that preserve contracts, formatting, dep bumps, or test additions.
