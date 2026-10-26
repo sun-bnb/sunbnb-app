@@ -18,13 +18,12 @@ consumer, so the engine stays exercised by real work.
 
 ## Resume here
 
-- **Next action:** step 3 — write `/context-loop:context init` in `vhalme/context-loop`
-  (`skills/context/workflows/init.md` + a script that detects workspaces and writes
-  `budgets.json` / `project.json` from `templates/`), then test it on a fresh repo and one
-  existing non-Sunbnb repo.
-- **State:** the plugin is live at https://github.com/vhalme/context-loop (MIT, 0.1.1) and
-  installed here at project scope; this repo holds only the instance. Local plugin checkout:
-  `~/projects/context-loop`.
+- **Next action:** step 4 — finish the public README (what loads when, the layers, the
+  optional store, a worked init example) and decide whether to submit to the public plugin
+  directory once a repo outside this machine has used it. Optional: turn the step-3 fixtures
+  into a `claude plugin eval` suite so every release re-tests init.
+- **State:** plugin 0.2.0 live at https://github.com/vhalme/context-loop (init shipped); Sunbnb
+  runs it at project scope (autoUpdate). Local checkout: `~/projects/context-loop`.
 - **Blocked by:** nothing.
 
 ## Roadmap
@@ -60,7 +59,7 @@ consumer, so the engine stays exercised by real work.
   `${CLAUDE_PLUGIN_ROOT}`, and `.claude/settings.json` loses them. The script dependencies (`pg`,
   `dotenv`, `@huggingface/transformers`) get a first-run install inside the plugin. The fix-hint
   strings (`node .claude/scripts/…`) become a single command-path helper.
-- ⬜ **Step 3 — `/context init`.** It detects workspaces and writes `budgets.json`,
+- ✅ **Step 3 — `/context init` (2026-10-13, plugin 0.2.0).** It detects workspaces and writes `budgets.json`,
   `project.json`, the root `CLAUDE.md` "Context system" section, and empty
   `wiki/`/`tracks/`/`knowledge/`. It drafts a `CLAUDE.md` for each workspace and an agent per
   surface from a template, all as proposals. The pgvector store is optional, provisioned through
@@ -104,6 +103,25 @@ consumer, so the engine stays exercised by real work.
   installed plugin: the health findings match the pre-move set except for edits made in
   this switchover (table-reservations link edit, CLAUDE.md +0.5 KB). The curated index
   dropped the 64 units of moved docs. The repo's `.claude/scripts/` copy is gone.
+- 2026-10-13 — Step 3 shipped (0.2.0). How init splits:
+  - `context-init.mjs` is mechanical: it detects workspaces and creates only missing files,
+    so a re-run is a no-op, and `--plan --json` changes nothing.
+  - `workflows/init.md` is judgement: two questions (recall store, agents), canon drafted from
+    the code, and drift in existing context reported but not edited.
+  - `store-provision.mjs` takes a free port and pins it, because every store defaulted to
+    :5434. A host listen test misses Docker Desktop's ports, so it also checks `docker ps`.
+
+  Tested headless on four repos:
+  - an npm monorepo with an agent: drafts were factual;
+  - a pnpm monorepo with `libs/` and `services/` roots;
+  - a single package with an existing `CLAUDE.md`: section appended only;
+  - a scratch copy of `~/projects/trade-vector`, a real Next.js + Drizzle app: kept its
+    `CLAUDE.md` and `AGENTS.md`, derived 6 entities from the schema, and flagged real drift.
+    Its `CLAUDE.md` says SQLite with 6 tables; the code has 8 `pgTable`s and tests with
+    PGlite. The original repo was not touched.
+
+  In headless runs, writes under `.claude/` need `bypassPermissions`; interactive sessions
+  ask instead. The test container was removed afterwards.
 
 ## Open decisions
 
