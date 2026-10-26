@@ -2,6 +2,7 @@ import logger from '@/utils/logger'
 
 import type { Metadata } from 'next'
 import { GoogleAnalytics } from '@repo/ui/google-analytics'
+import { PostHogAnalytics } from '@repo/ui/posthog'
 import AuthAnalytics from './analytics/AuthAnalytics'
 import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages } from 'next-intl/server'
@@ -90,6 +91,8 @@ export default async function RootLayout({
                   </App>
                   <GlobalCookieConsent />
                   <GoogleAnalytics measurementId={process.env.NEXT_PUBLIC_GA4_ID} />
+                  {/* Not while impersonating: a sudo session must not pollute the user's analytics. */}
+                  {!isImpersonating && <PostHogAnalytics apiKey={process.env.NEXT_PUBLIC_POSTHOG_KEY} app="user" environment={process.env.NEXT_PUBLIC_APP_ENV} userId={session?.user?.id} />}
                   <AuthAnalytics />
                 </NextIntlClientProvider>
               </NextAuthProvider>

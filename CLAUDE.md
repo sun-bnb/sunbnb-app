@@ -189,7 +189,7 @@ Names and purpose only; per-app detail lives in that app's `CLAUDE.md`.
 | `BLOB_READ_WRITE_TOKEN`, `ASSISTANT_BLOB_READ_WRITE_TOKEN` | Vercel Blob · private store for assistant uploads |
 | `RECONCILIATION_SECRET`, `CRON_SECRET` | `/api/reconcile` (503 if unset) · Vercel Cron bearer |
 | `ALLOWED_ORIGINS`, `RESEND_API_KEY` | Password-reset link origins · email |
-| `NEXT_PUBLIC_GA4_ID` | GA4 per app/env via `@repo/ui/google-analytics` (consent-gated) |
+| `NEXT_PUBLIC_GA4_ID`, `NEXT_PUBLIC_POSTHOG_KEY` | GA4 / PostHog (EU, one shared project) via `@repo/ui`, consent-gated |
 | `NEXT_PUBLIC_DEMO_MODE` | Demo payment mode |
 | `ANTHROPIC_API_KEY`, `PARTNER_ASSISTANT_ENABLED` | Claude API; both required for the partner assistant (else 503) |
 | `PARTNER_ASSISTANT_MODEL`, `PARTNER_ASSISTANT_EXTRACTION_MODEL`, `PARTNER_AI_DAILY_TURNS`, `ASSISTANT_NOTIFY_EMAIL` | Assistant model overrides, daily turn budget, budget alert |

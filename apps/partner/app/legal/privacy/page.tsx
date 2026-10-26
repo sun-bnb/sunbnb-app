@@ -37,7 +37,7 @@ export default async function PartnerPrivacyPage() {
         </section>
 
         <section className="mb-8">
-          <h2 className="text-base font-semibold text-gray-900 mb-2">3. Cookies and Google Analytics</h2>
+          <h2 className="text-base font-semibold text-gray-900 mb-2">3. Cookies, Google Analytics and PostHog</h2>
           <p>
             We use essential cookies to keep you signed in and to remember your cookie choice. These do not require consent.
           </p>
@@ -45,14 +45,17 @@ export default async function PartnerPrivacyPage() {
             If you choose <strong>Accept</strong> in the cookie banner, we also use <strong>Google Analytics 4</strong>, a web analytics service provided by Google Ireland Limited, Gordon House, Barrow Street, Dublin 4, Ireland. Google Analytics sets cookies and collects pseudonymous usage data, such as the pages you view, the buttons you click, your approximate location, device and browser information, and the steps of the sign-up and setup flow (for example creating a venue or connecting payments). We use it to measure how visitors find the partner portal, including from sunbnb.app and try.sunbnb.app and from our advertising, and to improve the service. We do not send your name or email address to Google Analytics.
           </p>
           <p className="mt-2">
-            Google Analytics is only loaded after you accept. If you choose <strong>Decline</strong> (essential cookies only), nothing is sent to Google. Analytics data is processed under Google&rsquo;s terms and may be transferred outside the EEA under the safeguards Google provides (such as standard contractual clauses). You can change your mind at any time by clearing your cookies for this site, which shows the banner again.
+            With the same consent we also use <strong>PostHog</strong>, a product analytics service provided by PostHog Inc., with data stored in its EU cloud (Frankfurt, Germany). PostHog sets cookies and records how you use the partner portal: the pages you view, the buttons you click, page performance and, as session recordings, the movements and clicks on the page, with everything typed into form fields masked. When you are signed in, these events are linked to your internal account ID so we can understand how venues use the portal; we do not send your name or email address to PostHog. We use it to find and fix usability problems and to improve the service.
+          </p>
+          <p className="mt-2">
+            Google Analytics and PostHog are only loaded after you accept. If you choose <strong>Decline</strong> (essential cookies only), nothing is sent to Google or PostHog. Analytics data is processed under Google&rsquo;s terms and may be transferred outside the EEA under the safeguards Google provides (such as standard contractual clauses). You can change your mind at any time by clearing your cookies for this site, which shows the banner again.
           </p>
         </section>
 
         <section className="mb-8">
           <h2 className="text-base font-semibold text-gray-900 mb-2">4. Service Providers</h2>
           <p>
-            We share data with providers that help us run the service: hosting, email delivery, payment providers you connect (Mollie, Stripe, Viva) with your consent, Google (analytics), and, if you use the AI assistant, Anthropic (see section 5). We require all providers to handle data in line with the GDPR.
+            We share data with providers that help us run the service: hosting, email delivery, payment providers you connect (Mollie, Stripe, Viva) with your consent, Google and PostHog (analytics), and, if you use the AI assistant, Anthropic (see section 5). We require all providers to handle data in line with the GDPR.
           </p>
         </section>
 

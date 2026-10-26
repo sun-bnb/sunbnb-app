@@ -12,6 +12,7 @@
  */
 import Script from 'next/script'
 import { useEffect, useState } from 'react'
+import { posthogEvent } from './posthog'
 
 declare global {
   interface Window {
@@ -34,14 +35,15 @@ export function consentSignals(granted: boolean): Record<'ad_storage' | 'analyti
 }
 
 /**
- * Send a GA4 event. A no-op before consent (gtag doesn't exist yet) and on the server, so call
- * sites never need to check. Use GA4 recommended names where one fits (sign_up, login,
+ * Send a funnel event to GA4 and PostHog (`./posthog`). A no-op before consent (neither tag
+ * exists yet) and on the server, so call sites never need to check. Use GA4 recommended names where one fits (sign_up, login,
  * begin_checkout, purchase, generate_lead …); never put personal data (email, name) in params.
  */
 export function gaEvent(name: string, params?: Record<string, unknown>) {
   if (typeof window === 'undefined') return
   try {
     window.gtag?.('event', name, params ?? {})
+    posthogEvent(name, params)
   } catch {
     /* analytics must never break the page */
   }

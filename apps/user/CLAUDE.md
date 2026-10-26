@@ -17,6 +17,7 @@ Port 3002 (`https://local.sunbnb.app:3002`). Run: `cd apps/user && source .env.l
 **Analytics:** GA4 via `@repo/ui/google-analytics` in `app/layout.tsx` (consent-gated;
 `NEXT_PUBLIC_GA4_ID` per env). Funnel events in `app/analytics/` (`funnel.ts` builders + once-per-
 transaction guard, `track.ts` wrappers); never pass email/name/anonId/user ids as params.
+`gaEvent` also forwards to PostHog (`@repo/ui/posthog`, `NEXT_PUBLIC_POSTHOG_KEY`, `/ingest` rewrite).
 
 ## Auth Model
 

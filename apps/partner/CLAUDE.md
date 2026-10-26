@@ -173,12 +173,13 @@ kill switch; `siteId` is route-bound and every tool re-runs `requireSiteOwner`. 
 SQL on the real DB as `assistant_reader` (RLS). Detail: **`ASSISTANT.md`**; model:
 `.claude/wiki/subsystems/partner-assistant.md`.
 
-## Analytics (GA4)
+## Analytics (GA4 + PostHog)
 
 `NEXT_PUBLIC_GA4_ID` (shared with try.sunbnb.app; unset = no tag). `<GoogleAnalytics>` +
 `<CookieConsent hasAnalytics>` in `app/layout.tsx`; nothing loads until consent. Events go through
 `trackOnce(onceKey, name, params)` / `<TrackEvent>` (`components/Analytics.tsx`); pure rules in
-`lib/analytics.ts`. Never put email/name/user ids in params.
+`lib/analytics.ts`. Never put email/name/user ids in params. `gaEvent` also forwards to PostHog
+(`@repo/ui/posthog`, `NEXT_PUBLIC_POSTHOG_KEY`, `/ingest` rewrite), which identifies by user id only.
 
 Events: `sign_up`/`login` (stamped in the `jwt` callback in `app/auth.ts`, fired by
 `<AuthEvents>`), `generate_lead`/`select_content` (landing CTAs), `site_created`,

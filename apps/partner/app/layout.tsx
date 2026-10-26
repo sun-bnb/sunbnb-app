@@ -10,6 +10,7 @@ import { AppRouterCacheProvider } from '@mui/material-nextjs/v16-appRouter'
 import GlobalStyles from '@mui/material/GlobalStyles'
 import { CookieConsent } from '@repo/ui/cookie-consent'
 import { GoogleAnalytics } from '@repo/ui/google-analytics'
+import { PostHogAnalytics } from '@repo/ui/posthog'
 import { AuthEvents } from '@/components/Analytics'
 import { FlagsProvider } from '@repo/ui/flags'
 import { getClientFlags } from './flags'
@@ -102,6 +103,8 @@ export default async function RootLayout({
                   </App>
                   <CookieConsent hasAnalytics privacyHref="/legal/privacy" />
                   <GoogleAnalytics measurementId={process.env.NEXT_PUBLIC_GA4_ID} />
+                  {/* Not while impersonating: a sudo session must not pollute the partner's analytics. */}
+                  {!isImpersonating && <PostHogAnalytics apiKey={process.env.NEXT_PUBLIC_POSTHOG_KEY} app="partner" environment={process.env.NEXT_PUBLIC_APP_ENV} userId={session?.user?.id} />}
                   <AuthEvents />
                 </NextIntlClientProvider>
               </NextAuthProvider>
