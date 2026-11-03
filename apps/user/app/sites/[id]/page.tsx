@@ -6,6 +6,7 @@ import { auth } from '@/app/auth'
 import SiteView from './view'
 import ErrorCard from '@/components/ErrorCard'
 import { countAvailableToday } from '@/service/availabilityService'
+import { LAYOUT_ELEMENT_SELECT } from '@/app/sites/layout-element-select'
 
 async function getSite(idOrSlug: string, userId: string) {
 
@@ -15,6 +16,7 @@ async function getSite(idOrSlug: string, userId: string) {
     where: { OR: [{ id: idOrSlug }, { slug: idOrSlug }] },
     include: {
       workingHours: true,
+      layoutElements: { select: LAYOUT_ELEMENT_SELECT },
       inventoryItems: {
         where: {
           status: 'active'

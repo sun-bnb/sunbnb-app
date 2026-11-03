@@ -7,6 +7,7 @@ import { resolveBrandRender } from '@repo/data/brand-manifest'
 import BrandMount from '@/brands/BrandMount'
 import { BRAND_METADATA } from '@/brands/metadata'
 import { countAvailableToday } from '@/service/availabilityService'
+import { LAYOUT_ELEMENT_SELECT } from '@/app/sites/layout-element-select'
 
 async function getSiteBySlug(slug: string, userId?: string) {
 
@@ -17,6 +18,7 @@ async function getSiteBySlug(slug: string, userId?: string) {
     include: {
       brand: true,
       workingHours: true,
+      layoutElements: { select: LAYOUT_ELEMENT_SELECT },
       inventoryItems: {
         where: { status: 'active' },
         include: {

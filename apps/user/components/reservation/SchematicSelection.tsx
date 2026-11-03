@@ -106,6 +106,7 @@ export default function SchematicSelection({ site }: { site: SiteProps }) {
         z: el.z ?? 0,
         label: el.label ?? null,
         color: el.color ?? null,
+        cornerRadius: el.cornerRadius ?? null,
       })),
     [site.layoutElements]
   )

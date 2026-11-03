@@ -48,6 +48,7 @@ export interface LayoutElementProps {
   z: number
   label?: string | null
   color?: string | null
+  cornerRadius?: number | null
 }
 
 export interface MapCenter {
