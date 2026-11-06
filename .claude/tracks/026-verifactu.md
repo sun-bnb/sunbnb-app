@@ -55,9 +55,12 @@ is gated on P7.2 any more.
 
 `submitPendingRecords()` — the `*/15` cron in `apps/admin/vercel.json` — sends our own
 commission invoices AND every partner who has granted submission, with us named as
-`Representante`. The client defaults to **stub** so nothing happens until a certificate is
-configured, and `AEAT_MODE=http` with no certificate **throws** rather than degrading.
-`AEAT_ENV` defaults to `pruebas`. `submitPlatformRecords()` is retained as the
+`Representante`. With no certificate (or `AEAT_MODE=off`) transmission is **off**: the sweep
+returns `paused` and every record stays `pending` — it no longer resolves to the stub, whose
+fake acceptances marked records `sent` (fixed 2026-11-05). `AEAT_MODE=http` with no
+certificate **throws** rather than degrading. `AEAT_ENV=production` is accepted only on a
+Vercel production deployment, and a production deployment requires it
+(`aeatEnvironmentMismatch`); elsewhere `AEAT_ENV` defaults to `pruebas`. `submitPlatformRecords()` is retained as the
 nothing-external sweep: the right first proof against preproducción.
 
 ### To go live, in order
@@ -82,10 +85,13 @@ nothing-external sweep: the right first proof against preproducción.
 2. **Obtain the FNMT certificate** (€14, 2 years, online accreditation for our B-prefix NIF).
    See *Founder actions*.
 3. **Run against preproducción from a laptop**: set `AEAT_CERT_PFX_BASE64`,
-   `AEAT_CERT_PASSWORD`, `AEAT_MODE=http`, `AEAT_ENV=pruebas`, then
-   `npm run verifactu:health:local` → sweep → health again. This is the manual gate that
+   `AEAT_CERT_PASSWORD`, `AEAT_MODE=http`, `AEAT_ENV=pruebas` in the shell of ONE command, then
+   `npm run verifactu:health:test` → `npm run verifactu:submit:test` → health again. This is the manual gate that
    cannot run in CI, because preproducción needs a real certificate.
-4. **Then production**: `AEAT_ENV=production` in Vercel for the admin app only.
+4. **Then production**: on the admin project's Production environment only, the certificate
+   pair as **sensitive** vars plus `AEAT_ENV=production`; `AEAT_MODE=off` first, confirm
+   `/verifactu` reads the certificate, then `AEAT_MODE=http`. `AEAT_MODE=off` is the pause
+   switch. No certificate on Preview — crons only fire on production.
 
 **Check before and after every step with `npm run verifactu:health:{local,test,production}`.**
 Note `verifactu:health:production` cannot run until the migrations reach production.
@@ -707,6 +713,19 @@ missing `select` field through in P7.1a.
   difference between "this is absent" and "this is costing you 40 unfiled records". The `none`
   state is singled out, because it means we are issuing invoices in a partner's name with no
   mandate at all, which is a different problem from merely not being able to file yet.
+
+- **2026-11-05 — Transmission off now means paused, and the AEAT environment is pinned to the
+  deployment.** Found while planning certificate rollout: with no certificate `getAeatClient()`
+  returned the STUB, and the production cron (every 15 min) would have marked the first real
+  record `sent` from the stub's fake acceptance — the exact failure P7.1 was written to
+  prevent, reached through the default path rather than the explicit one. Production held 0
+  records, so nothing was mis-marked. Now `getAeatClient()` returns `null` when off, the sweep
+  returns `paused: true` touching nothing (cron 200, not 503 — it is production's normal
+  pre-go-live state), and the stub is reachable only by injection. `AEAT_MODE=stub` is read as
+  `off`. Second gap: a production deployment missing `AEAT_ENV` filed to preproducción, and a
+  laptop could set `AEAT_ENV=production`; both now throw `AeatEnvironmentMismatchError`, keyed
+  on `VERCEL_ENV`. Added `verifactu:submit:{local,test}` for the preproducción gate — no
+  production variant by design.
 
 ## Open decisions
 

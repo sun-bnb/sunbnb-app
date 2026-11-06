@@ -11,7 +11,11 @@ import {
   describeCertificateStatus,
 } from '@repo/data/tax/es-verifactu/certificate'
 import { findRecordsNeedingSubsanacion } from '@repo/data/tax/es-verifactu/subsanacion'
-import { resolveAeatMode, resolveAeatEnvironment } from '@repo/data/tax/es-verifactu/client'
+import {
+  resolveAeatMode,
+  resolveAeatEnvironment,
+  aeatEnvironmentMismatch,
+} from '@repo/data/tax/es-verifactu/client'
 import { AUTHORISATION_RETRY_MS } from '@repo/data/tax/es-verifactu/submit'
 
 /**
@@ -57,6 +61,7 @@ export default async function VerifactuOpsPage() {
   const cert = getCertificateStatus()
   const mode = resolveAeatMode(process.env)
   const environment = resolveAeatEnvironment(process.env)
+  const mismatch = mode === 'http' ? aeatEnvironmentMismatch(process.env) : null
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">
@@ -70,7 +75,7 @@ export default async function VerifactuOpsPage() {
       {/* ── Transport ─────────────────────────────────────────── */}
       <Section title="Transport">
         <div className="grid grid-cols-3 gap-4">
-          <Stat label="Mode" value={mode} muted={mode === 'stub'} />
+          <Stat label="Mode" value={mode} muted={mode === 'off'} alert={Boolean(mismatch)} />
           <Stat label="Environment" value={environment} muted={environment === 'pruebas'} />
           <Stat
             label="Certificate"
@@ -93,11 +98,13 @@ export default async function VerifactuOpsPage() {
             {cert.subject} &middot; issued by {cert.issuer}
           </p>
         )}
-        {mode === 'stub' && (
+        {mode === 'off' && (
           <p className="text-xs text-amber-400 mt-2">
-            Stub mode: records are generated and queued but nothing reaches AEAT.
+            Transmission off: records are generated and queued as pending, and nothing
+            reaches AEAT or is marked sent.
           </p>
         )}
+        {mismatch && <p className="text-xs text-red-400 mt-2">Sweep refusing to run: {mismatch}</p>}
       </Section>
 
       {/* ── Records ───────────────────────────────────────────── */}

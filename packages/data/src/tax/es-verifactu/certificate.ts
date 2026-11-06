@@ -76,7 +76,7 @@ function describeAttributes(attrs: forge.pki.CertificateField[]): string {
  * Read the configured certificate's metadata.
  *
  * Returns `configured: false` rather than throwing when none is set — that is
- * the normal state in development and in CI, where the client runs in stub mode.
+ * the normal state in development and in CI, where transmission is off.
  */
 export function getCertificateStatus(
   env: Record<string, string | undefined> = process.env,
@@ -127,7 +127,7 @@ export function getCertificateStatus(
 /** One line for a dashboard or a log. */
 export function describeCertificateStatus(status: CertificateStatus): string {
   if (!status.configured) {
-    return 'No AEAT certificate configured — the client runs in stub mode and files nothing.'
+    return 'No AEAT certificate configured — transmission is off and records stay pending.'
   }
   if (status.error) return `AEAT certificate unreadable: ${status.error}`
   if (status.expired) {

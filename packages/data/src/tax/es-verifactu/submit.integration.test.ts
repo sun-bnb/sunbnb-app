@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterAll } from 'vitest'
+import { describe, it, expect, beforeEach, afterAll, afterEach, vi } from 'vitest'
 import { cleanDatabase, disconnectDatabase, prisma } from '../../test/setup'
 import {
   createTestUser,
@@ -20,12 +20,7 @@ import {
   ERROR_NOT_ENTITLED,
   MAX_SUBMISSION_ATTEMPTS,
 } from './submit'
-import {
-  createStubAeatClient,
-  createAeatHttpClient,
-  getAeatClient,
-  AeatCertificateMissingError,
-} from './client'
+import { createStubAeatClient } from './client'
 import { SoapFaultError } from './soap'
 import { PLATFORM_ES_ISSUER_NIF, sistemaInformatico } from './sistema-informatico'
 
@@ -341,45 +336,23 @@ describe('submitPlatformRecords', () => {
   })
 })
 
-describe('the client mode switch', () => {
-  it('defaults to the stub when no certificate is configured', () => {
-    expect(getAeatClient({} as NodeJS.ProcessEnv).mode).toBe('stub')
+describe('transmission off', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
   })
 
-  it('uses the real client when a certificate is present', () => {
-    const c = getAeatClient({
-      AEAT_CERT_PFX_BASE64: Buffer.from('not-a-real-pfx').toString('base64'),
-    } as NodeJS.ProcessEnv)
-    expect(c.mode).toBe('http')
-  })
-
-  it('FAILS CLOSED in explicit http mode with no certificate', () => {
-    // Never silently degrade: falling back to a stub would mark every record sent
-    // while AEAT held nothing, and the register would read complete.
-    expect(() => createAeatHttpClient({ AEAT_MODE: 'http' } as NodeJS.ProcessEnv)).toThrow(
-      AeatCertificateMissingError,
-    )
-    expect(() => getAeatClient({ AEAT_MODE: 'http' } as NodeJS.ProcessEnv)).toThrow(
-      AeatCertificateMissingError,
-    )
-  })
-
-  it('defaults to the pruebas endpoint, never production', () => {
-    // A wrong guess toward the sandbox costs a re-run; a wrong guess toward
-    // production files real records from a dev machine.
-    const c = getAeatClient({
-      AEAT_CERT_PFX_BASE64: Buffer.from('x').toString('base64'),
-    } as NodeJS.ProcessEnv)
-    expect(c.environment).toBe('pruebas')
-    expect(c.endpoint).toContain('prewww1.aeat.es')
-
-    const prod = getAeatClient({
-      AEAT_CERT_PFX_BASE64: Buffer.from('x').toString('base64'),
-      AEAT_ENV: 'production',
-    } as NodeJS.ProcessEnv)
-    expect(prod.endpoint).toContain('www1.agenciatributaria.gob.es')
-    // Not the ...Sello port: we hold a representative certificate.
-    expect(prod.endpoint).not.toContain('www10')
+  it('leaves every record pending and sends nothing when no certificate is set', async () => {
+    // Before 2026-11 this path resolved to the stub client, whose fake
+    // acceptances marked real records `sent`. The register must stay honest.
+    vi.stubEnv('AEAT_CERT_PFX_BASE64', '')
+    vi.stubEnv('AEAT_MODE', '')
+    const inv = await platformRecord()
+    const result = await submitPendingRecords()
+    expect(result).toMatchObject({ mode: 'off', paused: true, accepted: 0, issuers: [] })
+    const row = await prisma.verifactuRecord.findFirstOrThrow({ where: { invoiceId: inv.id } })
+    expect(row.status).toBe(RECORD_PENDING)
+    expect(row.attempts).toBe(0)
+    expect(row.csv).toBeNull()
   })
 })
 

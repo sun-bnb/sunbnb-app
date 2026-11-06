@@ -15,10 +15,19 @@ vi.mock('@repo/data/tax/es-verifactu/client', () => ({
       this.name = 'AeatCertificateMissingError'
     }
   },
+  AeatEnvironmentMismatchError: class extends Error {
+    constructor(message: string) {
+      super(message)
+      this.name = 'AeatEnvironmentMismatchError'
+    }
+  },
 }))
 
 import { GET } from './route'
-import { AeatCertificateMissingError } from '@repo/data/tax/es-verifactu/client'
+import {
+  AeatCertificateMissingError,
+  AeatEnvironmentMismatchError,
+} from '@repo/data/tax/es-verifactu/client'
 
 const ORIGINAL = process.env.CRON_SECRET
 
@@ -26,7 +35,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   process.env.CRON_SECRET = 'test-secret'
   submitPendingRecords.mockResolvedValue({
-    mode: 'stub',
+    mode: 'http',
     environment: 'pruebas',
     issuers: [],
     accepted: 0,
@@ -86,6 +95,32 @@ describe('GET /api/cron/verifactu-submit', () => {
     await expect(res.json()).resolves.toMatchObject({
       error: 'AEAT certificate not configured',
     })
+  })
+
+  it('reports a paused sweep as 200, not as a failure', async () => {
+    // No certificate is production's normal state until go-live; a 503 every
+    // 15 minutes would train everyone to ignore this cron's errors.
+    submitPendingRecords.mockResolvedValue({
+      mode: 'off',
+      environment: 'pruebas',
+      issuers: [],
+      accepted: 0,
+      rejected: 0,
+      complete: false,
+      paused: true,
+    })
+    const res = await GET(request('Bearer test-secret'))
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toMatchObject({ paused: true, accepted: 0 })
+  })
+
+  it('reports an AEAT environment mismatch as 503', async () => {
+    submitPendingRecords.mockRejectedValue(
+      new AeatEnvironmentMismatchError('production deployment without AEAT_ENV=production'),
+    )
+    const res = await GET(request('Bearer test-secret'))
+    expect(res.status).toBe(503)
+    await expect(res.json()).resolves.toMatchObject({ error: 'AEAT environment mismatch' })
   })
 
   it('returns 500 on an unexpected failure, and never leaks internals', async () => {

@@ -59,7 +59,7 @@ import {
   type CabeceraInput,
 } from './registro-xml'
 import { isAccepted, SoapFaultError, type RecordReply } from './soap'
-import { getAeatClient, type AeatClient } from './client'
+import { getAeatClient, resolveAeatEnvironment, type AeatClient } from './client'
 import { RECORD_PENDING, RECORD_SENT, RECORD_ERROR, RECORD_BLOCKED } from './record'
 import {
   COLABORADOR_SOCIAL,
@@ -122,7 +122,10 @@ export function nextAttemptDelayMs(attempts: number): number {
 }
 
 export interface SweepOptions {
-  /** Inject a client; defaults to the env-resolved one. */
+  /**
+   * Inject a client; defaults to the env-resolved one. Tests pass the stub here —
+   * the env never resolves to it.
+   */
   client?: AeatClient
   now?: Date
   /**
@@ -161,6 +164,7 @@ export interface IssuerSweepResult {
 }
 
 export interface SweepResult {
+  /** The client's mode, or `off` when transmission is off and nothing ran. */
   mode: string
   environment: string
   issuers: IssuerSweepResult[]
@@ -168,6 +172,11 @@ export interface SweepResult {
   rejected: number
   /** False when a bound stopped the run and more work remains. */
   complete: boolean
+  /**
+   * True when transmission is off (`AEAT_MODE=off`, or no certificate): nothing
+   * was read or written, every due record is still `pending`.
+   */
+  paused?: boolean
 }
 
 /** Statuses that still owe AEAT a submission AND are worth retrying now. */
@@ -183,6 +192,20 @@ const RETRYABLE = [RECORD_PENDING, RECORD_ERROR]
 export async function submitPendingRecords(options: SweepOptions = {}): Promise<SweepResult> {
   const now = options.now ?? new Date()
   const client = options.client ?? getAeatClient()
+  // Transmission off. Return BEFORE touching a record: the alternative this
+  // replaced was sending to a stub that accepted everything, which marked real
+  // records `sent` while AEAT held nothing.
+  if (!client) {
+    return {
+      mode: 'off',
+      environment: resolveAeatEnvironment(process.env),
+      issuers: [],
+      accepted: 0,
+      rejected: 0,
+      complete: false,
+      paused: true,
+    }
+  }
   const maxIssuers = options.maxIssuers ?? 20
 
   const due = {

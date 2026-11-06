@@ -21,6 +21,12 @@
  * It was deliberately `submitPlatformRecords` until P7.2, when all it could
  * safely cover was the case needing no external approval at all.
  *
+ * ## Paused is a 200
+ *
+ * With no certificate (or `AEAT_MODE=off`) the sweep returns `paused: true`
+ * having touched nothing — every record stays `pending`. That is the normal state
+ * of production until go-live, so it is not an error and must not page anyone.
+ *
  * ## What a non-200 means
  *
  * Nothing that endangers an invoice. Records queue, with periodic retries, which
@@ -34,7 +40,10 @@
 
 import { NextResponse } from 'next/server'
 import { submitPendingRecords } from '@repo/data/tax/es-verifactu/submit'
-import { AeatCertificateMissingError } from '@repo/data/tax/es-verifactu/client'
+import {
+  AeatCertificateMissingError,
+  AeatEnvironmentMismatchError,
+} from '@repo/data/tax/es-verifactu/client'
 
 export const dynamic = 'force-dynamic'
 /** The sweep makes one network round trip per issuer; give it room. */
@@ -59,6 +68,13 @@ export async function GET(request: Request) {
     if (error instanceof AeatCertificateMissingError) {
       console.error('[Verifactu] submission sweep cannot run:', error.message)
       return NextResponse.json({ error: 'AEAT certificate not configured' }, { status: 503 })
+    }
+    // AEAT_ENV disagrees with the deployment (production without
+    // AEAT_ENV=production, or AEAT production off a production deployment).
+    // Equally a configuration error, and nothing was sent.
+    if (error instanceof AeatEnvironmentMismatchError) {
+      console.error('[Verifactu] submission sweep cannot run:', error.message)
+      return NextResponse.json({ error: 'AEAT environment mismatch' }, { status: 503 })
     }
     console.error('[Verifactu] submission sweep failed:', error)
     return NextResponse.json({ error: 'Submission sweep failed' }, { status: 500 })

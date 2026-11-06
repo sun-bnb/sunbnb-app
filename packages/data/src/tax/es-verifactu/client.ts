@@ -1,28 +1,41 @@
 /**
  * The AEAT submission client — stub and real (track 026 phase 7.1b).
  *
- * `getAeatClient()` is the ONE place that decides stub vs real HTTP, mirroring
- * `packages/data/src/viva/index.ts`, so the sweep never branches on env itself.
+ * `getAeatClient()` is the ONE place that decides whether anything is sent,
+ * mirroring `packages/data/src/viva/index.ts`, so the sweep never branches on env
+ * itself.
  *
- * Mode resolution:
- *  - `AEAT_MODE=stub` → stub, always.
+ * Transmission resolution (`resolveAeatMode`):
+ *  - `AEAT_MODE=off` (or the legacy `stub`) → off, always: the sweep is paused.
  *  - `AEAT_MODE=http` → real client, always; **throws if the certificate is
  *    missing** rather than quietly degrading.
  *  - unset, `AEAT_CERT_PFX_BASE64` present → real client.
- *  - unset, no certificate → stub. This is what lets CI and a laptop run the
- *    whole sweep with no secret at all.
+ *  - unset, no certificate → off.
  *
- * ## Why a missing certificate must FAIL, never skip
+ * ## Off means PAUSED, never "send to a stub"
  *
- * The one thing worse than not submitting is believing we submitted. If `http`
- * mode fell back to the stub when the certificate was absent, a production
- * misconfiguration would mark every record `sent` against a stub that accepted
- * everything, and the register would read complete while AEAT had nothing. So the
- * fallback only exists when the mode was never explicitly requested.
+ * The one thing worse than not submitting is believing we submitted. Until
+ * 2026-11 an unconfigured environment fell back to the stub client, and the
+ * sweep marked every record `sent` from the stub's fake acceptances — so a
+ * production deployment with no certificate would have read the register as
+ * complete while AEAT held nothing. Now `getAeatClient()` returns `null` when
+ * transmission is off and the sweep leaves every record `pending`. The stub
+ * exists only for tests, which construct it explicitly with
+ * `createStubAeatClient()` and inject it.
+ *
+ * ## The AEAT environment must match the deployment
+ *
+ * `AEAT_ENV=production` files real records, so it is accepted ONLY on a Vercel
+ * production deployment (`VERCEL_ENV=production`), and a production deployment
+ * REQUIRES it. A laptop, CI or a preview can therefore never file to production,
+ * and production can never file to preproducción because a variable was
+ * forgotten — either mismatch throws `AeatEnvironmentMismatchError` before a
+ * client exists. See `aeatEnvironmentMismatch`.
  *
  * ## Certificate handling
  *
- * `AEAT_CERT_PFX_BASE64` + `AEAT_CERT_PASSWORD` as Vercel encrypted env vars,
+ * `AEAT_CERT_PFX_BASE64` + `AEAT_CERT_PASSWORD` as Vercel SENSITIVE env vars
+ * (write-only), on the admin project's Production environment only,
  * decoded into an https.Agent per cold start and never written to disk. One
  * certificate for the whole platform (D2: colaboración social under Convenio 17),
  * which is what makes a single env pair sufficient — we never hold a partner's
@@ -33,7 +46,10 @@ import https from 'node:https'
 import { ENDPOINTS } from './registro-xml'
 import { parseSubmissionReply, wrapSoap, type SubmissionReply } from './soap'
 
+/** What a client instance is. `stub` exists only when a test constructs one. */
 export type AeatMode = 'stub' | 'http'
+/** What the environment asks for. `off` pauses the sweep; nothing is marked sent. */
+export type AeatTransmission = 'off' | 'http'
 export type AeatEnvironment = 'production' | 'pruebas'
 
 export interface AeatClient
@@ -64,16 +80,58 @@ export class AeatCertificateMissingError extends Error {
   }
 }
 
+export class AeatEnvironmentMismatchError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'AeatEnvironmentMismatchError'
+  }
+}
+
 function resolveEnvironment(env: NodeJS.ProcessEnv): AeatEnvironment {
   // Default to pruebas. A wrong guess toward the sandbox costs a re-run; a wrong
   // guess toward production files real records from a dev machine.
   return env.AEAT_ENV === 'production' ? 'production' : 'pruebas'
 }
 
-function resolveMode(env: NodeJS.ProcessEnv): AeatMode {
+function resolveMode(env: NodeJS.ProcessEnv): AeatTransmission {
   const explicit = env.AEAT_MODE
-  if (explicit === 'stub' || explicit === 'http') return explicit
-  return env.AEAT_CERT_PFX_BASE64 ? 'http' : 'stub'
+  if (explicit === 'http') return 'http'
+  // `stub` is the pre-2026-11 spelling of the pause switch; it is read as `off`
+  // so an environment still carrying it pauses rather than reverting to the
+  // fake-acceptance behaviour it used to select.
+  if (explicit === 'off' || explicit === 'stub') return 'off'
+  return env.AEAT_CERT_PFX_BASE64 ? 'http' : 'off'
+}
+
+/**
+ * Why this deployment may not talk to the configured AEAT environment, or `null`
+ * when it may.
+ *
+ * Keyed on `VERCEL_ENV`, which Vercel sets on every deployment and nothing sets on
+ * a laptop. Both directions are refused:
+ *  - production deployment, AEAT pruebas — real invoices would be marked `sent`
+ *    against preproducción, which keeps nothing. Usually a forgotten `AEAT_ENV`.
+ *  - anything else, AEAT production — a laptop, CI or a branch preview filing
+ *    real records, typically against the TEST database's fake invoices.
+ *
+ * Exported so the admin page can show the mismatch before a sweep trips on it.
+ */
+export function aeatEnvironmentMismatch(env: NodeJS.ProcessEnv): string | null {
+  const productionDeployment = env.VERCEL_ENV === 'production'
+  const environment = resolveEnvironment(env)
+  if (productionDeployment && environment !== 'production') {
+    return (
+      'This is a production deployment but AEAT_ENV is not "production". Refusing to ' +
+      'file real invoices to preproducción, where they would read as sent and be lost.'
+    )
+  }
+  if (!productionDeployment && environment === 'production') {
+    return (
+      'AEAT_ENV=production is only accepted on a Vercel production deployment ' +
+      '(VERCEL_ENV=production). Refusing to file to AEAT production from here.'
+    )
+  }
+  return null
 }
 
 // ─── the real client ─────────────────────────────────────────────────────────
@@ -87,6 +145,9 @@ export function createAeatHttpClient(env: NodeJS.ProcessEnv = process.env): Aeat
         'while AEAT holds nothing.',
     )
   }
+
+  const mismatch = aeatEnvironmentMismatch(env)
+  if (mismatch) throw new AeatEnvironmentMismatchError(mismatch)
 
   const environment = resolveEnvironment(env)
   // The non-Sello hosts: www10/prewww10 are the ...Sello ports and expect a
@@ -145,6 +206,9 @@ export function createAeatHttpClient(env: NodeJS.ProcessEnv = process.env): Aeat
 }
 
 // ─── the stub ────────────────────────────────────────────────────────────────
+//
+// Test-only. Nothing in the env resolution returns it: a stub that accepts
+// everything, wired into a real sweep, marks real records `sent`.
 
 export interface StubBehaviour {
   /**
@@ -219,8 +283,15 @@ export function createStubAeatClient(behaviour: StubBehaviour = {}): StubAeatCli
 
 // ─── the switch ──────────────────────────────────────────────────────────────
 
-export function getAeatClient(env: NodeJS.ProcessEnv = process.env): AeatClient {
-  return resolveMode(env) === 'http' ? createAeatHttpClient(env) : createStubAeatClient()
+/**
+ * The env-resolved client, or `null` when transmission is off.
+ *
+ * Never the stub: a caller that gets `null` must leave records untouched. Throws
+ * `AeatCertificateMissingError` or `AeatEnvironmentMismatchError` on a
+ * misconfiguration, so it is loud rather than paused.
+ */
+export function getAeatClient(env: NodeJS.ProcessEnv = process.env): AeatClient | null {
+  return resolveMode(env) === 'http' ? createAeatHttpClient(env) : null
 }
 
 export { resolveMode as resolveAeatMode, resolveEnvironment as resolveAeatEnvironment }

@@ -34,7 +34,7 @@ describe('getCertificateStatus', () => {
   it('reports nothing configured when no certificate is set', () => {
     const s = getCertificateStatus({})
     expect(s.configured).toBe(false)
-    expect(describeCertificateStatus(s)).toContain('stub mode')
+    expect(describeCertificateStatus(s)).toContain('transmission is off')
   })
 
   it('reads subject, issuer and expiry out of a real PKCS#12', () => {
