@@ -344,6 +344,7 @@
     "verifactu:health:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx scripts/verifactu-health.ts",
     "verifactu:submit:local": "npx --yes tsx scripts/verifactu-submit.ts",
     "verifactu:submit:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx --yes tsx scripts/verifactu-submit.ts",
+    "aeat-cert": "./scripts/aeat-cert.sh",
     "migrate:status:local": "./scripts/with-db-url.sh POSTGRES_URL npx prisma migrate status",
     "migrate:status:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx prisma migrate status",
     "migrate:status:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx prisma migrate status",

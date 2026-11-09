@@ -84,13 +84,16 @@ nothing-external sweep: the right first proof against preproducción.
    `readIdentityRow` prefers a row that HAS a `vatId` — so this is tidiness, not a blocker.
 2. **Obtain the FNMT certificate** (€14, 2 years, online accreditation for our B-prefix NIF).
    See *Founder actions*.
-3. **Run against preproducción from a laptop**: set `AEAT_CERT_PFX_BASE64`,
-   `AEAT_CERT_PASSWORD`, `AEAT_MODE=http`, `AEAT_ENV=pruebas` in the shell of ONE command, then
-   `npm run verifactu:health:test` → `npm run verifactu:submit:test` → health again. This is the manual gate that
+3. **Run against preproducción from a laptop**: `npm run aeat-cert -- import <file.pfx>` once
+   (Keychain custody; `status` proves Node TLS can load it — forge reads legacy RC2 files that
+   OpenSSL 3 refuses), then `npm run verifactu:health:test` →
+   `npm run aeat-cert -- exec -- npm run verifactu:submit:test` → health again. `exec`
+   injects the pair into that one process with `AEAT_MODE=http AEAT_ENV=pruebas`. This is the manual gate that
    cannot run in CI, because preproducción needs a real certificate.
 4. **Then production**: on the admin project's Production environment only, the certificate
-   pair as **sensitive** vars plus `AEAT_ENV=production`; `AEAT_MODE=off` first, confirm
-   `/verifactu` reads the certificate, then `AEAT_MODE=http`. `AEAT_MODE=off` is the pause
+   pair as **sensitive** vars plus `AEAT_ENV=production` (`aeat-cert -- vercel-production
+   --yes-production`); `vercel-mode off` first, confirm `/verifactu` reads the certificate,
+   then `vercel-mode http`. Each needs an admin production redeploy. `AEAT_MODE=off` is the pause
    switch. No certificate on Preview — crons only fire on production.
 
 **Check before and after every step with `npm run verifactu:health:{local,test,production}`.**
