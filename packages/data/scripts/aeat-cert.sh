@@ -37,10 +37,37 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 
 die() { echo "aeat-cert: $*" >&2; exit 1; }
 
+# read_secret <service> — print a Keychain item's value exactly as stored.
+#
+# NOT `security find-generic-password -w`: for any value containing a non-ASCII
+# byte (ä, ñ, €…) `-w` prints it as bare HEX, indistinguishable from an ASCII
+# value that happens to be hex digits — so a correct non-ASCII passphrase was
+# read back as its hex spelling and rejected. `-g` marks the hex form with `0x`
+# (`password: 0x50C3A4… "…"`) and prints ASCII as `password: "…"`, which is
+# unambiguous. It writes that line to stderr.
+read_secret() {
+  security find-generic-password -a "$ACCOUNT" -s "$1" -g 2>&1 >/dev/null | python3 -c '
+import sys, re
+for line in sys.stdin:
+    if not line.startswith("password: "):
+        continue
+    v = line[len("password: "):].rstrip("\n")
+    m = re.match(r"0x([0-9A-Fa-f]+)", v)
+    if m:
+        sys.stdout.buffer.write(bytes.fromhex(m.group(1)))
+    elif v.startswith("\"") and v.endswith("\""):
+        sys.stdout.write(v[1:-1])
+    else:
+        sys.exit(1)  # empty item ("password: ") or an unrecognised form
+    sys.exit(0)
+sys.exit(1)
+'
+}
+
 load_from_keychain() {
-  AEAT_CERT_PFX_BASE64="$(security find-generic-password -a "$ACCOUNT" -s "$SVC_PFX" -w 2>/dev/null)" \
+  AEAT_CERT_PFX_BASE64="$(read_secret "$SVC_PFX")" \
     || die "no certificate in Keychain — run: aeat-cert.sh import <file.pfx>"
-  AEAT_CERT_PASSWORD="$(security find-generic-password -a "$ACCOUNT" -s "$SVC_PASS" -w 2>/dev/null)" \
+  AEAT_CERT_PASSWORD="$(read_secret "$SVC_PASS")" \
     || die "no passphrase in Keychain — run: aeat-cert.sh import <file.pfx>"
   export AEAT_CERT_PFX_BASE64 AEAT_CERT_PASSWORD
 }
@@ -62,12 +89,14 @@ cmd_import() {
     -l "Sunbnb AEAT certificate passphrase" -w
 
   local pass
-  pass="$(security find-generic-password -a "$ACCOUNT" -s "$SVC_PASS" -w)"
+  pass="$(read_secret "$SVC_PASS")" || die "could not read the passphrase back from Keychain"
   # Verify BEFORE storing the certificate; passed to openssl through its env.
   if ! AEAT_CERT_PASSWORD="$pass" openssl pkcs12 -in "$pfx" -passin env:AEAT_CERT_PASSWORD \
       -noout 2>/dev/null; then
     security delete-generic-password -a "$ACCOUNT" -s "$SVC_PASS" >/dev/null 2>&1 || true
-    die "that passphrase does not open $pfx — nothing stored"
+    die "that passphrase does not open $pfx — nothing stored (it is case-sensitive; it is
+the one set when the certificate was EXPORTED from the browser/Keychain, not the FNMT
+request code)"
   fi
   unset pass
 
