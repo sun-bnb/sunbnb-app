@@ -1,9 +1,9 @@
 ---
 id: 026-verifactu
 title: Veri*factu — Spanish fiscal compliance for receipts and invoices
-status: active
+status: blocked
 created: 2026-09-29
-updated: 2026-10-04
+updated: 2026-11-13
 worktree: null
 ---
 
@@ -40,12 +40,31 @@ implements them. No partner is in a foral territory today.
 
 ## Resume here
 
-**[2026-11-13] Certificate in hand, preproducción gate PASSED (step 3).** AEAT preproducción
-accepted `PLATFORM-F-2026-00001` from the TEST DB, signed with the real FNMT certificate. The
-run surfaced three transport bugs no test could reach, all fixed and pushed to `main`
-(0ffe78d3, c3c88d72, 9e48393b) — **they must be promoted and deployed to production before
-step 4**, or every live submission fails. Next: promote → deploy → D4 + D3 → step 4 on an
-explicit "production".
+**Blocked on founder actions: sign D4, then run D3, then go-live step 4 on an explicit "production".**
+Engineering is complete and deployed (2026-11-13): the certificate works, AEAT preproducción
+accepted our first record, and the three transport fixes it exposed (0ffe78d3, c3c88d72,
+9e48393b) are live on test and production. Production still has `AEAT_MODE` unset and no
+certificate, so the cron returns `paused` and nothing is filed.
+
+**Remaining, in order — none is code:**
+1. **D4** — founder signs the declaración responsable (the in-app screen, P9a, is built).
+2. **D3** — production clean-slate delete of the test invoices. Ask separately; take a
+   `pg_dump` and a fresh row count first (was 132 at last count, 124 of them out of scope).
+3. **Step 4** (below) — `npm run aeat-cert -- vercel-production --yes-production`, then
+   `vercel-mode off --yes-production` → admin production redeploy → confirm `/verifactu` reads
+   the certificate → `vercel-mode http --yes-production` → redeploy →
+   `verifactu:health:production`. Only on an explicit "production" from the founder.
+4. **Partners only, not blocking our own invoices:** Convenio 017 application (§ B); each
+   Spanish partner accepts at `/account/verifactu` and has `taxRegion` set (steps 0–1).
+5. **Asesor questions:** D6 (reverse-charge `Desglose`, blocks our invoices to the Finnish
+   partner), D5 (one question), D7 (Canarias/Ceuta/Melilla), D9 (merchant-agreement clause).
+6. **Housekeeping:** delete the `.pfx` from `~/Downloads` once in the password manager; decide
+   whether the gestoría keeps its copy; renew the certificate before 2028-10-06.
+
+**Context needed:** the certificate pair lives only in the founder's macOS Keychain
+(`packages/data/scripts/aeat-cert.sh`; `aeat-cert status` to check). Run step-4 commands
+from `packages/data`. A preproducción re-run is `npm run aeat-cert -- exec -- npm run
+verifactu:submit:test` (TEST DB; `PLATFORM-F-2026-00001` is already `sent`).
 
 ### What P7.2 changed about this section
 
@@ -93,7 +112,8 @@ nothing-external sweep: the right first proof against preproducción.
    OpenSSL 3 refuses), then `npm run verifactu:health:test` →
    `npm run aeat-cert -- exec -- npm run verifactu:submit:test` → health again. `exec`
    injects the pair into that one process with `AEAT_MODE=http AEAT_ENV=pruebas`. This is the manual gate that
-   cannot run in CI, because preproducción needs a real certificate. **Passed 2026-11-13.**
+   cannot run in CI, because preproducción needs a real certificate. **Passed 2026-11-13;
+   fixes deployed to test and production the same day.**
 4. **Then production**: on the admin project's Production environment only, the certificate
    pair as **sensitive** vars plus `AEAT_ENV=production` (`aeat-cert -- vercel-production
    --yes-production`); `vercel-mode off` first, confirm `/verifactu` reads the certificate,
@@ -747,6 +767,10 @@ missing `select` field through in P7.1a.
   its chain row and regenerated; the resend came back `3000 duplicado / Correcta` and is now
   `sent` — without a CSV, which only the lost first reply carried. Production unaffected (0
   records). Partner record `BM-F-2026-00001` stays pending by design (platform-only run).
+- **2026-11-13 — Fixes deployed; handoff, status → blocked.** Founder promoted and deployed
+  the three transport fixes and the track update (admin production on 2abedfec). D8 moved to
+  ◐: the Representante is in use and works, so the Sello is now an optional addition rather
+  than a decision blocking go-live. Everything left is founder/asesor action — see Resume here.
 
 ## Open decisions
 
@@ -862,7 +886,12 @@ missing `select` field through in P7.1a.
   `ES_INDIRECT_TAX_UNSUPPORTED` so nothing is filed, rather than producing a breakdown with the
   wrong tax in it. No partner is established there today. One question for the asesor.
 
-- ☐ **D8 — Representante or Sello de Entidad?** FNMT recommends the **Sello de Entidad** for a
+- ◐ **D8 — Representante in use since 2026-11-13; Sello still an option.** We hold a
+  Representante (Lauri Tiainen) and it works on the non-Sello `prewww1` host, so nothing in
+  the code needs to change. What remains open is only whether to ADD a Sello later for the
+  reasons below — chiefly that a Representante must be revoked and replaced if the named
+  person stops being legal representative. Original question:
+  **Representante or Sello de Entidad?** FNMT recommends the **Sello de Entidad** for a
   cloud platform doing unattended high-volume submission, which is exactly what the sweep is.
   Arguments for it: issued to the ENTITY rather than to a named person, so it does not depend on
   one administrador's personal certificate and does not break when that person's *cargo*

@@ -15,13 +15,13 @@ drift. Regenerate after every `handoff` / `close`.
 | [030](030-partner-ai-assistant.md) | Partner AI assistant — site tabs, inventory/schematic editing, documents, photos | **State 2026-10-12:** all slices S0–S8 **committed and pushed** on `main` (`534d9c3`, `c978ce3`, | — | 2026-10-12 |
 | [027](027-beach-mockup-lead-agent.md) | Beach mockup lead agent — marketing landing page that builds a prospect's beach | **State 2026-10-09:** P0–P6, P8–P10 (+ P8b tracking stack) and the coastline DB are committed | — | 2026-10-09 |
 | [028](028-multi-provider-payments.md) | Multi-provider payments — Mollie, Viva and Stripe as pluggable rails per partner | **State (2026-10-08):** **P1–P6 shipped — committed and pushed to `main` 2026-10-08** (`41c09f7..116f696`, 9 commits; | — | 2026-10-08 |
-| [026](026-verifactu.md) | Veri*factu — Spanish fiscal compliance for receipts and invoices | **Every code phase is complete. The transport covers every authorised issuer and | — | 2026-10-04 |
 | [021](021-physical-unit-model.md) | Physical unit model — durable mount point, policy split from structure | **▶ NEXT ACTION: P4 (A1) — make parcel resize a real edit.** See *Delivery sequence* for | — | 2026-09-12 |
 
 ## Blocked / paused
 
 | ID | Track | Status | Next action | Updated |
 |---|---|---|---|---|
+| [026](026-verifactu.md) | Veri*factu — Spanish fiscal compliance for receipts and invoices | blocked | **Blocked on founder actions: sign D4, then run D3, then go-live step 4 on an explicit "production".** | 2026-11-13 |
 | [023](023-custom-whitelabel-pages.md) | Custom whitelabel pages — bespoke brand experiences for key customers | paused | **PAUSED 2026-10-13** (track 031 status pass) — mechanism shipped (custom-brand migrations live); waiting on founder review of the Alcúdia page and open questions Q6+. | 2026-10-13 |
 | [012](012-multiday-per-day-operational-state.md) | Per-day operational state for multiday sunbed reservations | paused | **PAUSED 2026-10-13** (track 031 status pass) — availability double-sell fixed; per-day occupancy remains, waiting for prioritisation. | 2026-10-13 |
 | [006](006-alonso-staff-ui.md) | Alonso → Staff UI Migration | paused | **PAUSED 2026-10-13** (track 031 status pass) — floor-state parity done; three reporting-presentation gaps from the 2026-07-09 customer feedback remain, waiting for prioritisation. | 2026-10-13 |
