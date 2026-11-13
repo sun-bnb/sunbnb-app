@@ -40,9 +40,12 @@ implements them. No partner is in a foral territory today.
 
 ## Resume here
 
-**Every code phase is complete. The transport covers every authorised issuer and
-needs no further deploy to go live — the next actions are the certificate and the Convenio,
-both external.**
+**[2026-11-13] Certificate in hand, preproducción gate PASSED (step 3).** AEAT preproducción
+accepted `PLATFORM-F-2026-00001` from the TEST DB, signed with the real FNMT certificate. The
+run surfaced three transport bugs no test could reach, all fixed and pushed to `main`
+(0ffe78d3, c3c88d72, 9e48393b) — **they must be promoted and deployed to production before
+step 4**, or every live submission fails. Next: promote → deploy → D4 + D3 → step 4 on an
+explicit "production".
 
 ### What P7.2 changed about this section
 
@@ -82,14 +85,15 @@ nothing-external sweep: the right first proof against preproducción.
    (`ensureSettingsAndFee`) created it AFTER the last identity save, and nothing has copied the
    identity onto it since. `getBusinessEntity()` already resolves correctly regardless, because
    `readIdentityRow` prefers a row that HAS a `vatId` — so this is tidiness, not a blocker.
-2. **Obtain the FNMT certificate** (€14, 2 years, online accreditation for our B-prefix NIF).
-   See *Founder actions*.
+2. ~~**Obtain the FNMT certificate**~~ **Done 2026-11-13** — representative certificate in
+   Lauri Tiainen's name for B22435705, valid to **2028-10-06**, in Keychain on the founder's
+   laptop (`aeat-cert status`). See *Founder actions* § A for custody.
 3. **Run against preproducción from a laptop**: `npm run aeat-cert -- import <file.pfx>` once
    (Keychain custody; `status` proves Node TLS can load it — forge reads legacy RC2 files that
    OpenSSL 3 refuses), then `npm run verifactu:health:test` →
    `npm run aeat-cert -- exec -- npm run verifactu:submit:test` → health again. `exec`
    injects the pair into that one process with `AEAT_MODE=http AEAT_ENV=pruebas`. This is the manual gate that
-   cannot run in CI, because preproducción needs a real certificate.
+   cannot run in CI, because preproducción needs a real certificate. **Passed 2026-11-13.**
 4. **Then production**: on the admin project's Production environment only, the certificate
    pair as **sensitive** vars plus `AEAT_ENV=production` (`aeat-cert -- vercel-production
    --yes-production`); `vercel-mode off` first, confirm `/verifactu` reads the certificate,
@@ -729,6 +733,20 @@ missing `select` field through in P7.1a.
   laptop could set `AEAT_ENV=production`; both now throw `AeatEnvironmentMismatchError`, keyed
   on `VERCEL_ENV`. Added `verifactu:submit:{local,test}` for the preproducción gate — no
   production variant by design.
+- **2026-11-13 — Certificate imported; preproducción gate passed after three transport fixes.**
+  The `.pfx` came from Lauri via the gestoría (which held the password). `aeat-cert status`:
+  Node TLS loads it. First real run against `prewww1` exposed, in order:
+  (1) **the certificate was never sent** — `fetch` (undici) silently ignores `agent`, so AEAT
+  returned its HTML Sede page; now `node:https` (0ffe78d3). (2) **`Codigo[1100] … NIF`** — the
+  PLATFORM issuer is stored as `ESB22435705`; AEAT wants the bare NIF. `toAeatNif()` applied to
+  record issuer (= chain key + huella input), recipient, FacturasRectificadas, anulación and
+  the invoice QR (c3c88d72). (3) **AEAT accepted, we recorded `error`** — the parser looked for
+  `IDFactura` in the SuministroInformacion namespace; AEAT puts it in RespuestaSuministro
+  (9e48393b, with AEAT's verbatim reply as a test). Every test missed all three because
+  fixtures shared our assumptions. The bad TEST record (issuer `ESB22435705`) was deleted with
+  its chain row and regenerated; the resend came back `3000 duplicado / Correcta` and is now
+  `sent` — without a CSV, which only the lost first reply carried. Production unaffected (0
+  records). Partner record `BM-F-2026-00001` stays pending by design (platform-only run).
 
 ## Open decisions
 
@@ -923,6 +941,17 @@ different endpoint**. That is the `www10`/`prewww10` pair already in `ENDPOINTS`
 **It can live on a server.** The key pair is generated locally during the request and FNMT
 recommends making a *copia de seguridad* at download — i.e. it exports to `.p12`/`.pfx`, which
 is what `AEAT_CERT_PFX_BASE64` needs. It is a software certificate, not card-bound.
+
+**[2026-11-13] The certificate we hold.** FNMT *Certificado de Representante* (AC
+Representación), subject `Z3076679C LAURI TUOMAS TIAINEN (R: B22435705)`, valid to
+**2028-10-06** — renew before expiry (an FNMT certificate cannot be renewed once lapsed; the
+admin `/verifactu` page counts down). It was obtained and exported to `.pfx` by the company's
+gestoría, which set the password and may still hold a copy: anyone with the `.pfx` + password
+can act as the company at AEAT, not only for Veri*factu — keeping that copy should be a
+deliberate decision. **It is a representative certificate: if Lauri stops being the company's
+legal representative it must be revoked and replaced**, and the new one imported and pushed
+with `aeat-cert`. Laptop custody: macOS Keychain only (`aeat-cert.sh`); delete the `.pfx` from
+`~/Downloads` once the password manager holds it.
 
 **Custody note, unchanged from the plan:** we hold OUR certificate, never a partner's. Custody
 of a partner's own qualified certificate is the ability to act as that company everywhere, not
