@@ -36,7 +36,8 @@
  *
  * `AEAT_CERT_PFX_BASE64` + `AEAT_CERT_PASSWORD` as Vercel SENSITIVE env vars
  * (write-only), on the admin project's Production environment only,
- * decoded into an https.Agent per cold start and never written to disk. One
+ * decoded into an https.Agent per cold start (sent with node:https, never the
+ * global fetch, which drops the Agent) and never written to disk. One
  * certificate for the whole platform (D2: colaboración social under Convenio 17),
  * which is what makes a single env pair sufficient — we never hold a partner's
  * own certificate.
@@ -168,41 +169,68 @@ export function createAeatHttpClient(env: NodeJS.ProcessEnv = process.env): Aeat
     endpoint,
     async submit(payloadXml: string): Promise<SubmissionReply> {
       const body = wrapSoap(payloadXml)
-      let response: Response
+      let response: { status: number; text: string }
       try {
-        response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'text/xml; charset=UTF-8',
-            // Empty on purpose — the WSDL declares soapAction="". The HEADER
-            // must still be present; some stacks reject a SOAP 1.1 request
-            // without it.
-            SOAPAction: '""',
-          },
-          body,
-          // @ts-expect-error — Node's fetch accepts an agent via this key; it is
-          // not in the DOM lib types.
-          agent,
-        })
+        response = await postXml(endpoint, body, agent)
       } catch (cause) {
         throw new AeatTransportError(
           `AEAT request failed: ${cause instanceof Error ? cause.message : String(cause)}`,
         )
       }
 
-      const text = await response.text()
-      if (!response.ok) {
+      const { status, text } = response
+      if (status < 200 || status >= 300) {
         // A 500 can still carry a SOAP Fault, which is more informative than the
         // status, so the body is attached rather than discarded.
-        throw new AeatTransportError(
-          `AEAT returned HTTP ${response.status}`,
-          response.status,
-          text.slice(0, 2000),
-        )
+        throw new AeatTransportError(`AEAT returned HTTP ${status}`, status, text.slice(0, 2000))
       }
       return parseSubmissionReply(text)
     },
   }
+}
+
+const AEAT_TIMEOUT_MS = 60_000
+
+/**
+ * POST over `node:https`, NOT the global `fetch`. Node's fetch (undici) silently
+ * ignores an `agent` option, so the client certificate was never presented:
+ * AEAT answered 200 with its HTML Sede page and every submission failed as
+ * "Reply is not XML". Mutual TLS needs the Agent on a real https.request.
+ */
+function postXml(
+  endpoint: string,
+  body: string,
+  agent: https.Agent,
+): Promise<{ status: number; text: string }> {
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      endpoint,
+      {
+        method: 'POST',
+        agent,
+        headers: {
+          'Content-Type': 'text/xml; charset=UTF-8',
+          'Content-Length': Buffer.byteLength(body),
+          // Empty on purpose — the WSDL declares soapAction="". The HEADER
+          // must still be present; some stacks reject a SOAP 1.1 request
+          // without it.
+          SOAPAction: '""',
+        },
+        timeout: AEAT_TIMEOUT_MS,
+      },
+      (res) => {
+        const chunks: Buffer[] = []
+        res.on('data', (c: Buffer) => chunks.push(c))
+        res.on('end', () =>
+          resolve({ status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString('utf8') }),
+        )
+        res.on('error', reject)
+      },
+    )
+    req.on('timeout', () => req.destroy(new Error(`timed out after ${AEAT_TIMEOUT_MS} ms`)))
+    req.on('error', reject)
+    req.end(body)
+  })
 }
 
 // ─── the stub ────────────────────────────────────────────────────────────────
