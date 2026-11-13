@@ -46,6 +46,7 @@ import {
   HUELLA_SPEC_VERSION,
 } from './huella'
 import { invoiceRequiresRecord } from './record'
+import { toAeatNif } from '../../vat-id'
 import type { SistemaInformatico } from './sistema-informatico'
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
@@ -117,7 +118,7 @@ export async function anularInvoice(
   if (!invoice) return { status: 'not-found' }
   if (!invoiceRequiresRecord(invoice)) return { status: 'out-of-scope' }
 
-  const issuerNif = (invoice.issuerVatNumber ?? '').trim()
+  const issuerNif = toAeatNif(invoice.issuerVatNumber)
   if (issuerNif === '' || !invoice.invoiceNumber) {
     return { status: 'blocked', reason: 'Invoice has no issuer tax id or no number' }
   }

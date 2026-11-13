@@ -36,6 +36,7 @@ import {
 import { buildDesglose, classifyTipoFactura, type TipoFactura } from './tipo-factura'
 import { buildRegistroAltaXml, type Encadenamiento } from './registro-xml'
 import { resolveTaxRegime, regimeRequiresRecords } from '../regime'
+import { toAeatNif } from '../../vat-id'
 import {
   platformIssuerJurisdiction,
   THIRD_PARTY_ISSUER,
@@ -191,7 +192,7 @@ export async function recordInvoiceForTax(
   // ── in scope? See resolveInvoiceIssuerJurisdiction for the PLATFORM trap. ──
   if (!invoiceRequiresRecord(invoice)) return { status: 'out-of-scope' }
 
-  const issuerNif = (invoice.issuerVatNumber ?? '').trim()
+  const issuerNif = toAeatNif(invoice.issuerVatNumber)
   if (issuerNif === '') {
     return { status: 'blocked', reason: 'Issuer has no tax id; a record cannot identify a filer' }
   }
@@ -292,7 +293,7 @@ export async function recordInvoiceForTax(
   // The recipient goes on the record only when the invoice actually names one —
   // a factura simplificada has none, and an empty Destinatarios block is
   // schema-invalid rather than merely redundant.
-  const recipientNif = (invoice.recipientVatNumber ?? '').trim()
+  const recipientNif = toAeatNif(invoice.recipientVatNumber)
   const recipientName = (invoice.recipientCompanyName ?? '').trim()
   const destinatarios =
     recipientNif !== '' && recipientName !== ''
@@ -308,7 +309,7 @@ export async function recordInvoiceForTax(
     credited.issuerVatNumber
       ? [
           {
-            issuerNif: credited.issuerVatNumber.trim(),
+            issuerNif: toAeatNif(credited.issuerVatNumber),
             numSerieFactura: credited.invoiceNumber,
             fechaExpedicion: formatFechaExpedicion(credited.invoicedAt, timeZone),
           },

@@ -39,6 +39,7 @@ import {
 } from './tax/es-verifactu/record'
 import { buildInvoiceQrUrl, QR_LABEL_ABOVE, QR_LEGEND_BELOW } from './tax/es-verifactu/qr'
 import { ES_ISSUER_TIME_ZONE, formatFechaExpedicion } from './tax/es-verifactu/huella'
+import { toAeatNif } from './vat-id'
 
 /** What the QR needs, beyond the fields that identify the issuer. */
 export type FiscalInvoiceFields = InvoiceIssuerFields & {
@@ -64,7 +65,7 @@ export function buildInvoiceFiscal(invoice: FiscalInvoiceFields): ReceiptFiscal 
   if (regime !== 'ES_VERIFACTU') return null
 
   const qr = buildInvoiceQrUrl({
-    issuerNif: invoice.issuerVatNumber ?? '',
+    issuerNif: toAeatNif(invoice.issuerVatNumber),
     invoiceNumber: invoice.invoiceNumber ?? '',
     fechaExpedicion: formatFechaExpedicion(invoice.invoicedAt, ES_ISSUER_TIME_ZONE),
     totalAmount: invoice.totalAmount,

@@ -110,6 +110,16 @@ function checkSpanishCif(id: string): boolean {
   return control === String(controlDigit) || control === controlLetter
 }
 
+/**
+ * A tax id as AEAT wants it in a Veri*factu record or QR: the bare NIF, no `ES`
+ * prefix. We store the EU VAT form (`ESB22435705`) where an invoice document
+ * needs it, and AEAT rejects that form with `Codigo[1100] … NIF`. Anything not
+ * Spanish passes through normalized.
+ */
+export function toAeatNif(raw: string | null | undefined): string {
+  return normalizeVatId(raw).replace(/^ES(?=[0-9A-Z]{9}$)/, '')
+}
+
 /** Any of the three Spanish forms. */
 export function isValidSpanishTaxId(id: string): boolean {
   const v = normalizeVatId(id).replace(/^ES/, '')

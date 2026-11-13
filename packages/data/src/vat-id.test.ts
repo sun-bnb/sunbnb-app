@@ -4,6 +4,7 @@ import {
   validateVatId,
   isValidSpanishTaxId,
   isUsableVatId,
+  toAeatNif,
 } from './vat-id'
 
 // Vectors are computed from the published algorithms and checked by hand, not
@@ -27,6 +28,29 @@ describe('normalizeVatId', () => {
     expect(normalizeVatId(null)).toBe('')
     expect(normalizeVatId(undefined)).toBe('')
     expect(normalizeVatId('   ')).toBe('')
+  })
+})
+
+describe('toAeatNif', () => {
+  // AEAT rejects the EU VAT form in a Veri*factu record: Codigo[1100] … NIF.
+  it('strips the ES prefix from a Spanish VAT id', () => {
+    expect(toAeatNif('ESB22435705')).toBe('B22435705')
+    expect(toAeatNif(' es-b2243.5705 ')).toBe('B22435705')
+  })
+
+  it('leaves a bare NIF, NIE or CIF unchanged', () => {
+    expect(toAeatNif('B22435705')).toBe('B22435705')
+    expect(toAeatNif('12345678Z')).toBe('12345678Z')
+    expect(toAeatNif('X1234567L')).toBe('X1234567L')
+  })
+
+  it('does not strip a leading ES that is part of a shorter id', () => {
+    expect(toAeatNif('ES1234567')).toBe('ES1234567')
+  })
+
+  it('passes a non-Spanish id and a missing one through', () => {
+    expect(toAeatNif('FI12345671')).toBe('FI12345671')
+    expect(toAeatNif(null)).toBe('')
   })
 })
 
