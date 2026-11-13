@@ -176,7 +176,9 @@ export function parseSubmissionReply(xml: string): SubmissionReply {
     const line = lineNodes.item(i)
     if (!line) continue
 
-    const idFactura = line.getElementsByTagNameNS(NS_SUMINISTRO_INFORMACION_RESP, 'IDFactura').item(0)
+    // IDFactura itself is in the RESPUESTA namespace; only its children are
+    // SuministroInformacion. Observed on preproducción, 2026-11-13.
+    const idFactura = line.getElementsByTagNameNS(NS_RESPUESTA, 'IDFactura').item(0)
     if (!idFactura) {
       throw new MalformedReplyError(`RespuestaLinea ${i} has no IDFactura to identify it`)
     }

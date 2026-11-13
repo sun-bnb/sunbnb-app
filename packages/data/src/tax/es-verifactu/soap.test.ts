@@ -22,12 +22,12 @@ function reply(body: string): string {
 function line(num: string, estado: string, extra = ''): string {
   return (
     '<sfR:RespuestaLinea>' +
-    '<sf:IDFactura>' +
+    '<sfR:IDFactura>' +
     '<sf:IDEmisorFactura>B22435705</sf:IDEmisorFactura>' +
     `<sf:NumSerieFactura>${num}</sf:NumSerieFactura>` +
     '<sf:FechaExpedicionFactura>10-07-2026</sf:FechaExpedicionFactura>' +
-    '</sf:IDFactura>' +
-    '<sf:Operacion>Alta</sf:Operacion>' +
+    '</sfR:IDFactura>' +
+    '<sfR:Operacion><sf:TipoOperacion>Alta</sf:TipoOperacion></sfR:Operacion>' +
     `<sfR:EstadoRegistro>${estado}</sfR:EstadoRegistro>` +
     extra +
     '</sfR:RespuestaLinea>'
@@ -51,6 +51,36 @@ describe('wrapSoap', () => {
 })
 
 describe('parseSubmissionReply', () => {
+  it('reads a real preproducción reply (duplicate of an accepted record)', () => {
+    // Verbatim shape from prewww1, 2026-11-13. The first parser looked for
+    // IDFactura in the SuministroInformacion namespace and threw on every line.
+    const real =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      `<env:Envelope xmlns:env="${SOAP_ENV_NS}"><env:Header></env:Header><env:Body Id="Body">` +
+      `<tikR:RespuestaRegFactuSistemaFacturacion xmlns:tikR="${NS_RESPUESTA}" xmlns:tik="${NS_SUMINISTRO_INFORMACION_RESP}">` +
+      '<tikR:Cabecera><tik:ObligadoEmision><tik:NombreRazon>Sunbnb España SL</tik:NombreRazon><tik:NIF>B22435705</tik:NIF></tik:ObligadoEmision></tikR:Cabecera>' +
+      '<tikR:TiempoEsperaEnvio>60</tikR:TiempoEsperaEnvio><tikR:EstadoEnvio>Incorrecto</tikR:EstadoEnvio>' +
+      '<tikR:RespuestaLinea><tikR:IDFactura><tik:IDEmisorFactura>B22435705</tik:IDEmisorFactura>' +
+      '<tik:NumSerieFactura>PLATFORM-F-2026-00001</tik:NumSerieFactura><tik:FechaExpedicionFactura>04-10-2026</tik:FechaExpedicionFactura></tikR:IDFactura>' +
+      '<tikR:Operacion><tik:TipoOperacion>Alta</tik:TipoOperacion></tikR:Operacion>' +
+      '<tikR:EstadoRegistro>Incorrecto</tikR:EstadoRegistro><tikR:CodigoErrorRegistro>3000</tikR:CodigoErrorRegistro>' +
+      '<tikR:DescripcionErrorRegistro>Registro de facturación duplicado.</tikR:DescripcionErrorRegistro>' +
+      '<tikR:RegistroDuplicado><tik:IdPeticionRegistroDuplicado>20261113134712659190</tik:IdPeticionRegistroDuplicado>' +
+      '<tik:EstadoRegistroDuplicado>Correcta</tik:EstadoRegistroDuplicado></tikR:RegistroDuplicado>' +
+      '</tikR:RespuestaLinea></tikR:RespuestaRegFactuSistemaFacturacion></env:Body></env:Envelope>'
+    const r = parseSubmissionReply(real)
+    expect(r.estadoEnvio).toBe('Incorrecto')
+    expect(r.lines).toHaveLength(1)
+    expect(r.lines[0]).toMatchObject({
+      issuerNif: 'B22435705',
+      numSerieFactura: 'PLATFORM-F-2026-00001',
+      fechaExpedicion: '04-10-2026',
+      codigoError: 3000,
+      duplicado: true,
+    })
+    expect(isAccepted(r.lines[0]!)).toBe(true)
+  })
+
   it('reads the envelope verdict, the CSV and the wait time', () => {
     const r = parseSubmissionReply(
       reply(
