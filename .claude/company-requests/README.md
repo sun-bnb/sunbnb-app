@@ -4,8 +4,11 @@ Product changes asked for by Sunbnb's company side (`~/projects/sunbnb/sunbnb-co
 compliance wording, operator feedback). Each request is one file, `NNN-slug.md`, written as a self-contained
 prompt: why, current behaviour with file paths, the change, acceptance criteria, out of scope, report back.
 
-Who writes here: only Claude in a founder session of the company repo, after the founder approved the request.
-The company's agents never write to this repo.
+Who writes here: the company's **engineer** agent (Principal Software Engineer), and Claude in a founder session.
+The engineer works in its own clone (`../sunbnb-app-engineer`, remote `app` = this checkout) on `co/CR-NNN-slug`
+branches, only on requests the founder approved. It commits; push, promote and deploy each need a founder `release`
+approval and are run from this checkout by a founder session (`.claude/rules/deploys.md` holds). No other company
+agent writes to this repo.
 
 ## Frontmatter
 ```
