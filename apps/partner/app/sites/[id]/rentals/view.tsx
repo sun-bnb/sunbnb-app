@@ -479,18 +479,21 @@ export default function RentalsView() {
 
       {/* Delete confirmation */}
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}>
-        <DialogTitle>Delete rental item?</DialogTitle>
+        <DialogTitle>{t('deleteConfirmTitle')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
+            {t.rich('deleteConfirmBody', {
+              name: deleteTarget?.name ?? '',
+              b: (chunks) => <strong>{chunks}</strong>,
+            })}
             {(deleteTarget?._count?.bookings ?? 0) > 0 && (
-              <> This item has {deleteTarget?._count?.bookings} booking(s) which will also be removed.</>
+              <> {t('deleteConfirmBookings', { count: deleteTarget?._count?.bookings ?? 0 })}</>
             )}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteTarget(null)} disabled={deleting} sx={{ textTransform: 'none' }}>
-            Cancel
+            {t('cancel')}
           </Button>
           <Button
             color="error"
@@ -499,7 +502,7 @@ export default function RentalsView() {
             onClick={handleDelete}
             sx={{ textTransform: 'none' }}
           >
-            {deleting ? <CircularProgress size={16} color="inherit" /> : 'Delete'}
+            {deleting ? <CircularProgress size={16} color="inherit" /> : t('delete')}
           </Button>
         </DialogActions>
       </Dialog>
