@@ -85,6 +85,17 @@ export default function BeachStage({
     let wasActive = true
     const update = () => {
       raf = 0
+      // Hold the story while a text field on the stage has focus. On a phone,
+      // focusing the hero search makes iOS scroll the input above the keyboard
+      // (~200-350px), which this handler would read as story progress: the hero
+      // card faded half-transparent, and past its window the beat flipped,
+      // `visibility: hidden` hid the panel, and the focused input lost focus
+      // (keyboard closes, page jumps back). The stage is sticky, so holding
+      // `--p` keeps the panel in place; `focusout` below resumes the story.
+      const focused = document.activeElement
+      if (focused && st.contains(focused) && focused.matches('input, textarea, select, [contenteditable="true"]')) {
+        return
+      }
       const rect = el.getBoundingClientRect()
       const travel = Math.max(1, rect.height - window.innerHeight)
       const p = Math.min(1, Math.max(0, -rect.top / travel))
@@ -115,9 +126,12 @@ export default function BeachStage({
     update()
     window.addEventListener('scroll', onScroll, { passive: true })
     window.addEventListener('resize', onScroll)
+    // Catch up on the scroll that happened while a field held the story.
+    st.addEventListener('focusout', onScroll)
     return () => {
       window.removeEventListener('scroll', onScroll)
       window.removeEventListener('resize', onScroll)
+      st.removeEventListener('focusout', onScroll)
       if (raf) cancelAnimationFrame(raf)
     }
   }, [beats])

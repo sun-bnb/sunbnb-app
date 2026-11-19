@@ -144,6 +144,8 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
         .lp-stage[data-beat="stage2"] .lp-panel[data-beat="stage2"],
         .lp-stage[data-beat="stage3"] .lp-panel[data-beat="stage3"],
         .lp-stage[data-beat="close"]  .lp-panel[data-beat="close"] { visibility: visible; }
+        /* a panel holding focus never fades or hides: hiding it would drop the focus (and the phone keyboard) */
+        .lp-panel:focus-within { visibility: visible; opacity: 1; transform: none; }
 
         .lp-glass {
           background: rgba(255, 245, 225, 0.82);
