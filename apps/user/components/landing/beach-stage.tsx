@@ -83,6 +83,11 @@ export default function BeachStage({
     if (!el || !st) return
     let raf = 0
     let wasActive = true
+    /** The focused text field on the stage, if any: while there is one, the story holds. */
+    const heldField = () => {
+      const f = document.activeElement
+      return f && st.contains(f) && f.matches('input, textarea, select, [contenteditable="true"]') ? f : null
+    }
     const update = () => {
       raf = 0
       // Hold the story while a text field on the stage has focus. On a phone,
@@ -92,10 +97,10 @@ export default function BeachStage({
       // `visibility: hidden` hid the panel, and the focused input lost focus
       // (keyboard closes, page jumps back). The stage is sticky, so holding
       // `--p` keeps the panel in place; `focusout` below resumes the story.
-      const focused = document.activeElement
-      if (focused && st.contains(focused) && focused.matches('input, textarea, select, [contenteditable="true"]')) {
-        return
-      }
+      // The hold covers only that browser-made scroll: a scroll the visitor makes
+      // ends it (see `releaseHold`), or the page would look frozen for as long as
+      // the field keeps focus - which on a phone outlasts the keyboard.
+      if (heldField()) return
       const rect = el.getBoundingClientRect()
       const travel = Math.max(1, rect.height - window.innerHeight)
       const p = Math.min(1, Math.max(0, -rect.top / travel))
@@ -123,14 +128,35 @@ export default function BeachStage({
     const onScroll = () => {
       if (!raf) raf = requestAnimationFrame(update)
     }
+    // A swipe (beyond tap jitter, so tapping a suggestion still works) or a wheel
+    // is the visitor scrolling: drop the field's focus, which ends the hold and
+    // closes the keyboard, the usual mobile "scroll dismisses the keyboard".
+    let touchY: number | null = null
+    const onTouchStart = (e: TouchEvent) => {
+      touchY = e.touches[0]?.clientY ?? null
+    }
+    const releaseHold = () => {
+      const field = heldField()
+      if (field instanceof HTMLElement) field.blur()
+    }
+    const onTouchMove = (e: TouchEvent) => {
+      const y = e.touches[0]?.clientY
+      if (touchY !== null && y !== undefined && Math.abs(y - touchY) > 10) releaseHold()
+    }
     update()
     window.addEventListener('scroll', onScroll, { passive: true })
     window.addEventListener('resize', onScroll)
+    window.addEventListener('touchstart', onTouchStart, { passive: true })
+    window.addEventListener('touchmove', onTouchMove, { passive: true })
+    window.addEventListener('wheel', releaseHold, { passive: true })
     // Catch up on the scroll that happened while a field held the story.
     st.addEventListener('focusout', onScroll)
     return () => {
       window.removeEventListener('scroll', onScroll)
       window.removeEventListener('resize', onScroll)
+      window.removeEventListener('touchstart', onTouchStart)
+      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('wheel', releaseHold)
       st.removeEventListener('focusout', onScroll)
       if (raf) cancelAnimationFrame(raf)
     }
