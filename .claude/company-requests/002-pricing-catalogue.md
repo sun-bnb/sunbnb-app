@@ -1,12 +1,12 @@
 ---
 id: CR-002
 title: Replace the Starter / Pro / Business plans with Gratis, Temporada and Grupo
-status: in-progress
+status: done
 priority: 2
 company_ref: A-22 (approved prompt), A-23 / A-28 (build approvals), T-130, F-9 (pricing decision)
 created: 2026-11-19
 track: .claude/tracks/034-pricing-catalogue.md
-outcome: In progress. Run 1 filed the CR and answered the open questions. Run 2 committed the expand migration and the commission-cap ledger. Run 3 (T-146) committed the enum @map, the Gratis/Temporada/Grupo catalogue, plan features, the seed and the data-move migration; every workspace typechecks. Run 4 (T-147) wired the EUR 199 cap into the Mollie, Stripe and Viva charge paths and the PLATFORM invoices (collected = invoiced, pinned by payment.commission-cap-parity) and set the card-present rule (default (c)). Run 5 follows track 034.
+outcome: Done on co/CR-002-pricing-catalogue (runs 1-5, b9dad77e..HEAD, committed only). Gratis / Temporada / Grupo replace Starter / Pro / Business; the EUR 199 monthly cap is decided once at charge time and invoiced as collected; plan gating is enforced server-side on every guest charge path (incl. tabs and table deposits) and in partner settings; hamaca limits (100 / 300 / custom) block adding, never existing sunbeds; cards and fee breakdown in es/en/fi with no guest fee. Open questions for the founder are listed under Run 5.
 ---
 
 # CR-002: Gratis / Temporada / Grupo pricing catalogue
@@ -192,6 +192,60 @@ right expression for a site. But the gate has to be **plan-derived and server-en
   is written. Crossing the cap (EUR 198.50 already used) takes 0.50. The next month restarts at 2. The cap is per
   site. Rentals share the site's cap. A negotiated account fee of 5% at the cap takes 5. F&B takes 0 on
   Gratis/Temporada/Grupo. The site → account → plan cascade still holds.
+
+## Run 5 (T-148, 2026-11-19): gating, limits, copy. CR done
+
+- **Server-side plan gate** `@repo/data/plan-gate`. It resolves the partner from the payable's site, or from
+  `Restaurant.partnerAccountId` for tabs and table deposits, and reads the effective features
+  (`CustomSubscription.featureOverrides` win). It is wired into:
+  - `createOnlineCheckout` (Stripe, Viva), before `resolveCheckoutIntent` because resolve reserves cap headroom;
+    the route answers 403 `plan_gated`;
+  - the five Mollie create routes: reservation, rental, order, tab and table deposit;
+  - `createOrder` and `placeTabOrder` (Gratis has no F&B ordering).
+
+  Pay on site, staff terminal sales and demo payments are not gated. C3 is closed.
+- **Hamaca limit** (`checkHamacaLimit`). One `InventoryItem` is one hamaca, and a parasol (`SunbedGroup`) never
+  counts. The limit is checked in `createInventoryItem`, `syncChairsWithLayout` (create counts the generated rows;
+  rearrange counts only the net growth), `createPoolSeat` and `addSeatToGroup`. An over-limit venue keeps
+  everything and can still move, rotate and shrink.
+- **Partner settings.** Switching a site to `paid`, setting online rental or order payment, and enabling app sales
+  need `ONLINE_PAYMENTS` / `FOOD_AND_BEVERAGE`, checked against the **site owner's** plan (so a sudo admin acting
+  on the site sees the partner's plan). A Gratis partner's new site is created `unpaid`. `unpaid` is never gated.
+- **Copy.** The plan cards (landing and in-app) read `PRICING_TIERS`. Temporada shows the 2% rule with the cap and
+  0% F&B. Grupo shows "Pide presupuesto" / "Request a quote" / "Pyydä tarjous" (a mailto to partners@sunbnb.app)
+  with no price and no checkout. `api/subscription/checkout` refuses every tier. `plan-fee-notes.tsx` sits under
+  both fee breakdowns: commission (with the cap), 0% food and drink, card processing at provider cost on its own
+  line, and "guests never pay a fee". The upgrade hint is gone. The guard test keys on GRATIS|TEMPORADA|GRUPO, and
+  the new `app/test/i18n-parity.test.ts` checks en/es/fi.
+- **Evidence:**
+  - `packages/data`: `plan-gate.test.ts`, `plan-gate.integration.test.ts` (12 tests) and `checkout.test.ts`
+    (the plan-gate block).
+  - `apps/user`: the tab and table-deposit route tests, and `createOrder`.
+  - `apps/partner`: `inventory-actions.test.ts`, `inventory/actions.test.ts`, `site-actions.test.ts`,
+    `create/actions.test.ts`, `products/actions.test.ts` and `rentals/actions.test.ts` (plan blocks).
+  - Suites: data unit 1242/1243, data integration 735/740 (the failures are the AEAT XSD xmllint checks, which
+    cannot fetch the xmldsig import in the sandbox), partner unit 3372/3372, partner integration 310/310,
+    user unit 971 passed (1 skipped).
+
+**Remaining open questions (founder):**
+1. **Upgrade path.** Checkout is retired, so nothing in the app moves a partner from Gratis to Temporada. The
+   Temporada card links to `/account/payments`. Who sets the plan: an admin, or should connecting a provider
+   upgrade automatically?
+2. **Gratis restaurants with a deposit policy.** Card deposits are refused for Gratis, but the partner UI still lets
+   a Gratis restaurant set `noShowPolicy = deposit`, which would leave guests unable to finish a deposit booking.
+   Block the setting on Gratis, or allow deposits?
+3. **Refunds.** A refund that returns the application fee does not yet call `reverseCappedCommission`. This is
+   conservative (the venue pays less, never more).
+4. **M-68 card-present.** A Viva venue at its monthly cap cannot take Viva card payments, because Viva refuses a
+   zero ISV fee (run 4).
+5. **Live Stripe subscriptions** still need cancel-at-period-end in Stripe (outside the app).
+6. **Old names outside apps/partner:**
+   - `apps/marketing` `messages/{en,es,fi}.json` (FAQ `costA` and the plan lines), `lib/agent/knowledge.ts` and
+     `eval/scenarios.ts` still say Starter, Pro and Business (marketing is out of scope).
+   - The `apps/user` key `serviceFee` "Service fee" should be checked for guest visibility.
+7. `checkNewSiteHamacas` has no caller yet, because there is no copy-site or import path in `apps/partner`. The
+   hamaca check runs just before the write, not inside its transaction, so two concurrent adds can overshoot by
+   one batch.
 
 ## Build plan (later runs)
 - Run 2: catalogue + `LEGACY_TIER_MAP`, migration A (expand), seed, `CommissionCapUsage` + stored `commissionAmount`,

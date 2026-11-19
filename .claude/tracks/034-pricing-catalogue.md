@@ -1,7 +1,7 @@
 ---
 id: 034-pricing-catalogue
 title: Gratis / Temporada / Grupo pricing catalogue replaces Starter / Pro / Business (CR-002)
-status: active
+status: done
 created: 2026-11-19
 updated: 2026-11-19
 worktree: null
@@ -17,18 +17,11 @@ offer and its admin grant are OUT (M-65 / F-19). Branch `co/CR-002-pricing-catal
 
 ## Resume here
 
-- **Done in run 4 (T-147):** the cap is wired through `cappedCommission('reserve'|'take')` (`payment.ts`). It
-  covers Mollie (reservation, rental, the user-app rental route), `checkout.ts` (Stripe, Viva online), the Viva
-  terminal sale and both `processConfirmed*` invoice paths. Tap to Pay takes no commission (default (c), M-68
-  unanswered). The cleanup cron releases abandoned entries. Evidence: `payment.commission-cap-parity.integration.test.ts`.
-  The partner suite is green after the run-3 assertion fixes.
-- **Next action (run 5):** wire `reverseCappedCommission` into refunds that return the application fee
-  (`refund.ts`, Stripe `refund_application_fee`, Mollie route reversal). Then the hamaca limit (inventory create,
-  import, layout, copy site), plan gating as a server check on every charge path (C3 in the CR), cards, the site
-  create and site general fee breakdown, en/es/fi copy, the guard test, fixtures, `/review`.
-- **Open (founder):** M-68 card-present. Under default (c), a Viva venue at its monthly cap cannot take Viva card
-  payments (Viva refuses a zero ISV fee) until Viva confirms zero-ISV. See the CR's run-4 section.
-- The live Stripe subscriptions still need cancel-at-period-end in Stripe (founder, outside the app).
+- **CR-002 done in run 5 (T-148).** Gating, hamaca limits, cards and copy are committed on
+  `co/CR-002-pricing-catalogue`. The founder merges and releases.
+- Follow-ups need a new CR or founder decision; see the CR's "Remaining open questions": the upgrade path from
+  Gratis to Temporada, the deposit policy on Gratis restaurants, wiring the refund to
+  `reverseCappedCommission`, M-68 Viva at the cap, the marketing copy.
 
 ## Roadmap
 
@@ -40,9 +33,14 @@ offer and its admin grant are OUT (M-65 / F-19). Branch `co/CR-002-pricing-catal
   rollover; per site; concurrency; collected = invoiced.
 - ✅ Run 3 (2026-11-19, T-146): enum `@map`, catalogue, subscription, seed, data-move migration, consumers.
 - ✅ Run 4 (2026-11-19, T-147): cap wired into Mollie, Stripe, Viva and the invoices; Tap to Pay 0 commission.
-- ⏳ Run 5: limits, gating, copy, cards, guard test, review, CR closed.
+- ✅ Run 5 (2026-11-19, T-148): plan gate on every charge path, hamaca limits, settings gates, cards and copy, CR done.
 
 ## Log
+
+- 2026-11-19 run 5: a partner with no subscription resolves to Gratis, so every pre-CR-002 partner integration
+  test that saves a paid site or a 200-seat parcel broke. `createTestPartnerAccount` (apps/partner fixtures) now
+  grants an entitling CustomSubscription; `{ planGated: true }` gives a bare Gratis partner. `Site.type` is
+  nullable, and null counts as "not paid", so saving `paid` on a fixture site is a gated transition.
 
 - 2026-11-19 run 4: the parity test calls the charge paths for one reservation in sequence (Viva intent, Stripe
   intent, Mollie). Every call after the first reuses the same `reservation:<id>` entry, which shows the idempotency
