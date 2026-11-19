@@ -549,15 +549,13 @@
     "integratedPaymentsDesc": "Los clientes pagan al reservar. El pago se recoge y liquida a través de la plataforma.",
     "offPlatformBilling": "Facturación externa",
     "offPlatformBillingDesc": "Sin cobro en la plataforma. Ideal cuando la facturación se gestiona externamente, p. ej., huéspedes de hotel.",
-    "proOrBusinessRequired": "Se requiere plan Pro o Business",
     "basePrice": "Precio base (€)",
     "basePriceHelper": "El precio que pagarán tus clientes",
     "taxRate": "Tipo impositivo (%)",
     "taxRateHelper": "Aplicado a todas las ventas",
     "customerPays": "El cliente paga",
-    "serviceFee": "Cargo de servicio",
+    "serviceFee": "Comisión de Sunbnb",
     "customRate": "tarifa especial",
-    "upgradeTier": "Actualiza a {tier} para una tarifa de servicio del {fee}",
     "youReceive": "Recibes",
     "inclVat": "incl. IVA {rate}%",
     "noServiceFee": "No se ha configurado ningún cargo de servicio para sunbed-rental",
@@ -602,7 +600,8 @@
     "deletePermanently": "Eliminar permanentemente",
     "deleting": "Eliminando…",
     "changePaymentProvider": "Cambiar en Cuenta → Pagos",
-    "tapToPayNote": "Los pagos con tarjeta en la tumbona usan Tap to Pay en la app Sunbnb Floor."
+    "tapToPayNote": "Los pagos con tarjeta en la tumbona usan Tap to Pay en la app Sunbnb Floor.",
+    "notInPlan": "No incluido en tu plan"
   },
   "SiteContent": {
     "coverPhoto": "Foto de portada",
@@ -1173,7 +1172,8 @@
     "bookings": "{count, plural, one {# reserva} other {# reservas}}",
     "noItemsHint": "Añade tablas de surf, kayaks, sombrillas y más",
     "deleteTitle": "¿Eliminar artículo de alquiler?",
-    "deleteWithBookings": "Este artículo tiene {count} reserva(s) que también se eliminarán."
+    "deleteWithBookings": "Este artículo tiene {count} reserva(s) que también se eliminarán.",
+    "category": "Categoría"
   },
   "Calendar": {
     "today": "Hoy",
@@ -1687,11 +1687,11 @@
       },
       "listed": {
         "title": "El cliente paga tu precio",
-        "body": "No se añade nada para el cliente. La comisión se descuenta de la venta y Sunbnb te la factura por separado."
+        "body": "Al cliente nunca se le añade nada encima. La comisión se descuenta de la venta y Sunbnb te la factura por separado."
       },
       "commission": {
         "title": "Comisión según plan",
-        "body": "{starter} %, {pro} % o {business} % según tu plan, sobre reservas de hamacas, comida y bebida, y alquileres vendidos a través de Sunbnb."
+        "body": "{gratis}% en Gratis. {temporada}% en Temporada, con un tope de {cap} € por negocio al mes. {fnb}% en comida y bebida. El procesamiento de tarjeta se factura al coste del proveedor de pago, en una línea aparte."
       },
       "cash": {
         "title": "Sin comisión en efectivo",
@@ -1700,21 +1700,23 @@
     },
     "plans": {
       "title": "Planes",
-      "subtitle": "La comisión es lo que pagas por cada venta. Un plan mensual la reduce y añade negocios.",
-      "free": "Gratis",
-      "freeNote": "sin cuota mensual",
-      "perMonth": "/ mes",
+      "subtitle": "Solo pagas comisión por lo que los clientes pagan online. Ningún plan tiene cuota mensual.",
       "mostChosen": "El más elegido",
-      "commissionLabel": "de comisión por cada compra a través de Sunbnb",
-      "oneVenue": "1 negocio",
-      "starterAll": "Reservas de hamacas, pedidos y alquileres",
-      "upToVenues": "Hasta {count} negocios",
-      "everythingIn": "Todo lo de {plan}",
-      "offPlatform": "Cobro fuera de la plataforma",
-      "branded": "Página de reservas con tu marca",
-      "supportCommunity": "Soporte de la comunidad",
-      "supportPriority": "Soporte prioritario",
-      "supportDedicated": "Soporte dedicado",
+      "commissionLabel": "de comisión en reservas de hamacas y alquileres pagados online",
+      "noMonthlyFee": "Sin cuota mensual",
+      "sites": "{count, plural, one {# negocio} other {Hasta # negocios}}",
+      "hamacas": "Hasta {count} hamacas por negocio",
+      "perAgreement": "Negocios y hamacas según acuerdo",
+      "onlinePayments": "Pago online con tarjeta y pedidos de comida y bebida",
+      "cap": "Comisión con tope de {cap} € por negocio al mes",
+      "foodAndDrink": "{pct}% de comisión en comida y bebida",
+      "processing": "Procesamiento de tarjeta al coste del proveedor, en línea aparte",
+      "payOnSite": "Los clientes pagan solo en el sitio: sin pago online con tarjeta ni pedidos de comida y bebida",
+      "includedAll": "Reserva de hamacas, mapa satelital de hamacas, reserva por QR sin cuenta de cliente, enlace para el personal y alquiler de equipos",
+      "quote": "Pide presupuesto",
+      "quoteHeadline": "A medida",
+      "quoteNote": "Comisión y límites acordados contigo",
+      "quoteSubject": "Solicitud de presupuesto del plan Grupo",
       "cta": "Empezar"
     },
     "start": {
@@ -2180,5 +2182,35 @@
       "waitReply": "Espera a que el asistente termine de responder.",
       "canned": "He alineado la foto — por favor, propón la distribución."
     }
+  },
+  "PlanFees": {
+    "commission": "Comisión de Sunbnb: {pct}% en reservas de hamacas y alquileres pagados online",
+    "commissionCapped": "Comisión de Sunbnb: {pct}% en reservas de hamacas y alquileres pagados online, con un tope de {cap} € por negocio al mes",
+    "commissionAgreed": "Comisión de Sunbnb: según lo acordado para tu plan",
+    "foodAndDrink": "Comida y bebida: {pct}% de comisión",
+    "processing": "Procesamiento de tarjeta: se factura al coste del proveedor de pago, en una línea aparte y separada de la comisión de Sunbnb",
+    "noGuestFee": "Los clientes pagan tu precio de lista. No se les añade nada.",
+    "gratisUpgrade": "En tu plan los clientes pagan solo en el sitio. Pasa a {plan} para cobrar con tarjeta online y recibir pedidos de comida y bebida.",
+    "seePlans": "Ver planes",
+    "notInPlan": "No incluido en tu plan",
+    "commissionTitle": "Comisión de Sunbnb"
+  },
+  "Subscription": {
+    "title": "Suscripción",
+    "subtitle": "Gestiona tu plan y el límite de negocios",
+    "currentPlan": "Plan actual",
+    "sitesUsed": "Negocios en uso",
+    "custom": "(a medida)",
+    "pastDue": "Tu pago está vencido. Actualiza tus datos de facturación.",
+    "current": "Actual",
+    "currentButton": "Plan actual",
+    "freePlan": "Plan gratuito",
+    "badgeGratis": "Gratis",
+    "badgeGrupo": "A medida",
+    "enableOnline": "Conectar un proveedor de pago",
+    "manageBilling": "Gestionar facturación",
+    "opening": "Abriendo…",
+    "infoTitle": "Cómo se facturan los planes",
+    "infoBody": "Ningún plan tiene cuota mensual. El procesamiento de tarjeta se factura al coste del proveedor en una línea aparte, separada de la comisión de Sunbnb. Los clientes nunca pagan ningún cargo."
   }
 }

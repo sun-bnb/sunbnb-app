@@ -42,7 +42,7 @@ Saved automatically.
 ## Brand {#tab-brand}
 
 Customise the public booking page: brand name, page address (slug), tagline and colours (primary, accent,
-background, foreground). Auto-saves. Plan gate: customising needs the Business plan, except sites with a
+background, foreground). Auto-saves. Plan gate: customising needs the Grupo plan, except sites with a
 platform-delivered bespoke page, where only the address (slug) is editable. Changing the slug changes
 the public URL.
 

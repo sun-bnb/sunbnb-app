@@ -7,6 +7,7 @@ import sunbnbLogo from '@/app/sunbnb-logo.svg'
 import { gaEvent } from '@repo/ui/google-analytics'
 import { marketingCtaUrl } from '@/lib/marketing-cta'
 import { PRICING_TIERS, PRICING_TIER_ORDER, FEATURED_TIER } from '@repo/data/pricing-tiers'
+import { planCardLines } from '@/lib/plan-card-lines'
 
 interface BusinessEntity {
   companyName: string
@@ -122,31 +123,17 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
     body: t(`more.${k}.body`),
   }))
 
-  // Card copy per tier. The numbers — price, venue cap, commission — come from
-  // PRICING_TIERS, the same catalog the DB is seeded from, so the page can't
+  // Card copy per tier. The numbers (venue cap, hamacas, commission, cap) come
+  // from PRICING_TIERS, the same catalog the DB is seeded from, so the page can't
   // advertise a rate the cascade doesn't charge. Only the wording is translated.
-  // Interim CR-002 card lines on existing keys; the Gratis / Temporada / Grupo
-  // copy (hamacas, cap, F&B 0%, quote request) lands in track 034 run 5.
-  const planFeatureLines = {
-    GRATIS: [t('plans.oneVenue'), t('plans.offPlatform'), t('plans.supportCommunity')],
-    TEMPORADA: [
-      t('plans.upToVenues', { count: PRICING_TIERS.TEMPORADA.maxSites }),
-      t('plans.everythingIn', { plan: PRICING_TIERS.GRATIS.name }),
-      t('plans.starterAll'),
-      t('plans.supportPriority'),
-    ],
-    GRUPO: [
-      t('plans.everythingIn', { plan: PRICING_TIERS.TEMPORADA.name }),
-      t('plans.branded'),
-      t('plans.supportDedicated'),
-    ],
-  } as const
+  const tp = useTranslations('Landing.plans')
 
-  // Interpolated into money.*.body; keys kept until the run-5 copy rewrite.
+  // Interpolated into money.commission.body.
   const commissionRates = {
-    starter: PRICING_TIERS.GRATIS.commissionPercent['sunbed-rental'],
-    pro: PRICING_TIERS.TEMPORADA.commissionPercent['sunbed-rental'],
-    business: PRICING_TIERS.GRUPO.commissionPercent['sunbed-rental'],
+    gratis: PRICING_TIERS.GRATIS.commissionPercent['sunbed-rental'],
+    temporada: PRICING_TIERS.TEMPORADA.commissionPercent['sunbed-rental'],
+    cap: PRICING_TIERS.TEMPORADA.monthlyCommissionCapPerSite ?? 0,
+    fnb: PRICING_TIERS.TEMPORADA.commissionPercent['food-and-beverage'],
   }
 
   const plans = PRICING_TIER_ORDER.map((tier) => {
@@ -154,11 +141,12 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
     return {
       tier,
       name: spec.name,
-      price: spec.monthlyPrice === 0 ? t('plans.free') : `€${spec.monthlyPrice}`,
-      note: spec.monthlyPrice === 0 ? t('plans.freeNote') : t('plans.perMonth'),
-      commission: `${spec.commissionPercent['sunbed-rental']}%`,
+      quoteOnly: spec.quoteOnly,
+      headline: spec.quoteOnly ? t('plans.quote') : `${spec.commissionPercent['sunbed-rental']}%`,
+      headlineNote: spec.quoteOnly ? t('plans.quoteNote') : t('plans.commissionLabel'),
+      price: spec.quoteOnly ? null : t('plans.noMonthlyFee'),
       featured: tier === FEATURED_TIER,
-      features: planFeatureLines[tier],
+      features: planCardLines(tier, tp),
     }
   })
 
@@ -267,13 +255,12 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
               {/* Commission is the headline term of the deal, not a footnote —
                   it is what a partner actually pays on every sale. */}
               <p className="mt-5">
-                <span className="text-4xl font-bold tracking-tight">{p.commission}</span>
+                <span className={`${p.quoteOnly ? 'text-2xl' : 'text-4xl'} font-bold tracking-tight`}>{p.headline}</span>
               </p>
-              <p className="text-sm text-gray-500">{t('plans.commissionLabel')}</p>
-              <p className="mt-4 border-t border-gray-100 pt-4">
-                <span className="text-xl font-semibold">{p.price}</span>
-                <span className="ml-1 text-sm text-gray-500">{p.note}</span>
-              </p>
+              <p className="text-sm text-gray-500">{p.headlineNote}</p>
+              {p.price && (
+                <p className="mt-4 border-t border-gray-100 pt-4 text-sm font-semibold">{p.price}</p>
+              )}
               <ul className="mt-4 flex-1 space-y-2">
                 {p.features.map((f) => (
                   <li key={f} className="flex gap-2 text-sm text-gray-600">
@@ -284,14 +271,24 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
                   </li>
                 ))}
               </ul>
-              <SignInLink
-                cta={`pricing-${p.tier.toLowerCase()}`}
-                className={`mt-6 w-full text-center ${
-                  p.featured ? 'btn-primary' : 'rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-gray-50'
-                }`}
-              >
-                {t('plans.cta')}
-              </SignInLink>
+              {p.quoteOnly ? (
+                <a
+                  href={`mailto:partners@sunbnb.app?subject=${encodeURIComponent(t('plans.quoteSubject'))}`}
+                  onClick={() => trackCta(`pricing-${p.tier.toLowerCase()}`, 'generate_lead')}
+                  className="mt-6 w-full rounded-lg border border-gray-300 px-4 py-2.5 text-center text-sm font-medium transition-colors hover:bg-gray-50"
+                >
+                  {t('plans.quote')}
+                </a>
+              ) : (
+                <SignInLink
+                  cta={`pricing-${p.tier.toLowerCase()}`}
+                  className={`mt-6 w-full text-center ${
+                    p.featured ? 'btn-primary' : 'rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-gray-50'
+                  }`}
+                >
+                  {t('plans.cta')}
+                </SignInLink>
+              )}
             </div>
           ))}
         </div>

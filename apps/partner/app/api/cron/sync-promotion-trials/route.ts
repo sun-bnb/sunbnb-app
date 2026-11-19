@@ -1,6 +1,6 @@
 /**
  * GET /api/cron/sync-promotion-trials — daily (vercel.json). Launch offer (track 027 D9): once a
- * partner's first live paid booking starts the 30-day clock, their Pro/Business plan must cost
+ * partner's first live paid booking starts the 30-day clock, their paid plan must cost
  * nothing until the promotion ends. Stripe lets us set `trial_end` on an existing subscription
  * (even an active one) with no proration, so this aligns every running promotion's subscription
  * with `endsAt`. Idempotent: it compares with Stripe's own trial_end and only ever EXTENDS.

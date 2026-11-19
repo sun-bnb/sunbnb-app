@@ -1,22 +1,19 @@
 /**
  * POST /api/subscription/checkout
  *
- * Creates a Stripe Checkout Session for a subscription plan upgrade.
- * Expects JSON body: { planId: string }
+ * Retired by CR-002: no plan bills a monthly price, so no tier is purchasable
+ * through Stripe Checkout. Temporada is commission-only (nothing recurring),
+ * Grupo is a quote request, Gratis is free. The route stays so a stale client or
+ * a leftover `stripePriceId` can never start a paid subscription: every
+ * authenticated call gets a clear 400. Existing subscribers still manage billing
+ * through /api/subscription/portal.
  *
- * Flow:
- * 1. Authenticate partner
- * 2. Look up the target plan and its stripePriceId
- * 3. Get or create a Stripe Customer for the partner
- * 4. Create a Stripe Checkout Session in subscription mode
- * 5. Return the checkout URL
+ * Expects JSON body: { planId: string }
  */
 
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
-import { getStripeClient } from '@/app/api/_lib/stripe'
-import { getLaunchPromotion } from '@repo/data/promotion-db'
-import { planTrialEnd } from '@repo/data/promotion'
+import { PRICING_TIERS } from '@repo/data/pricing-tiers'
 import { NextRequest } from 'next/server'
 
 export async function POST(request: NextRequest) {
@@ -25,89 +22,24 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
-
   const { planId } = await request.json()
   if (!planId) {
     return Response.json({ error: 'planId is required' }, { status: 400 })
   }
 
-  // Look up the target plan
   const plan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } })
-  if (!plan || !plan.stripePriceId) {
+  if (!plan) {
     return Response.json({ error: 'Plan not available for purchase' }, { status: 400 })
   }
 
-  // CR-002: no plan bills a monthly price; only a plan row with a Stripe price could be bought, and the data move NULLs them. Gratis is never purchasable.
-  if (plan.tier === 'GRATIS') {
-    return Response.json({ error: 'Cannot purchase the free plan' }, { status: 400 })
+  // Derived from the catalogue (every tier is monthlyPrice 0), so a future paid
+  // tier is a deliberate change to PRICING_TIERS plus this route.
+  if (!(PRICING_TIERS[plan.tier].monthlyPrice > 0)) {
+    return Response.json(
+      { error: 'This plan has no monthly subscription: Gratis is free, Temporada is commission-only and Grupo is by quote.' },
+      { status: 400 },
+    )
   }
 
-  const stripe = getStripeClient()
-  const userId = session.user.id!
-
-  // Get existing subscription to check for Stripe customer
-  const existingSub = await prisma.subscription.findUnique({
-    where: { partnerAccountId: userId },
-  })
-
-  let stripeCustomerId = existingSub?.stripeCustomerId
-
-  // Create Stripe Customer if needed
-  if (!stripeCustomerId) {
-    const partner = await prisma.partnerAccount.findUnique({
-      where: { userId },
-    })
-    const customer = await stripe.customers.create({
-      email: partner?.email ?? session.user.email!,
-      name: partner ? `${partner.firstName} ${partner.lastName}` : session.user.name!,
-      metadata: { partnerAccountId: userId },
-    })
-    stripeCustomerId = customer.id
-
-    // Persist the customer ID
-    if (existingSub) {
-      await prisma.subscription.update({
-        where: { partnerAccountId: userId },
-        data: { stripeCustomerId },
-      })
-    }
-  }
-
-  // If the partner already has an active Stripe subscription, use the portal
-  // for plan changes instead of checkout
-  if (existingSub?.stripeSubscriptionId) {
-    const portalSession = await stripe.billingPortal.sessions.create({
-      customer: stripeCustomerId,
-      return_url: `${appUrl}/account/subscription`,
-    })
-    return Response.json({ url: portalSession.url })
-  }
-
-  // Launch offer (track 027 D9): a plan bought during the promotion starts as a Stripe trial that
-  // ends with the promotion (provisionally 30 days before the clock starts; the
-  // sync-promotion-trials cron extends it once the first live paid booking starts the clock).
-  const trialEnd = planTrialEnd(await getLaunchPromotion(userId), new Date())
-
-  // Create a new Stripe Checkout Session
-  const checkoutSession = await stripe.checkout.sessions.create({
-    customer: stripeCustomerId,
-    mode: 'subscription',
-    line_items: [{ price: plan.stripePriceId, quantity: 1 }],
-    success_url: `${appUrl}/account/subscription?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${appUrl}/account/subscription?checkout=canceled`,
-    metadata: {
-      partnerAccountId: userId,
-      planId: plan.id,
-    },
-    subscription_data: {
-      metadata: {
-        partnerAccountId: userId,
-        planId: plan.id,
-      },
-      ...(trialEnd ? { trial_end: Math.floor(trialEnd.getTime() / 1000) } : {}),
-    },
-  })
-
-  return Response.json({ url: checkoutSession.url })
+  return Response.json({ error: 'Plan not available for purchase' }, { status: 400 })
 }
