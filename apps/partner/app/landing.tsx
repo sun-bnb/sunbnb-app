@@ -125,26 +125,28 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
   // Card copy per tier. The numbers — price, venue cap, commission — come from
   // PRICING_TIERS, the same catalog the DB is seeded from, so the page can't
   // advertise a rate the cascade doesn't charge. Only the wording is translated.
+  // Interim CR-002 card lines on existing keys; the Gratis / Temporada / Grupo
+  // copy (hamacas, cap, F&B 0%, quote request) lands in track 034 run 5.
   const planFeatureLines = {
-    STARTER: [t('plans.oneVenue'), t('plans.starterAll'), t('plans.supportCommunity')],
-    PRO: [
-      t('plans.upToVenues', { count: PRICING_TIERS.PRO.maxSites }),
-      t('plans.everythingIn', { plan: PRICING_TIERS.STARTER.name }),
-      t('plans.offPlatform'),
+    GRATIS: [t('plans.oneVenue'), t('plans.offPlatform'), t('plans.supportCommunity')],
+    TEMPORADA: [
+      t('plans.upToVenues', { count: PRICING_TIERS.TEMPORADA.maxSites }),
+      t('plans.everythingIn', { plan: PRICING_TIERS.GRATIS.name }),
+      t('plans.starterAll'),
       t('plans.supportPriority'),
     ],
-    BUSINESS: [
-      t('plans.upToVenues', { count: PRICING_TIERS.BUSINESS.maxSites }),
-      t('plans.everythingIn', { plan: PRICING_TIERS.PRO.name }),
+    GRUPO: [
+      t('plans.everythingIn', { plan: PRICING_TIERS.TEMPORADA.name }),
       t('plans.branded'),
       t('plans.supportDedicated'),
     ],
   } as const
 
+  // Interpolated into money.*.body; keys kept until the run-5 copy rewrite.
   const commissionRates = {
-    starter: PRICING_TIERS.STARTER.commissionPercent,
-    pro: PRICING_TIERS.PRO.commissionPercent,
-    business: PRICING_TIERS.BUSINESS.commissionPercent,
+    starter: PRICING_TIERS.GRATIS.commissionPercent['sunbed-rental'],
+    pro: PRICING_TIERS.TEMPORADA.commissionPercent['sunbed-rental'],
+    business: PRICING_TIERS.GRUPO.commissionPercent['sunbed-rental'],
   }
 
   const plans = PRICING_TIER_ORDER.map((tier) => {
@@ -154,7 +156,7 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
       name: spec.name,
       price: spec.monthlyPrice === 0 ? t('plans.free') : `€${spec.monthlyPrice}`,
       note: spec.monthlyPrice === 0 ? t('plans.freeNote') : t('plans.perMonth'),
-      commission: `${spec.commissionPercent}%`,
+      commission: `${spec.commissionPercent['sunbed-rental']}%`,
       featured: tier === FEATURED_TIER,
       features: planFeatureLines[tier],
     }

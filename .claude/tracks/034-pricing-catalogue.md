@@ -17,19 +17,14 @@ offer and its admin grant are OUT (M-65 / F-19). Branch `co/CR-002-pricing-catal
 
 ## Resume here
 
-- **Next action (run 3):** the enum. Rename the Prisma enum values with `@map` (`GRATIS @map("STARTER")`,
-  `TEMPORADA @map("PRO")`, `GRUPO @map("BUSINESS")`): no DDL, and old deployed clients keep reading the
-  same labels, so the change is single-release and expand-safe on the shared TEST DB. This supersedes the
-  R1/R2/R3 plan in the CR's Q2 answer. Then rewrite `pricing-tiers.ts` (per-service-code commission,
-  `maxHamacasPerSite`, `monthlyCommissionCapPerSite`, `FEATURED_TIER = 'TEMPORADA'`, Grupo `quoteOnly`)
-  and `subscription.ts`: features `ONLINE_PAYMENTS` and `FOOD_AND_BEVERAGE`, Gratis as the default,
-  `OFF_PLATFORM_BILLING` true on every plan, the hamaca limit in `resolveEffectiveSubscription`, and
-  `handleSubscriptionCanceled` keeping the current plan instead of dropping to Gratis. Then update the
-  seed and write a data-move migration: plan rows; fee rows, including F&B at 0%; `STARTER`→`TEMPORADA`
-  when any site has `type='paid' AND app_sales_enabled`; `BUSINESS`→`TEMPORADA`; NULL the plans' Stripe
-  price ids. Then fix every consumer (about 40 files, listed by `grep -rln "STARTER\|BUSINESS\|PRICING_TIER"
-  apps packages`) until all workspaces typecheck.
-- **Then (run 4):** wire `@repo/data/commission-cap` into the charge and invoice paths. Reserve in
+- **Done in run 3 (T-146):** enum `@map`, catalogue, features, seed, data-move migration
+  `20261119150000_pricing_catalogue_data_move`, consumers. Every workspace typechecks (apps/user's
+  14 image-module errors predate this branch: no `next-env.d.ts` in the clone).
+- **Next action (run 4):** partner unit tests were renamed to the new tier literals but NOT run;
+  run `cd apps/partner && npm test` first and fix value assertions (old 6% / OFF_PLATFORM false on
+  Starter, `inspect.test.ts` ladder). The live Stripe subscriptions still need cancel-at-period-end in
+  Stripe (founder, outside the app).
+- **Then (run 4, after the tests):** wire `@repo/data/commission-cap` into the charge and invoice paths. Reserve in
   `reservation-payment.ts`, `rental-payment.ts`, `checkout.ts`, the user app's Mollie
   `create-rental-payment` route and `reservation-machine-apply.ts` (Viva, Tap to Pay). Take in
   `processConfirmedReservation` and `processConfirmedRentalBooking`. Release from `/api/reservations-cleanup`
@@ -49,11 +44,14 @@ offer and its admin grant are OUT (M-65 / F-19). Branch `co/CR-002-pricing-catal
   `CustomSubscription.max_hamacas_per_site`, table `commission_cap_entry`) plus `src/commission-cap.ts`,
   with unit and integration tests: below, at and above the cap; a booking crossing it; refund; month
   rollover; per site; concurrency; collected = invoiced.
-- ⏳ Run 3: enum `@map`, catalogue, subscription, seed, data-move migration, consumers.
+- ✅ Run 3 (2026-11-19, T-146): enum `@map`, catalogue, subscription, seed, data-move migration, consumers.
 - ⏳ Run 4: cap wired into Mollie, Stripe, Viva and the invoices.
 - ⏳ Run 5: limits, gating, copy, cards, guard test, review, CR closed.
 
 ## Log
+
+- 2026-11-19 run 3: seed runs found the DB already right after the data move (0 rows written twice):
+  migration and seed agree. `tsx` CLI fails in the sandbox (IPC pipe EPERM); `node --import <tsx>/dist/loader.mjs` works.
 
 - 2026-11-19 run 2: the ledger decides the capped amount once, at charge creation, under
   `pg_advisory_xact_lock(hashtext('commission-cap:'||site||':'||month))`, and the invoice reads it back.

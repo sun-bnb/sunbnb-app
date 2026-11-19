@@ -35,13 +35,15 @@ export default async function LandingPage({
     checkin: t('Hero.slides.checkin.tag'),
     invoice: t('Hero.slides.invoice.tag'),
   }
-  const starter = PRICING_TIERS.STARTER
+  // TODO(CR-002 run 5): Faq.costA still describes the old ladder; the params now carry
+  // Gratis / Temporada / Grupo sunbed rates until the copy is rewritten.
+  const sunbedRate = (tier: keyof typeof PRICING_TIERS) => PRICING_TIERS[tier].commissionPercent['sunbed-rental']
   const faq = [
     ['noPhone', {}],
     ['hardware', {}],
     ['assistant', {}],
     ['paid', {}],
-    ['cost', { pct: starter.commissionPercent, pro: PRICING_TIERS.PRO.commissionPercent, business: PRICING_TIERS.BUSINESS.commissionPercent }],
+    ['cost', { pct: sunbedRate('GRATIS'), pro: sunbedRate('TEMPORADA'), business: sunbedRate('GRUPO') }],
     ['languages', {}],
   ] as const
 

@@ -101,7 +101,7 @@ describe('inspect tool: scope and safety', () => {
   })
 
   it('every provider reads only the ctx site / account (never anything else)', async () => {
-    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValue({ tier: 'PRO', name: 'Pro', monthlyPrice: 29, maxSites: 3, isCustom: false, features: { OFF_PLATFORM_BILLING: true } } as never)
+    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValue({ tier: 'TEMPORADA', name: 'Pro', monthlyPrice: 29, maxSites: 3, isCustom: false, features: { OFF_PLATFORM_BILLING: true } } as never)
     vi.mocked(getFlagStates).mockResolvedValue({ assistant: { name: 'assistant', enabled: true, source: 'account' }, devices: { name: 'devices', enabled: false, source: 'default' } } as never)
     vi.mocked(prisma.site.count).mockResolvedValue(1 as never)
     vi.mocked(prisma.siteWorkingHours.count).mockResolvedValue(2 as never)
@@ -331,8 +331,8 @@ describe('space', () => {
 
 describe('features', () => {
   const sub = (tier: string, over: Record<string, unknown> = {}) => ({
-    tier, name: tier === 'STARTER' ? 'Starter' : 'Pro', monthlyPrice: tier === 'STARTER' ? 0 : 29, maxSites: tier === 'STARTER' ? 1 : 3, isCustom: false,
-    features: { OFF_PLATFORM_BILLING: tier !== 'STARTER' }, ...over,
+    tier, name: tier === 'GRATIS' ? 'Starter' : 'Pro', monthlyPrice: tier === 'GRATIS' ? 0 : 29, maxSites: tier === 'GRATIS' ? 1 : 3, isCustom: false,
+    features: { OFF_PLATFORM_BILLING: tier !== 'GRATIS' }, ...over,
   })
   beforeEach(() => {
     vi.mocked(prisma.site.count).mockResolvedValue(1 as never)
@@ -341,17 +341,17 @@ describe('features', () => {
   })
 
   it('explains what a Starter plan locks and which plan unlocks it', async () => {
-    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValue(sub('STARTER') as never)
+    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValue(sub('GRATIS') as never)
     const r = await inspect('features')
-    expect(r.plan).toMatchObject({ tier: 'STARTER', maxSites: 1, sitesUsed: 1, canAddSite: false, commissionPercent: 6, subscriptionStatus: 'ACTIVE', currentPeriodEnd: '2026-11-01' })
+    expect(r.plan).toMatchObject({ tier: 'GRATIS', maxSites: 1, sitesUsed: 1, canAddSite: false, commissionPercent: 6, subscriptionStatus: 'ACTIVE', currentPeriodEnd: '2026-11-01' })
     expect(r.entitlements[0]).toMatchObject({ key: 'OFF_PLATFORM_BILLING', enabled: false, unlockedBy: ['Pro', 'Business', 'or an admin override'] })
     expect(r.entitlements[0].whyLocked).toMatch(/Starter/)
-    expect(r.ladder.map((l: any) => l.tier)).toEqual(['STARTER', 'PRO', 'BUSINESS'])
+    expect(r.ladder.map((l: any) => l.tier)).toEqual(['GRATIS', 'TEMPORADA', 'GRUPO'])
     expect(JSON.stringify(r)).not.toMatch(/SECRET/)
   })
 
   it('a Pro plan has it unlocked, with flags (state + source) and site features', async () => {
-    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValue(sub('PRO') as never)
+    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValue(sub('TEMPORADA') as never)
     const r = await inspect('features')
     expect(r.entitlements[0]).toEqual(expect.objectContaining({ enabled: true }))
     expect(r.entitlements[0].whyLocked).toBeUndefined()
@@ -502,7 +502,7 @@ describe('output size caps', () => {
   })
 
   it('every aspect stays within the cap with realistic data', async () => {
-    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValue({ tier: 'PRO', name: 'Pro', monthlyPrice: 29, maxSites: 3, isCustom: false, features: { OFF_PLATFORM_BILLING: true } } as never)
+    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValue({ tier: 'TEMPORADA', name: 'Pro', monthlyPrice: 29, maxSites: 3, isCustom: false, features: { OFF_PLATFORM_BILLING: true } } as never)
     vi.mocked(getFlagStates).mockResolvedValue({} as never)
     vi.mocked(prisma.site.count).mockResolvedValue(1 as never)
     vi.mocked(prisma.siteWorkingHours.count).mockResolvedValue(3 as never)
@@ -529,10 +529,10 @@ function fee(serviceCode: string, percentage: number, over: Record<string, unkno
 }
 
 function feeCtx(o: { siteFees?: any[]; accountFees?: any[]; tier?: string | null; promotions?: any[]; provider?: string; partnerCountry?: string; businessId?: string | null } = {}) {
-  const tier = o.tier === undefined ? 'PRO' : o.tier
+  const tier = o.tier === undefined ? 'TEMPORADA' : o.tier
   const settingsFees = ['sunbed-rental', 'food-and-beverage', 'equipment-rental'].flatMap((code) => [
     fee(code, 6),
-    fee(code, 3, { subscriptionTier: 'PRO' }),
+    fee(code, 3, { subscriptionTier: 'TEMPORADA' }),
   ])
   return {
     site: { id: SITE, vat: 21, rentalVat: 10, price: 10, paymentProvider: o.provider ?? 'mollie', serviceFees: o.siteFees ?? [] },

@@ -80,7 +80,7 @@ function feeCtx(serviceCode: string) {
       vivaMerchantId: 'merchant-1',
       vivaSourceCode: 'src-1',
       vivaVerificationStatus: 'verified',
-      subscription: { plan: { tier: 'STARTER' } },
+      subscription: { plan: { tier: 'GRATIS' } },
     },
     settings: { serviceFees: settingsFees },
   }
@@ -90,7 +90,7 @@ function feeCtx(serviceCode: string) {
 function expectedFee(serviceCode: string, amount: number) {
   const c = feeCtx(serviceCode)
   const fee = chargeableServiceFee(
-    resolveServiceFee(c.site.serviceFees as any, c.partnerAccount.serviceFees as any, c.settings.serviceFees as any, serviceCode, 'STARTER' as any),
+    resolveServiceFee(c.site.serviceFees as any, c.partnerAccount.serviceFees as any, c.settings.serviceFees as any, serviceCode, 'GRATIS' as any),
     c.partnerAccount as any,
     CREATED,
   )
@@ -200,7 +200,7 @@ describe('resolveCheckoutIntent — tab', () => {
   const input: CheckoutInput = { ...base, kind: 'tab', tabId: 't1' }
   beforeEach(() => {
     const c = feeCtx('food-and-beverage')
-    m.loadTabFeeContext.mockResolvedValue({ siteFees: [], partnerAccount: c.partnerAccount, settings: c.settings, tier: 'STARTER' })
+    m.loadTabFeeContext.mockResolvedValue({ siteFees: [], partnerAccount: c.partnerAccount, settings: c.settings, tier: 'GRATIS' })
   })
 
   it('charges payableTotal (menu prices only) with the Mollie fee', async () => {
@@ -366,7 +366,7 @@ describe('createOnlineCheckout', () => {
     expect(m.orderUpdate).toHaveBeenCalledWith({ where: { id: 'o1' }, data: { paymentRef: 'vso_z', status: 'processing' } })
 
     const c = feeCtx('food-and-beverage')
-    m.loadTabFeeContext.mockResolvedValue({ siteFees: [], partnerAccount: c.partnerAccount, settings: c.settings, tier: 'STARTER' })
+    m.loadTabFeeContext.mockResolvedValue({ siteFees: [], partnerAccount: c.partnerAccount, settings: c.settings, tier: 'GRATIS' })
     m.tabFind.mockResolvedValue({ id: 't1', siteId: null, restaurantId: 'r', status: 'pending_payment', paymentRef: null, createdAt: CREATED })
     m.calculateTabTotal.mockResolvedValue({ payableTotal: 10 })
     await createOnlineCheckout({ ...base, kind: 'tab', tabId: 't1' })
@@ -381,7 +381,7 @@ describe('createOnlineCheckout', () => {
   })
   it('tab provider failure releases the claim', async () => {
     const c = feeCtx('food-and-beverage')
-    m.loadTabFeeContext.mockResolvedValue({ siteFees: [], partnerAccount: c.partnerAccount, settings: c.settings, tier: 'STARTER' })
+    m.loadTabFeeContext.mockResolvedValue({ siteFees: [], partnerAccount: c.partnerAccount, settings: c.settings, tier: 'GRATIS' })
     m.tabFind.mockResolvedValue({ id: 't1', siteId: null, restaurantId: 'r', status: 'pending_payment', paymentRef: null, createdAt: CREATED })
     m.calculateTabTotal.mockResolvedValue({ payableTotal: 10 })
     m.createCheckout.mockRejectedValue(new Error('x'))

@@ -29,9 +29,13 @@ export const ASK_THE_TEAM = [
 export function renderFactSheet(): string {
   const plans = PRICING_TIER_ORDER.map((tier) => {
     const p = PRICING_TIERS[tier]
-    const price = p.monthlyPrice === 0 ? 'free' : `€${p.monthlyPrice} per month`
+    if (p.quoteOnly) return `- ${p.name}: no public price; venues, sunbeds and fees are agreed per group (quote on request).`
     const sites = p.maxSites === 1 ? '1 venue' : `up to ${p.maxSites} venues`
-    return `- ${p.name}: ${price}, ${p.commissionPercent}% commission on each purchase made through Sunbnb, ${sites}.`
+    const beds = `up to ${p.maxHamacasPerSite} sunbeds per venue`
+    const fee = !p.onlinePayments
+      ? 'no monthly fee and no commission; guests pay at the venue (no online card payment, no food & drink ordering)'
+      : `no monthly fee; ${p.commissionPercent['sunbed-rental']}% commission on online-paid sunbed and rental bookings, capped at €${p.monthlyCommissionCapPerSite} per venue per month; 0% on food & drink`
+    return `- ${p.name}: ${fee}, ${sites}, ${beds}.`
   }).join('\n')
 
   return [
@@ -44,7 +48,7 @@ export function renderFactSheet(): string {
     'PRICING',
     plans,
     'Commission is charged only on purchases made through Sunbnb. It is deducted from the venue\'s revenue; guests pay only the venue\'s listed price.',
-    'Pro adds off-platform billing and priority support. Business adds the branded booking page and dedicated support.',
+    'Card processing is billed at the provider\'s cost as its own line, separate from the Sunbnb commission.',
     '',
 
     'ALWAYS REFER TO THE TEAM (never answer yourself)',
@@ -58,8 +62,10 @@ export function factSheetFigures(): number[] {
   for (const tier of PRICING_TIER_ORDER) {
     const p = PRICING_TIERS[tier]
     figures.add(p.monthlyPrice)
-    figures.add(p.commissionPercent)
-    figures.add(p.maxSites)
+    for (const pct of Object.values(p.commissionPercent)) figures.add(pct)
+    if (p.maxSites !== null) figures.add(p.maxSites)
+    if (p.maxHamacasPerSite !== null) figures.add(p.maxHamacasPerSite)
+    if (p.monthlyCommissionCapPerSite !== null) figures.add(p.monthlyCommissionCapPerSite)
   }
   for (const e of KNOWLEDGE) for (const f of e.figures ?? []) figures.add(f)
   return [...figures]

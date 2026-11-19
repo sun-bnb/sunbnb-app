@@ -1,48 +1,123 @@
 /**
- * Pricing Tier Catalog — the published partner pricing ladder.
+ * Pricing Plan Catalog — Gratis / Temporada / Grupo (CR-002, decision F-9).
  *
  * CLIENT-SAFE: pure data, no prisma import (the type import is erased at
  * compile time). The partner landing page and the in-app plan cards are client
  * components and read this directly, so the marketing copy and the seeded
  * database rows can never drift apart. Keep it that way — `subscription.ts`
  * re-exports everything here for server callers.
+ *
+ * Enum keys: `SubscriptionTier` values are GRATIS / TEMPORADA / GRUPO in code,
+ * stored in Postgres under the legacy labels STARTER / PRO / BUSINESS via
+ * Prisma `@map` (no enum DDL; clients deployed on the shared TEST DB keep
+ * reading the same labels). Renaming the stored labels is optional later
+ * cleanup.
  */
 import type { SubscriptionTier } from '@prisma/client'
 
 /**
- * What each plan costs, how many sites it allows, and the commission the
- * platform takes on every consumer purchase.
- *
- * This is a SEED source, not a runtime shortcut. `prisma/seed-subscriptions.ts`
- * projects it onto `SubscriptionPlan` rows and onto the platform-level
- * `ServiceFee` rows (one per tier × commissioned service code, on every
- * `Settings` row). Fee resolution during a charge still goes through the
- * site → partnerAccount → settings cascade in `resolveServiceFee` — a partner
- * with a negotiated site/account fee keeps it, and an admin can edit the
- * platform rows without a deploy. Nothing here is read while charging.
- */
-export const PRICING_TIERS = {
-  STARTER:  { name: 'Starter',  monthlyPrice: 0,  maxSites: 1,  commissionPercent: 6   },
-  PRO:      { name: 'Pro',      monthlyPrice: 29, maxSites: 3,  commissionPercent: 3   },
-  BUSINESS: { name: 'Business', monthlyPrice: 79, maxSites: 10, commissionPercent: 1.5 },
-} as const satisfies Record<
-  SubscriptionTier,
-  { name: string; monthlyPrice: number; maxSites: number; commissionPercent: number }
->
-
-/** Ascending order of the ladder — cheapest first. Used by the seed, the cards and the tests. */
-export const PRICING_TIER_ORDER = ['STARTER', 'PRO', 'BUSINESS'] as const satisfies readonly SubscriptionTier[]
-
-/** The tier the plan cards mark as the recommended one. */
-export const FEATURED_TIER: SubscriptionTier = 'PRO'
-
-/**
- * Service codes the tier commission applies to — every consumer purchase that
+ * Service codes the plan commission applies to — every consumer purchase that
  * flows through Sunbnb. Codes outside this list fall back to the tier-null
- * platform default in the cascade.
+ * platform default in the cascade. F&B stays listed so the seed writes an
+ * explicit 0% row for it on every plan (otherwise it would fall through to the
+ * tier-null default).
  */
 export const COMMISSIONED_SERVICE_CODES = [
   'sunbed-rental',
   'food-and-beverage',
   'equipment-rental',
 ] as const
+
+export type CommissionedServiceCode = (typeof COMMISSIONED_SERVICE_CODES)[number]
+
+/** Service codes the monthly per-site commission cap counts (sunbeds + rentals, never F&B). */
+export const CAPPED_SERVICE_CODES = ['sunbed-rental', 'equipment-rental'] as const satisfies readonly CommissionedServiceCode[]
+
+export type PricingTierSpec = {
+  /** Plan name shown to partners — identical in every language. */
+  name: string
+  /** Fixed monthly price (EUR, excl. IVA). Every plan is 0: Temporada is commission-only, Grupo is quote-only. */
+  monthlyPrice: number
+  /** Sites allowed; `null` = set per agreement (CustomSubscription). */
+  maxSites: number | null
+  /** Hamacas (loungers, one InventoryItem each) per site; `null` = set per agreement. */
+  maxHamacasPerSite: number | null
+  /** Platform commission percent per service code, taken on online-paid purchases only. */
+  commissionPercent: Record<CommissionedServiceCode, number>
+  /** Monthly cap (EUR, excl. IVA) on plan-rate sunbed + rental commission per site; `null` = uncapped / n/a. */
+  monthlyCommissionCapPerSite: number | null
+  /** Guests can pay online by card on this plan. */
+  onlinePayments: boolean
+  /** No public price: the card shows a quote request and there is no checkout. */
+  quoteOnly: boolean
+}
+
+/**
+ * The published plans.
+ *
+ * This is a SEED source, not a runtime shortcut. `prisma/seed-subscriptions.ts`
+ * (and the data-move migration `..._pricing_catalogue_data_move`) project it
+ * onto `SubscriptionPlan` rows and onto the platform-level `ServiceFee` rows
+ * (one per tier × commissioned service code, on every `Settings` row). Fee
+ * resolution during a charge still goes through the site → partnerAccount →
+ * settings cascade in `resolveServiceFee` — a negotiated site/account fee keeps
+ * winning, and an admin can edit the platform rows without a deploy.
+ *
+ * Grupo: limits and fees are negotiated per partner (CustomSubscription,
+ * account-level ServiceFee). Until a partner's agreement is recorded, its
+ * platform rows carry Temporada's rate and cap so no one pays more by moving
+ * to Grupo; the DB plan row's `maxSites` falls back to GRUPO_DEFAULT_MAX_SITES.
+ */
+export const PRICING_TIERS = {
+  GRATIS: {
+    name: 'Gratis',
+    monthlyPrice: 0,
+    maxSites: 1,
+    maxHamacasPerSite: 100,
+    commissionPercent: { 'sunbed-rental': 0, 'food-and-beverage': 0, 'equipment-rental': 0 },
+    monthlyCommissionCapPerSite: null,
+    onlinePayments: false,
+    quoteOnly: false,
+  },
+  TEMPORADA: {
+    name: 'Temporada',
+    monthlyPrice: 0,
+    maxSites: 3,
+    maxHamacasPerSite: 300,
+    commissionPercent: { 'sunbed-rental': 2, 'food-and-beverage': 0, 'equipment-rental': 2 },
+    monthlyCommissionCapPerSite: 199,
+    onlinePayments: true,
+    quoteOnly: false,
+  },
+  GRUPO: {
+    name: 'Grupo',
+    monthlyPrice: 0,
+    maxSites: null,
+    maxHamacasPerSite: null,
+    commissionPercent: { 'sunbed-rental': 2, 'food-and-beverage': 0, 'equipment-rental': 2 },
+    monthlyCommissionCapPerSite: 199,
+    onlinePayments: true,
+    quoteOnly: true,
+  },
+} as const satisfies Record<SubscriptionTier, PricingTierSpec>
+
+/**
+ * Sites a Grupo partner gets before its agreement is recorded in a
+ * CustomSubscription — the legacy Business limit, so no partner moved to Grupo
+ * loses a site. Written to the Grupo `SubscriptionPlan.maxSites` row.
+ */
+export const GRUPO_DEFAULT_MAX_SITES = 10
+
+/** Display order of the plans — free first. Used by the seed, the cards and the tests. */
+export const PRICING_TIER_ORDER = ['GRATIS', 'TEMPORADA', 'GRUPO'] as const satisfies readonly SubscriptionTier[]
+
+/** The plan a partner without a subscription is on. */
+export const DEFAULT_TIER: SubscriptionTier = 'GRATIS'
+
+/** The tier the plan cards mark as the recommended one. */
+export const FEATURED_TIER: SubscriptionTier = 'TEMPORADA'
+
+/** `maxSites` as stored on the `SubscriptionPlan` row (the column is NOT NULL). */
+export function planRowMaxSites(tier: SubscriptionTier): number {
+  return PRICING_TIERS[tier].maxSites ?? GRUPO_DEFAULT_MAX_SITES
+}

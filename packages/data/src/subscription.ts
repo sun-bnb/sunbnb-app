@@ -2,7 +2,8 @@
  * Subscription Service
  *
  * Provides helpers to query a partner's subscription and enforce plan limits
- * (currently: max number of sites).
+ * (sites per account, hamacas per site) and plan features (CR-002: Gratis /
+ * Temporada / Grupo).
  *
  * SECURITY / TRUST BOUNDARY:
  *   `syncStripeSubscription` and `handleSubscriptionCanceled` mutate
@@ -24,8 +25,14 @@ export {
   PRICING_TIERS,
   PRICING_TIER_ORDER,
   FEATURED_TIER,
+  DEFAULT_TIER,
+  GRUPO_DEFAULT_MAX_SITES,
   COMMISSIONED_SERVICE_CODES,
+  CAPPED_SERVICE_CODES,
+  planRowMaxSites,
 } from './pricing-tiers'
+export type { PricingTierSpec, CommissionedServiceCode } from './pricing-tiers'
+import { DEFAULT_TIER, PRICING_TIERS } from './pricing-tiers'
 
 // ─── Feature Catalog ────────────────────────────────────────────────────────
 
@@ -37,7 +44,17 @@ export const SUBSCRIPTION_FEATURES = {
   OFF_PLATFORM_BILLING: {
     key: 'OFF_PLATFORM_BILLING',
     label: 'Off-platform billing',
-    description: 'Allow availability-only (unpaid) sites',
+    description: 'Allow availability-only (unpaid) sites — guests pay on site',
+  },
+  ONLINE_PAYMENTS: {
+    key: 'ONLINE_PAYMENTS',
+    label: 'Online card payments',
+    description: 'Guests can pay sunbed bookings and rentals online by card',
+  },
+  FOOD_AND_BEVERAGE: {
+    key: 'FOOD_AND_BEVERAGE',
+    label: 'Food and drink ordering',
+    description: 'Menu, orders, tabs and card-paid table deposits',
   },
 } as const
 
@@ -48,10 +65,11 @@ export type SubscriptionFeatureKey = keyof typeof SUBSCRIPTION_FEATURES
  * Source of truth for server-side enforcement. Marketing copy in the apps
  * is separate and should align with this map over time.
  */
-export const TIER_FEATURE_DEFAULTS: Record<SubscriptionTier, Partial<Record<SubscriptionFeatureKey, boolean>>> = {
-  STARTER:  { OFF_PLATFORM_BILLING: false },
-  PRO:      { OFF_PLATFORM_BILLING: true },
-  BUSINESS: { OFF_PLATFORM_BILLING: true },
+export const TIER_FEATURE_DEFAULTS: Record<SubscriptionTier, Record<SubscriptionFeatureKey, boolean>> = {
+  // Gratis: "pay on site" is the normal mode, so off-platform is always allowed.
+  GRATIS:    { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: false, FOOD_AND_BEVERAGE: false },
+  TEMPORADA: { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: true,  FOOD_AND_BEVERAGE: true },
+  GRUPO:     { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: true,  FOOD_AND_BEVERAGE: true },
 }
 
 /**
@@ -65,7 +83,7 @@ export function resolveEffectiveFeatures(
   tier: SubscriptionTier | null,
   overrides: Partial<Record<SubscriptionFeatureKey, boolean>> | null,
 ): Record<SubscriptionFeatureKey, boolean> {
-  const t = tier ?? 'STARTER'
+  const t = tier ?? DEFAULT_TIER
   const out = {} as Record<SubscriptionFeatureKey, boolean>
   for (const key of Object.keys(SUBSCRIPTION_FEATURES) as SubscriptionFeatureKey[]) {
     out[key] = overrides?.[key] ?? TIER_FEATURE_DEFAULTS[t]?.[key] ?? false
@@ -85,17 +103,43 @@ export function resolveEffectiveFeatures(
  * as JsonValue — cast at the DB boundary (call site) before passing here.
  */
 export function resolveEffectiveSubscription(
-  plan: { tier: SubscriptionTier; name: string; monthlyPrice: number; maxSites: number } | null,
-  custom: { maxSites: number | null; featureOverrides?: Partial<Record<SubscriptionFeatureKey, boolean>> | null } | null,
+  plan: {
+    tier: SubscriptionTier
+    name: string
+    monthlyPrice: number
+    maxSites: number
+    maxHamacasPerSite?: number | null
+    monthlyCommissionCapPerSite?: number | null
+  } | null,
+  custom: {
+    maxSites: number | null
+    maxHamacasPerSite?: number | null
+    featureOverrides?: Partial<Record<SubscriptionFeatureKey, boolean>> | null
+  } | null,
 ) {
-  const tier = plan?.tier ?? ('STARTER' as SubscriptionTier)
+  const tier = plan?.tier ?? DEFAULT_TIER
+  const fallback = PRICING_TIERS[DEFAULT_TIER]
+  // A plan row written before the CR-002 expand migration has NULL limits;
+  // `undefined` (column not selected) falls back to the catalogue too. A NULL
+  // hamaca limit on a seeded row means "no limit" (Grupo without agreement).
+  const planHamacas = plan
+    ? plan.maxHamacasPerSite !== undefined ? plan.maxHamacasPerSite : PRICING_TIERS[plan.tier].maxHamacasPerSite
+    : fallback.maxHamacasPerSite
   return {
     tier,
-    name:         plan?.name         ?? 'Starter',
-    monthlyPrice: plan?.monthlyPrice ?? 0,
-    maxSites:     custom?.maxSites   ?? plan?.maxSites ?? 1,
-    isCustom:     custom != null && custom.maxSites != null,
-    features:     resolveEffectiveFeatures(tier, custom?.featureOverrides ?? null),
+    name:              plan?.name         ?? fallback.name,
+    monthlyPrice:      plan?.monthlyPrice ?? 0,
+    maxSites:          custom?.maxSites   ?? plan?.maxSites ?? fallback.maxSites ?? 1,
+    /** null = no limit. Custom (Grupo agreement) wins over the plan. */
+    maxHamacasPerSite: custom?.maxHamacasPerSite ?? planHamacas,
+    /** null = uncapped. Read by the commission-cap ledger for plan-rate fees only. */
+    monthlyCommissionCapPerSite: plan
+      ? plan.monthlyCommissionCapPerSite !== undefined
+        ? plan.monthlyCommissionCapPerSite
+        : PRICING_TIERS[plan.tier].monthlyCommissionCapPerSite
+      : fallback.monthlyCommissionCapPerSite,
+    isCustom:          custom != null && (custom.maxSites != null || custom.maxHamacasPerSite != null),
+    features:          resolveEffectiveFeatures(tier, custom?.featureOverrides ?? null),
   }
 }
 
@@ -201,22 +245,25 @@ export async function syncStripeSubscription(
 
 /**
  * Handle subscription cancellation from Stripe.
- * Downgrades the partner back to the STARTER plan.
+ *
+ * CR-002: no plan bills a monthly price any more, so the legacy Pro/Business
+ * Stripe subscriptions are cancelled at period end (no refund, founder decision
+ * M-65) and the partner STAYS on its current plan (Temporada after the data
+ * move). Only the Stripe linkage is cleared — never a downgrade to Gratis.
  */
 export async function handleSubscriptionCanceled(partnerAccountId: string) {
-  const starterPlan = await prisma.subscriptionPlan.findUnique({
-    where: { tier: 'STARTER' },
+  const existing = await prisma.subscription.findUnique({
+    where: { partnerAccountId },
+    select: { id: true },
   })
-
-  if (!starterPlan) {
-    console.error('[Subscription] STARTER plan not found for downgrade')
+  if (!existing) {
+    console.error(`[Subscription] No subscription for ${partnerAccountId} on cancel`)
     return
   }
 
   await prisma.subscription.update({
     where: { partnerAccountId },
     data: {
-      planId: starterPlan.id,
       status: 'ACTIVE',
       stripeSubscriptionId: null,
       stripeCustomerId: null,
@@ -225,5 +272,5 @@ export async function handleSubscriptionCanceled(partnerAccountId: string) {
     },
   })
 
-  console.log(`[Subscription] Canceled & downgraded ${partnerAccountId} → STARTER`)
+  console.log(`[Subscription] Stripe subscription ended for ${partnerAccountId}; plan kept`)
 }

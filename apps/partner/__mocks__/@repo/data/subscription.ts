@@ -3,11 +3,11 @@ import { vi } from 'vitest'
 export const syncStripeSubscription = vi.fn().mockResolvedValue(undefined)
 export const handleSubscriptionCanceled = vi.fn().mockResolvedValue(undefined)
 export const getPartnerSubscription = vi.fn().mockResolvedValue(null)
-export const canCreateSite = vi.fn().mockResolvedValue({ allowed: true, currentCount: 0, maxSites: 1, tier: 'STARTER', overridden: false })
+export const canCreateSite = vi.fn().mockResolvedValue({ allowed: true, currentCount: 0, maxSites: 1, tier: 'GRATIS', overridden: false })
 export const resolveEffectiveSubscription = vi.fn().mockImplementation(
   (plan: { tier: string; name: string; monthlyPrice: number; maxSites: number } | null,
    custom: { maxSites: number | null } | null) => ({
-    tier: plan?.tier ?? 'STARTER',
+    tier: plan?.tier ?? 'GRATIS',
     name: plan?.name ?? 'Starter',
     monthlyPrice: plan?.monthlyPrice ?? 0,
     maxSites: custom?.maxSites ?? plan?.maxSites ?? 1,
@@ -16,7 +16,7 @@ export const resolveEffectiveSubscription = vi.fn().mockImplementation(
   })
 )
 export const getEffectiveSubscriptionForUser = vi.fn().mockResolvedValue({
-  tier: 'STARTER',
+  tier: 'GRATIS',
   name: 'Starter',
   monthlyPrice: 0,
   maxSites: 1,
@@ -34,7 +34,7 @@ export const SUBSCRIPTION_FEATURES = {
   },
 } as const
 export const TIER_FEATURE_DEFAULTS = {
-  STARTER: { OFF_PLATFORM_BILLING: false },
-  PRO: { OFF_PLATFORM_BILLING: true },
-  BUSINESS: { OFF_PLATFORM_BILLING: true },
+  GRATIS: { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: false, FOOD_AND_BEVERAGE: false },
+  TEMPORADA: { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: true, FOOD_AND_BEVERAGE: true },
+  GRUPO: { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: true, FOOD_AND_BEVERAGE: true },
 } as const

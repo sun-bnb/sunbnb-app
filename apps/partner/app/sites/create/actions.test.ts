@@ -53,11 +53,11 @@ beforeEach(() => {
     allowed: true,
     currentCount: 0,
     maxSites: 5,
-    tier: 'STARTER',
+    tier: 'GRATIS',
     overridden: false,
   })
   mockGetEffective.mockResolvedValue({
-    tier: 'STARTER',
+    tier: 'GRATIS',
     name: 'Starter',
     monthlyPrice: 0,
     maxSites: 1,
@@ -85,7 +85,7 @@ describe('createSite', () => {
       allowed: false,
       currentCount: 1,
       maxSites: 1,
-      tier: 'STARTER',
+      tier: 'GRATIS',
       overridden: false,
     })
 
@@ -110,7 +110,7 @@ describe('createSite', () => {
   it('rejects type:unpaid when OFF_PLATFORM_BILLING feature is false', async () => {
     authenticateUser()
     mockGetEffective.mockResolvedValue({
-      tier: 'STARTER',
+      tier: 'GRATIS',
       name: 'Starter',
       monthlyPrice: 0,
       maxSites: 1,
@@ -128,7 +128,7 @@ describe('createSite', () => {
   it('allows type:unpaid when OFF_PLATFORM_BILLING feature is true', async () => {
     authenticateUser()
     mockGetEffective.mockResolvedValue({
-      tier: 'PRO',
+      tier: 'TEMPORADA',
       name: 'Pro',
       monthlyPrice: 49,
       maxSites: 5,
@@ -151,7 +151,7 @@ describe('createSite', () => {
     authenticateUser()
     // Simulates a STARTER partner with an admin-granted override
     mockGetEffective.mockResolvedValue({
-      tier: 'STARTER',
+      tier: 'GRATIS',
       name: 'Starter',
       monthlyPrice: 0,
       maxSites: 1,

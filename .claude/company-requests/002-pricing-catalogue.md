@@ -6,7 +6,7 @@ priority: 2
 company_ref: A-22 (approved prompt), A-23 / A-28 (build approvals), T-130, F-9 (pricing decision)
 created: 2026-11-19
 track: .claude/tracks/034-pricing-catalogue.md
-outcome: In progress. Run 1 filed the CR and answered the open questions. Run 2 (2026-11-19) recorded the M-65 decisions and committed the expand migration and the commission-cap ledger with tests. Runs 3-5 follow track 034.
+outcome: In progress. Run 1 filed the CR and answered the open questions. Run 2 committed the expand migration and the commission-cap ledger. Run 3 (T-146) committed the enum @map, the Gratis/Temporada/Grupo catalogue, plan features, the seed and the data-move migration; every workspace typechecks. Runs 4-5 follow track 034.
 ---
 
 # CR-002: Gratis / Temporada / Grupo pricing catalogue
@@ -147,6 +147,20 @@ right expression for a site. But the gate has to be **plan-derived and server-en
 3. **Q5, launch offer mechanism**: proposed is a dated account-level `ServiceFee` at 0% (`validUntil`, new nullable
    column), ignored by `resolveServiceFee` after expiry and listed on the admin partner page. Confirm.
 4. **Q1 boundary**: a payment counts toward the month it was created in, not the month it was confirmed. Confirm.
+
+## Run 3 (T-146, 2026-11-19)
+
+- `SubscriptionTier` is `GRATIS @map("STARTER")`, `TEMPORADA @map("PRO")`, `GRUPO @map("BUSINESS")`. `migrate:check` is clean.
+- `pricing-tiers.ts`: per-service-code `commissionPercent` (F&B 0% on every plan), `maxHamacasPerSite` (100 / 300 / null),
+  `monthlyCommissionCapPerSite` (Temporada 199; Grupo defaults to Temporada terms until negotiated), `quoteOnly`,
+  `DEFAULT_TIER = GRATIS`, `FEATURED_TIER = TEMPORADA`, `CAPPED_SERVICE_CODES`, `GRUPO_DEFAULT_MAX_SITES = 10` (plan-row fallback).
+- `subscription.ts`: features `ONLINE_PAYMENTS` and `FOOD_AND_BEVERAGE` (off on Gratis), `OFF_PLATFORM_BILLING` on for every plan,
+  hamaca limit and cap in `resolveEffectiveSubscription`, `handleSubscriptionCanceled` keeps the plan.
+- Migration `20261119150000_pricing_catalogue_data_move` (data move, no DDL, expand-safe, idempotent): plan rows, M-65 subscription
+  mapping, platform fee rows, NULLs the plans' Stripe ids. **Not done by SQL:** setting the live Stripe subscriptions to cancel at
+  period end. That is a Stripe action outside this sandbox.
+- Interim card lines in partner `landing.tsx` / `account/subscription/view.tsx` and admin; real copy in run 5. Marketing projection
+  now uses Temporada 2% capped; its FAQ copy (`Faq.costA`) still names Starter/Pro/Business (run 5 copy pass).
 
 ## Build plan (later runs)
 - Run 2: catalogue + `LEGACY_TIER_MAP`, migration A (expand), seed, `CommissionCapUsage` + stored `commissionAmount`,

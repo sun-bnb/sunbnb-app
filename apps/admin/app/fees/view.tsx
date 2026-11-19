@@ -72,9 +72,9 @@ const emptyForm: FormData = {
 
 const tierTabs = [
   { value: "", label: "Default" },
-  { value: "STARTER", label: "Starter" },
-  { value: "PRO", label: "Pro" },
-  { value: "BUSINESS", label: "Business" },
+  { value: "GRATIS", label: "Gratis" },
+  { value: "TEMPORADA", label: "Temporada" },
+  { value: "GRUPO", label: "Grupo" },
 ]
 
 const chargeTypes = [

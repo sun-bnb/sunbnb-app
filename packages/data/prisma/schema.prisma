@@ -6,10 +6,13 @@ datasource db {
   provider = "postgresql"
 }
 
+/// CR-002 plans. Stored under the legacy labels via @map (no enum DDL, so clients already
+/// deployed on the shared TEST DB keep reading the same values). Renaming the stored labels
+/// (ALTER TYPE ... RENAME VALUE) is optional later cleanup and must ship with its code.
 enum SubscriptionTier {
-  STARTER
-  PRO
-  BUSINESS
+  GRATIS    @map("STARTER")
+  TEMPORADA @map("PRO")
+  GRUPO     @map("BUSINESS")
 }
 
 /// CR-002 monthly commission cap ledger. One row per payable (sourceKey), counted against

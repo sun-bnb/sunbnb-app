@@ -174,7 +174,7 @@ describe('saveGeneral', () => {
     // type:'unpaid' requires the off-platform-billing entitlement; grant it so the
     // update proceeds (this test exercises price-null logic, not the gate).
     vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValueOnce({
-      tier: 'BUSINESS', name: 'Business', monthlyPrice: 0, maxSites: 999,
+      tier: 'GRUPO', name: 'Business', monthlyPrice: 0, maxSites: 999,
       isCustom: false, features: { OFF_PLATFORM_BILLING: true },
     } as any)
 
@@ -608,7 +608,7 @@ describe('saveGeneral — off-platform billing entitlement', () => {
   it('rejects type:unpaid when OFF_PLATFORM_BILLING feature is false', async () => {
     authorizeOwner()
     mockGetEffective.mockResolvedValue({
-      tier: 'STARTER',
+      tier: 'GRATIS',
       name: 'Starter',
       monthlyPrice: 0,
       maxSites: 1,
@@ -626,7 +626,7 @@ describe('saveGeneral — off-platform billing entitlement', () => {
   it('allows type:unpaid when OFF_PLATFORM_BILLING feature is true', async () => {
     authorizeOwner()
     mockGetEffective.mockResolvedValue({
-      tier: 'PRO',
+      tier: 'TEMPORADA',
       name: 'Pro',
       monthlyPrice: 49,
       maxSites: 5,
@@ -682,7 +682,7 @@ describe('submitForm — off-platform billing entitlement', () => {
   it('rejects type:unpaid when OFF_PLATFORM_BILLING feature is false', async () => {
     mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
     mockGetEffective.mockResolvedValue({
-      tier: 'STARTER',
+      tier: 'GRATIS',
       name: 'Starter',
       monthlyPrice: 0,
       maxSites: 1,
@@ -706,7 +706,7 @@ describe('submitForm — off-platform billing entitlement', () => {
   it('allows type:unpaid when OFF_PLATFORM_BILLING feature is true', async () => {
     mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
     mockGetEffective.mockResolvedValue({
-      tier: 'PRO',
+      tier: 'TEMPORADA',
       name: 'Pro',
       monthlyPrice: 49,
       maxSites: 5,

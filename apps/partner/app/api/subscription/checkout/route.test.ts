@@ -34,13 +34,13 @@ const USER_ID = 'user-1'
 
 const PRO_PLAN = {
   id: 'plan-pro',
-  tier: 'PRO',
+  tier: 'TEMPORADA',
   stripePriceId: 'price_pro_monthly',
 }
 
 const STARTER_PLAN = {
   id: 'plan-starter',
-  tier: 'STARTER',
+  tier: 'GRATIS',
   stripePriceId: 'price_free',
 }
 
@@ -128,7 +128,7 @@ describe('POST /api/subscription/checkout', () => {
     mockAuth.mockResolvedValue({ user: { id: USER_ID } } as any)
     mockSubscriptionPlanFindUnique.mockResolvedValue({
       id: 'plan-pro',
-      tier: 'PRO',
+      tier: 'TEMPORADA',
       stripePriceId: null,
     } as any)
     const response = await POST(makeRequest({ planId: 'plan-pro' }))

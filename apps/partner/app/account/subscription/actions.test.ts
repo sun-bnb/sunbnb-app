@@ -89,14 +89,14 @@ describe('getSubscriptionData', () => {
 
   it('returns subscription, plans, siteCount, effectiveMaxSites and isCustomMaxSites', async () => {
     mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
-    const fakeSub = { plan: { tier: 'PRO', name: 'Pro', monthlyPrice: 49, maxSites: 5 } }
-    const fakePlans = [{ id: 'plan-pro', tier: 'PRO' }]
+    const fakeSub = { plan: { tier: 'TEMPORADA', name: 'Pro', monthlyPrice: 49, maxSites: 5 } }
+    const fakePlans = [{ id: 'plan-pro', tier: 'TEMPORADA' }]
     mockGetPartnerSubscription.mockResolvedValue(fakeSub as any)
     vi.mocked(prisma.subscriptionPlan.findMany).mockResolvedValue(fakePlans as any)
     vi.mocked(prisma.site.count).mockResolvedValue(2)
     vi.mocked(prisma.customSubscription.findUnique).mockResolvedValue(null)
     mockResolveEffectiveSubscription.mockReturnValue({
-      tier: 'PRO',
+      tier: 'TEMPORADA',
       name: 'Pro',
       monthlyPrice: 49,
       maxSites: 5,
@@ -122,7 +122,7 @@ describe('getSubscriptionData', () => {
     const customSub = { maxSites: 20 }
     vi.mocked(prisma.customSubscription.findUnique).mockResolvedValue(customSub as any)
     mockResolveEffectiveSubscription.mockReturnValue({
-      tier: 'STARTER',
+      tier: 'GRATIS',
       name: 'Starter',
       monthlyPrice: 0,
       maxSites: 20,
@@ -140,7 +140,7 @@ describe('getSubscriptionData', () => {
 
   it('passes plan from subscription to resolveEffectiveSubscription', async () => {
     mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
-    const fakePlan = { tier: 'PRO', name: 'Pro', monthlyPrice: 49, maxSites: 5 }
+    const fakePlan = { tier: 'TEMPORADA', name: 'Pro', monthlyPrice: 49, maxSites: 5 }
     mockGetPartnerSubscription.mockResolvedValue({ plan: fakePlan } as any)
     vi.mocked(prisma.subscriptionPlan.findMany).mockResolvedValue([])
     vi.mocked(prisma.site.count).mockResolvedValue(0)

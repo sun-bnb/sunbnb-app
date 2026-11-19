@@ -549,7 +549,7 @@ export default function GeneralView() {
   }
 
   const isPaid = siteType === 'paid'
-  const tier = (site as any).subscriptionTier ?? 'STARTER'
+  const tier = (site as any).subscriptionTier ?? 'GRATIS'
   const canUseAvailabilityOnly = ((site as any).subscriptionFeatures?.OFF_PLATFORM_BILLING ?? false) as boolean
 
   return (

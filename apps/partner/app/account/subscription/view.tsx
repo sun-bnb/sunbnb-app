@@ -20,22 +20,21 @@ interface SubscriptionData {
 // PRICING_TIERS so an in-app card can never promise a limit `canCreateSite`
 // won't grant. The commission is shown separately, as a badge.
 const TIER_FEATURES: Record<string, string[]> = {
-  STARTER: [
-    '1 beach or venue',
-    'Sunbed reservations + QR ordering',
-    'Integrated card payments',
+  // Interim CR-002 lines; the translated Gratis / Temporada / Grupo cards land in track 034 run 5.
+  GRATIS: [
+    `${PRICING_TIERS.GRATIS.maxSites} venue, up to ${PRICING_TIERS.GRATIS.maxHamacasPerSite} sunbeds`,
+    'Sunbed reservations, guests pay on site',
     'Community support',
   ],
-  PRO: [
-    `Up to ${PRICING_TIERS.PRO.maxSites} venues`,
-    'Everything in Starter',
-    'Off-platform billing',
+  TEMPORADA: [
+    `Up to ${PRICING_TIERS.TEMPORADA.maxSites} venues, ${PRICING_TIERS.TEMPORADA.maxHamacasPerSite} sunbeds each`,
+    'Online card payments and food and drink ordering',
+    `Commission capped at €${PRICING_TIERS.TEMPORADA.monthlyCommissionCapPerSite} per venue per month`,
     'Priority support',
   ],
-  BUSINESS: [
-    `Up to ${PRICING_TIERS.BUSINESS.maxSites} venues`,
-    'Everything in Pro',
-    'Branded booking page',
+  GRUPO: [
+    'Venues and sunbeds per agreement',
+    'Everything in Temporada',
     'Dedicated support',
   ],
 }
@@ -48,14 +47,14 @@ const DEFAULT_COLORS = {
 }
 
 const TIER_COLORS: Record<string, typeof DEFAULT_COLORS> = {
-  STARTER: DEFAULT_COLORS,
-  PRO: {
+  GRATIS: DEFAULT_COLORS,
+  TEMPORADA: {
     ring: 'ring-blue-500 ring-2',
     badge: 'bg-blue-100 text-blue-700',
     badgeText: 'Most chosen',
     button: 'bg-blue-600 text-white hover:bg-blue-700',
   },
-  BUSINESS: {
+  GRUPO: {
     ring: 'ring-amber-500 ring-2',
     badge: 'bg-amber-100 text-amber-700',
     badgeText: 'Scale',
@@ -65,7 +64,7 @@ const TIER_COLORS: Record<string, typeof DEFAULT_COLORS> = {
 
 export default function SubscriptionView({ data }: { data: SubscriptionData }) {
   const { subscription, plans, siteCount, effectiveMaxSites, isCustomMaxSites } = data
-  const currentTier = subscription?.plan?.tier ?? 'STARTER'
+  const currentTier = subscription?.plan?.tier ?? 'GRATIS'
   const [loading, setLoading] = useState<string | null>(null)
 
   const hasStripeSubscription = !!subscription?.stripeSubscriptionId
@@ -188,9 +187,9 @@ export default function SubscriptionView({ data }: { data: SubscriptionData }) {
               {/* Commission — the term that actually costs the partner money */}
               <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
                 <span className="text-base font-bold text-amber-700">
-                  {PRICING_TIERS[plan.tier].commissionPercent}%
+                  {PRICING_TIERS[plan.tier].commissionPercent['sunbed-rental']}%
                 </span>
-                <span className="text-xs text-gray-500 ml-1.5">commission per Sunbnb purchase</span>
+                <span className="text-xs text-gray-500 ml-1.5">commission on online sunbed and rental bookings</span>
               </div>
 
               {/* Features */}
@@ -210,7 +209,7 @@ export default function SubscriptionView({ data }: { data: SubscriptionData }) {
                 <div className="text-center py-2 text-sm font-medium text-gray-400 bg-gray-50 rounded-lg">
                   Current plan
                 </div>
-              ) : plan.tier === 'STARTER' ? (
+              ) : plan.tier === 'GRATIS' ? (
                 <div className="text-center py-2 text-sm font-medium text-gray-400 bg-gray-50 rounded-lg">
                   Free tier
                 </div>

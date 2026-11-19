@@ -38,8 +38,8 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Plan not available for purchase' }, { status: 400 })
   }
 
-  // Don't allow purchasing the free tier
-  if (plan.tier === 'STARTER') {
+  // CR-002: no plan bills a monthly price; only a plan row with a Stripe price could be bought, and the data move NULLs them. Gratis is never purchasable.
+  if (plan.tier === 'GRATIS') {
     return Response.json({ error: 'Cannot purchase the free plan' }, { status: 400 })
   }
 

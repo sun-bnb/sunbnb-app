@@ -67,7 +67,7 @@ describe('saveGeneral', () => {
     // the OFF_PLATFORM_BILLING entitlement (PRO/BUSINESS plan). Grant it via a real
     // DB subscription so saveGeneral's entitlement check passes legitimately.
     const account = await createTestPartnerAccount(user.id)
-    await createTestSubscription(account.userId, 'PRO')
+    await createTestSubscription(account.userId, 'TEMPORADA')
 
     const result = await saveGeneral({
       id: site.id,
