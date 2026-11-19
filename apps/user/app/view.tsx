@@ -25,7 +25,7 @@ import Image from 'next/image'
 import { Fraunces } from 'next/font/google'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import type { CSSProperties, ReactNode } from 'react'
+import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
 
 import SearchBar from '@/components/search/search-bar'
 import BeachStage from '@/components/landing/beach-stage'
@@ -99,8 +99,29 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
   const t = useTranslations('LandingPage')
   const facts = ['fact1', 'fact2', 'fact3', 'fact4'] as const
 
+  // The docked search grows upward when it lists location suggestions. Publish its
+  // height (and how far it has grown past its closed height) so the stage captions
+  // can lift clear of it instead of disappearing under the list.
+  const root = useRef<HTMLDivElement>(null)
+  const dock = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const r = root.current
+    const d = dock.current
+    if (!r || !d) return
+    let rest = Infinity
+    const ro = new ResizeObserver(() => {
+      const h = d.offsetHeight
+      if (!h) return
+      rest = Math.min(rest, h)
+      r.style.setProperty('--lp-dock-h', `${h}px`)
+      r.style.setProperty('--lp-dock-grow', `${h - rest}px`)
+    })
+    ro.observe(d)
+    return () => ro.disconnect()
+  }, [])
+
   return (
-    <div className={`${display.variable} lp-root bg-cream font-sans`}>
+    <div ref={root} className={`${display.variable} lp-root bg-cream font-sans`}>
       <style>{`
         .lp-root {
           --lp-ink: #17323a;
@@ -177,6 +198,9 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
         .lp-stage:not([data-beat="hero"]) .lp-dock { opacity: 1; transform: none; }
         .lp-stage:not([data-beat="hero"]) .lp-dock > * { pointer-events: auto; }
         @media (prefers-reduced-motion: reduce) { .lp-dock { transition: none; transform: none; } }
+        /* captions ride up over the dock's suggestion list (padding fed by --lp-dock-h / --lp-dock-grow) */
+        .lp-lift { transition: padding-bottom 260ms ease; }
+        @media (prefers-reduced-motion: reduce) { .lp-lift { transition: none; } }
         @keyframes lpHint { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(6px); } }
         .lp-hint-arrow { animation: lpHint 1.8s ease-in-out infinite; }
         @media (prefers-reduced-motion: reduce) { .lp-hint-arrow { animation: none; } }
@@ -238,7 +262,7 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
 
         {/* Beat 1 — late morning, the map stands up */}
         <Panel beat="stage1" className="inset-x-0 bottom-0 md:inset-y-0 md:left-auto md:right-0 md:flex md:w-1/2 md:items-center">
-          <div className="px-5 pb-[21svh] md:px-8 md:pb-0 lg:pr-[max(2rem,calc((100vw-72rem)/2))]">
+          <div className="lp-lift px-5 pb-[max(21svh,calc(var(--lp-dock-h,0px)+26px))] md:px-8 md:pb-[calc(var(--lp-dock-grow,0px)*2)] lg:pr-[max(2rem,calc((100vw-72rem)/2))]">
             <StageCopy
               label={t('stage1Label')}
               title={t('stage1Title')}
@@ -250,20 +274,20 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
 
         {/* Beat 2 — noon, at the pole */}
         <Panel beat="stage2" className="inset-x-0 bottom-0 md:inset-y-0 md:right-auto md:left-0 md:flex md:w-1/2 md:items-center">
-          <div className="px-5 pb-[21svh] md:px-8 md:pb-0 lg:pl-[max(2rem,calc((100vw-72rem)/2))]">
+          <div className="lp-lift px-5 pb-[max(21svh,calc(var(--lp-dock-h,0px)+26px))] md:px-8 md:pb-[calc(var(--lp-dock-grow,0px)*2)] lg:pl-[max(2rem,calc((100vw-72rem)/2))]">
             <StageCopy label={t('stage2Label')} title={t('stage2Title')} desc={t('stage2Desc')} />
           </div>
         </Panel>
 
         {/* Beat 3 — golden hour, on the lounger */}
         <Panel beat="stage3" className="inset-x-0 bottom-0 md:inset-y-0 md:left-auto md:right-0 md:flex md:w-1/2 md:items-center">
-          <div className="px-5 pb-[21svh] md:px-8 md:pb-0 lg:pr-[max(2rem,calc((100vw-72rem)/2))]">
+          <div className="lp-lift px-5 pb-[max(21svh,calc(var(--lp-dock-h,0px)+26px))] md:px-8 md:pb-[calc(var(--lp-dock-grow,0px)*2)] lg:pr-[max(2rem,calc((100vw-72rem)/2))]">
             <StageCopy label={t('stage3Label')} title={t('stage3Title')} desc={t('stage3Desc')} />
           </div>
         </Panel>
 
         {/* Docked search — takes over from the hero's and stays for the rest of the page */}
-        <div className="lp-dock fixed inset-x-0 bottom-3 z-30 flex justify-center px-3 md:bottom-5">
+        <div ref={dock} className="lp-dock fixed inset-x-0 bottom-3 z-30 flex justify-center px-3 md:bottom-5">
           <div className="lp-glass w-full max-w-xl rounded-2xl p-2">
             <SearchBar className="flex flex-col-reverse" />
             <p className="mt-1.5 px-1 text-center text-[12px] text-[#4f6065]">
@@ -277,7 +301,7 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
 
         {/* Close — dusk */}
         <Panel beat="close" className="inset-0 flex items-center">
-          <div className="w-full px-5 pb-[10svh] md:px-8 md:pb-0">
+          <div className="lp-lift w-full px-5 pb-[calc(10svh+var(--lp-dock-grow,0px)*2)] md:px-8 md:pb-[calc(var(--lp-dock-grow,0px)*2)]">
             <div className="mx-auto max-w-xl rounded-[26px] p-7 text-center md:p-10 lp-glass-dusk">
               <h2 className="lp-display text-[clamp(2.1rem,6vw,3.4rem)] leading-none">{t('ctaTitle')}</h2>
               <p className="mx-auto mt-4 max-w-[42ch] text-[15px] leading-relaxed text-[#c9d6dc] md:text-[16px]">
