@@ -6,7 +6,7 @@ priority: 2
 company_ref: A-22 (approved prompt), A-23 / A-28 (build approvals), T-130, F-9 (pricing decision)
 created: 2026-11-19
 track: .claude/tracks/034-pricing-catalogue.md
-outcome: Done on co/CR-002-pricing-catalogue (runs 1-5, b9dad77e..HEAD, committed only). Gratis / Temporada / Grupo replace Starter / Pro / Business; the EUR 199 monthly cap is decided once at charge time and invoiced as collected; plan gating is enforced server-side on every guest charge path (incl. tabs and table deposits) and in partner settings; hamaca limits (100 / 300 / custom) block adding, never existing sunbeds; cards and fee breakdown in es/en/fi with no guest fee. Open questions for the founder are listed under Run 5.
+outcome: Done on co/CR-002-pricing-catalogue (runs 1-5, b9dad77e..HEAD, committed only). Gratis / Temporada / Grupo replace Starter / Pro / Business; the EUR 199 monthly cap is decided once at charge time and invoiced as collected; plan gating is enforced server-side on every guest charge path (incl. tabs and table deposits) and in partner settings; hamaca limits (100 / 300 / custom) block adding, never existing sunbeds; cards and fee breakdown in es/en/fi with no guest fee. Open questions for the founder are listed under Run 5. Run 6 (T-149): refunds that return the commission (Stripe, Viva) now lower the original month's cap total via reversal rows (Mollie keeps its application fee, so its refunds do not); marketing copy renamed to Gratis/Temporada/Grupo in en/es/fi (8f0cd37a, 172bc782).
 ---
 
 # CR-002: Gratis / Temporada / Grupo pricing catalogue
@@ -246,6 +246,38 @@ right expression for a site. But the gate has to be **plan-derived and server-en
 7. `checkNewSiteHamacas` has no caller yet, because there is no copy-site or import path in `apps/partner`. The
    hamaca check runs just before the write, not inside its transaction, so two concurrent adds can overshoot by
    one batch.
+
+## Run 6 (T-149, 2026-11-19): refunds and marketing copy
+
+- **Refunds (open question 3, closed).** Commit 8f0cd37a. `reverseCappedCommission({ sourceKey, refundKey, fraction })`
+  writes a reversal row (`status 'reversal'`, negative amount) in the **original entry's month**, so a refund made
+  in July lowers June only. The row is keyed `reversal:<sourceKey>:<refundKey>`, so a retry does nothing. A partial
+  refund reverses pro rata, never more than is left of the entry, so the month never drops below 0. The payable's
+  own entry keeps the amount that was collected and invoiced, so the PLATFORM invoice is never rewritten.
+  `reverseCapForRefundedPayment(paymentRef)` finds the payable from its ref (a reservation, otherwise the rental
+  group's lowest booking id). Both refund dispatchers call it after the provider accepts the refund:
+  `refund.ts` `issueReservationRefund` (the partner manage refund) and the user app's `issueRefund` (consumer cancel
+  of reservations and rentals; table deposits have no capped commission, so for them it is a no-op).
+  - **Contradiction with the task wording: Mollie.** Mollie application fees cannot be refunded: the platform keeps
+    the fee when a venue refunds a guest (docs.mollie.com, "Application fees"). A Mollie refund therefore does not
+    lower the month, which keeps the counted total equal to what was collected. Stripe (`refund_application_fee:
+    true`) and Viva (which reverses the ISV fee) do lower it. Demo moves no money and does not lower it.
+  - **Not reversed:** a refund made outside the app (in the provider dashboard, seen only as a `refunded` webhook).
+    The webhook cannot tell whether the fee was returned, so the month stays over-counted: the venue pays less,
+    never more.
+  - **Evidence:** `commission-cap.integration.test.ts` › "refunds that reverse commission" covers before the cap,
+    after the cap, partial refunds, a later-month refund and per-provider refs. `commission-cap.test.ts`,
+    `refund.test.ts` and the user app's `payment-provider.test.ts` check that the hook runs only after a refund
+    succeeds.
+- **Marketing copy (open question 6, closed for apps/marketing).** Commit 172bc782. `Faq.costA` (en/es/fi) now
+  describes Gratis, Temporada and Grupo. The Temporada rate and cap come from `PRICING_TIERS.TEMPORADA`. Grupo is
+  "priced on request" / "pide presupuesto" / "pyydä tarjous". `numbersAsk` names Temporada. `pj_breakEven` and its
+  render are removed. `knowledge.ts` and the eval scenarios no longer use the old names.
+- **Still open, for the founder:** `apps/marketing/lib/offer.ts` still shows the 2026-10-05 **launch offer** (30
+  days with no commission and no fees, for beaches that join by 31 May 2027). Billing enforces it through
+  `@repo/data/promotion`. It was not changed: it is not plan-name copy, and removing it means changing the copy
+  and the billing together (the file says so). It conflicts with "no launch offer" for marketing copy.
+  Decide: keep it, or retire it in both places.
 
 ## Build plan (later runs)
 - Run 2: catalogue + `LEGACY_TIER_MAP`, migration A (expand), seed, `CommissionCapUsage` + stored `commissionAmount`,
