@@ -58,6 +58,13 @@ export const httpApi = createApi({
       }),
       transformResponse: (response: { availability: { itemId: string, available: boolean }[] }) => response
     }),
+    getDailyAvailability: builder.query({
+      query: ({ siteId, days }: { siteId: string; days: number }) => ({
+        url: `sites/${siteId}/daily-availability`,
+        params: { days },
+      }),
+      transformResponse: (response: { days: { date: string; available: number; total: number }[] }) => response
+    }),
     getReservationById: builder.query({
       query: ({ id }) => anonGetQuery('reservations', id, getAnonId()),
       transformResponse: (response: Reservation) => response
@@ -85,6 +92,7 @@ export const httpApi = createApi({
 export const { 
   useGetSitesByCoordsQuery,
   useGetAvailabilityBySiteAndTimeRangeQuery,
+  useGetDailyAvailabilityQuery,
   useGetReservationByIdQuery,
   useGetOrderByIdQuery,
   useGetRentalBookingByIdQuery,

@@ -24,7 +24,9 @@
  */
 
 import { describe, it, expect, beforeEach, afterAll } from 'vitest'
-import { getAvailability } from './availabilityService'
+import { getAvailability, getDailyAvailability } from './availabilityService'
+import { siteDayKey, siteDateBounds } from '@repo/data/site-day'
+import { RESERVATION_COMPLETE, RESERVATION_CANCELED } from '@repo/data/reservation-status'
 import { cleanDatabase, disconnectDatabase, prisma } from '@/app/test/setup'
 import { createTestUser, createTestSite, createTestInventoryItem } from '@/app/test/fixtures'
 import { pickFirstAvailablePair } from '@/app/sites/[id]/sunbed-preselection'
@@ -123,5 +125,67 @@ describe('getAvailability ordering', () => {
     const second = await getAvailability(site.id, from, to)
 
     expect(first.map((a) => a.itemId)).toEqual(second.map((a) => a.itemId))
+  })
+})
+
+describe('getDailyAvailability (mobile day strip)', () => {
+  const TZ = { timeZone: 'Europe/Madrid' }
+
+  function dayKey(offset: number): string {
+    const [y, m, d] = siteDayKey(TZ).split('-').map(Number)
+    return new Date(Date.UTC(y!, m! - 1, d! + offset)).toISOString().slice(0, 10)
+  }
+
+  it('returns one entry per venue civil day, starting today', async () => {
+    const { site } = await seedScrambledSite()
+
+    const days = await getDailyAvailability(site.id, 7)
+
+    expect(days.map((d) => d.date)).toEqual([0, 1, 2, 3, 4, 5, 6].map(dayKey))
+    expect(days.every((d) => d.total === SCRAMBLED.length && d.available === SCRAMBLED.length)).toBe(true)
+  })
+
+  it('counts a multi-day booking on every day it covers and no others', async () => {
+    const { user, site, items } = await seedScrambledSite()
+    // Seat A: days 1–2; seat B: day 2 only; a cancelled booking on day 4 must not block.
+    const span = (a: number, b: number) => ({
+      from: siteDateBounds(TZ, dayKey(a)).start,
+      to: siteDateBounds(TZ, dayKey(b)).end,
+    })
+    await prisma.reservation.create({
+      data: { userId: user.id, siteId: site.id, ...span(1, 2), status: RESERVATION_COMPLETE, items: { connect: { id: items[0]!.id } } },
+    })
+    await prisma.reservation.create({
+      data: { userId: user.id, siteId: site.id, ...span(2, 2), status: RESERVATION_COMPLETE, items: { connect: { id: items[1]!.id } } },
+    })
+    await prisma.reservation.create({
+      data: { userId: user.id, siteId: site.id, ...span(4, 4), status: RESERVATION_CANCELED, items: { connect: { id: items[2]!.id } } },
+    })
+
+    const days = await getDailyAvailability(site.id, 6)
+
+    expect(days.map((d) => d.available)).toEqual([5, 4, 3, 5, 5, 5])
+  })
+
+  it('agrees with a per-day getAvailability call for every day (same rule, one query)', async () => {
+    const { user, site, items } = await seedScrambledSite()
+    await prisma.reservation.create({
+      data: {
+        userId: user.id,
+        siteId: site.id,
+        from: siteDateBounds(TZ, dayKey(0)).start,
+        to: siteDateBounds(TZ, dayKey(3)).end,
+        status: 'complete',
+        items: { connect: [{ id: items[3]!.id }, { id: items[4]!.id }] },
+      },
+    })
+
+    const days = await getDailyAvailability(site.id, 5)
+
+    for (const day of days) {
+      const { start, end } = siteDateBounds(TZ, day.date)
+      const perDay = await getAvailability(site.id, start, end)
+      expect(day.available).toBe(perDay.filter((a) => a.available).length)
+    }
   })
 })

@@ -1,7 +1,7 @@
 import prisma from '@repo/data/PrismaCient'
 import { Prisma } from '@prisma/client'
 import { BLOCKING_STATUSES, OP_NO_SHOW, OP_DEPARTED } from '@repo/data/reservation-status'
-import { siteDayBounds } from '@repo/data/site-day'
+import { siteDayBounds, siteDayKey, siteDateBounds } from '@repo/data/site-day'
 
 /** Build the `SiteTimezone` shape `siteDayBounds` expects from a site row. */
 function siteTz(site: { timeZone?: string | null; locationLat?: string | null; locationLng?: string | null } | null) {
@@ -129,6 +129,52 @@ async function queryAvailability(
   return items.map((f) => {
     const periods = periodsByItem.get(f.itemId)
     return { itemId: f.itemId, available: !periods, periods: periods ?? [] }
+  })
+}
+
+export interface DayAvailability {
+  /** Venue civil date, `YYYY-MM-DD`. */
+  date: string
+  /** Active seats free for the whole civil day. */
+  available: number
+  /** Active seats at the venue. */
+  total: number
+}
+
+/** Add `n` days to a `YYYY-MM-DD` civil key — calendar math, no timezone involved. */
+function addCivilDays(key: string, n: number): string {
+  const [y, m, d] = key.split('-').map(Number)
+  return new Date(Date.UTC(y!, m! - 1, d! + n)).toISOString().slice(0, 10)
+}
+
+/**
+ * Free-seat counts for the next `days` venue civil days, starting today — the
+ * mobile day strip's data.
+ *
+ * ONE availability query over the whole window, then a per-day split in JS.
+ * This is exactly the per-day `getAvailability` answer, not an approximation:
+ * a reservation overlapping a day also overlaps the window that contains it,
+ * so the window query returns every period that could block that day, and the
+ * no-show/departed release does not depend on the queried window. The split
+ * reuses the rule's inclusive overlap test (`from <= dayEnd && to >= dayStart`).
+ * The integration test checks the counts against per-day `getAvailability` calls.
+ */
+export async function getDailyAvailability(siteId: string, days: number): Promise<DayAvailability[]> {
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { timeZone: true, locationLat: true, locationLng: true },
+  })
+  const tz = siteTz(site)
+  const todayKey = siteDayKey(tz)
+  const keys = Array.from({ length: days }, (_, i) => addCivilDays(todayKey, i))
+  const bounds = keys.map((key) => siteDateBounds(tz, key))
+
+  const seats = await queryAvailability(siteId, null, bounds[0]!.start, bounds[bounds.length - 1]!.end)
+
+  return keys.map((date, i) => {
+    const { start, end } = bounds[i]!
+    const blocked = seats.filter((s) => s.periods.some((p) => p.from <= end && p.to >= start)).length
+    return { date, available: seats.length - blocked, total: seats.length }
   })
 }
 
