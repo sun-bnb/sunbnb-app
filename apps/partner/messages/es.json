@@ -1755,6 +1755,23 @@
       "operatedBy": "Operado por {company}",
       "businessId": "CIF/NIF {id}",
       "vatId": "IVA {id}"
+    },
+    "publishedPlans": {
+      "subtitle": "La comisión es lo que pagas por cada venta. Un plan mensual la reduce y añade locales.",
+      "free": "Gratis",
+      "freeNote": "sin cuota mensual",
+      "perMonth": "/ mes",
+      "commissionLabel": "de comisión por cada compra a través de Sunbnb",
+      "oneVenue": "1 local",
+      "starterAll": "Reservas de hamacas, pedidos y alquileres",
+      "upToVenues": "Hasta {count} locales",
+      "everythingIn": "Todo lo de {plan}",
+      "offPlatform": "Cobro fuera de la plataforma",
+      "branded": "Página de reservas con tu marca",
+      "supportCommunity": "Soporte de la comunidad",
+      "supportPriority": "Soporte prioritario",
+      "supportDedicated": "Soporte dedicado",
+      "commissionBody": "{starter} %, {pro} % o {business} % según tu plan, sobre reservas de hamacas, comida y bebida, y alquileres vendidos a través de Sunbnb."
     }
   },
   "Info": {

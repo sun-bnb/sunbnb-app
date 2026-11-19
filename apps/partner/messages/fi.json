@@ -1755,6 +1755,23 @@
       "operatedBy": "Palvelusta vastaa {company}",
       "businessId": "Y-tunnus {id}",
       "vatId": "ALV-tunnus {id}"
+    },
+    "publishedPlans": {
+      "subtitle": "Provisio on se, mitä maksat jokaisesta myynnistä. Kuukausipaketti laskee sitä ja tuo lisää paikkoja.",
+      "free": "Ilmainen",
+      "freeNote": "ei kuukausimaksua",
+      "perMonth": "/ kk",
+      "commissionLabel": "provisio jokaisesta Sunbnb:n kautta tehdystä ostosta",
+      "oneVenue": "1 paikka",
+      "starterAll": "Tuolivaraukset, tilaukset ja vuokraus",
+      "upToVenues": "Enintään {count} paikkaa",
+      "everythingIn": "Kaikki {plan}-paketista",
+      "offPlatform": "Laskutus alustan ulkopuolella",
+      "branded": "Brändätty varaussivu",
+      "supportCommunity": "Yhteisötuki",
+      "supportPriority": "Etusijatuki",
+      "supportDedicated": "Oma tukihenkilö",
+      "commissionBody": "{starter} %, {pro} % tai {business} % paketista riippuen, Sunbnb:n kautta myydyistä tuolivarauksista, ruoasta ja juomasta sekä vuokrista."
     }
   },
   "Info": {

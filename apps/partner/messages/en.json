@@ -1755,6 +1755,23 @@
       "operatedBy": "Operated by {company}",
       "businessId": "Business ID {id}",
       "vatId": "VAT {id}"
+    },
+    "publishedPlans": {
+      "subtitle": "The commission is what you pay on each sale. A monthly plan lowers it and adds venues.",
+      "free": "Free",
+      "freeNote": "no monthly fee",
+      "perMonth": "/ month",
+      "commissionLabel": "commission on each purchase through Sunbnb",
+      "oneVenue": "1 venue",
+      "starterAll": "Sunbed bookings, orders and rentals",
+      "upToVenues": "Up to {count} venues",
+      "everythingIn": "Everything in {plan}",
+      "offPlatform": "Off-platform billing",
+      "branded": "Branded booking page",
+      "supportCommunity": "Community support",
+      "supportPriority": "Priority support",
+      "supportDedicated": "Dedicated support",
+      "commissionBody": "{starter}%, {pro}% or {business}% depending on your plan, on sunbed bookings, food and drink, and rentals sold through Sunbnb."
     }
   },
   "Info": {
