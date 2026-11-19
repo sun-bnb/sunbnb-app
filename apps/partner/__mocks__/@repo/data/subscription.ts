@@ -32,6 +32,16 @@ export const SUBSCRIPTION_FEATURES = {
     label: 'Off-platform billing',
     description: 'Allow availability-only (unpaid) sites',
   },
+  ONLINE_PAYMENTS: {
+    key: 'ONLINE_PAYMENTS',
+    label: 'Online card payments',
+    description: 'Guests can pay sunbed bookings and rentals online by card',
+  },
+  FOOD_AND_BEVERAGE: {
+    key: 'FOOD_AND_BEVERAGE',
+    label: 'Food and drink ordering',
+    description: 'Menu, orders, tabs and table deposits',
+  },
 } as const
 export const TIER_FEATURE_DEFAULTS = {
   GRATIS: { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: false, FOOD_AND_BEVERAGE: false },
