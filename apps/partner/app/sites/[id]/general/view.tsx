@@ -4,7 +4,7 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { PRICING_TIERS, PRICING_TIER_ORDER } from '@repo/data/pricing-tiers'
+import PlanFeeNotes from '../../plan-fee-notes'
 import {
   APIProvider,
   ControlPosition,
@@ -143,15 +143,6 @@ function PriceBreakdown({
           <span className="text-red-500">&minus;{feeAmount.toFixed(2)} &euro;</span>
         </div>
       ) : null}
-      {feeAmount > 0 && !serviceFee?.accountId && !serviceFee?.siteId && (() => {
-        const tierIdx = PRICING_TIER_ORDER.indexOf(tier as typeof PRICING_TIER_ORDER[number])
-        const nextTier = tierIdx >= 0 && tierIdx < PRICING_TIER_ORDER.length - 1 ? PRICING_TIER_ORDER[tierIdx + 1] : null
-        return nextTier ? (
-          <div className="text-[11px] text-indigo-500 mb-1">
-            {t('upgradeTier', { tier: PRICING_TIERS[nextTier].name, fee: `${PRICING_TIERS[nextTier].commissionPercent}%` })}
-          </div>
-        ) : null
-      })()}
       <div className="border-t border-gray-200 my-1.5" />
       <div className="flex justify-between font-medium text-gray-800 mb-1">
         <span>{t('youReceive')}</span>
@@ -549,7 +540,7 @@ export default function GeneralView() {
   }
 
   const isPaid = siteType === 'paid'
-  const tier = (site as any).subscriptionTier ?? 'STARTER'
+  const tier = (site as any).subscriptionTier ?? 'GRATIS'
   const canUseAvailabilityOnly = ((site as any).subscriptionFeatures?.OFF_PLATFORM_BILLING ?? false) as boolean
 
   return (
@@ -725,7 +716,7 @@ export default function GeneralView() {
               {t('offPlatformBillingDesc')}
             </p>
             {!canUseAvailabilityOnly && (
-              <p className="text-xs text-amber-600 mt-1.5 font-medium">{t('proOrBusinessRequired')}</p>
+              <p className="text-xs text-amber-600 mt-1.5 font-medium">{t('notInPlan')}</p>
             )}
           </button>
         </div>
@@ -761,6 +752,7 @@ export default function GeneralView() {
             />
           </div>
           <PriceBreakdown price={price} vat={vat} serviceFees={site.serviceFees} baseServiceFees={(site as any).baseServiceFees} tier={tier} />
+          <PlanFeeNotes tier={tier} />
           {effectiveProvider === 'mollie' && <MolliePaymentExample price={price} vat={vat} serviceFees={site.serviceFees} baseServiceFees={(site as any).baseServiceFees} />}
         </div>
       )}

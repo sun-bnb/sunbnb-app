@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { verifySiteAccess, verifySiteAdmin } from '@/lib/auth-helpers'
 import prisma from '@repo/data/PrismaCient'
+import { checkHamacaLimit, hamacaLimitMessage } from '@repo/data/plan-gate'
 import {
   reserveWithConflictGuard,
   moveReservationWithConflictGuard,
@@ -2992,6 +2993,10 @@ export async function createPoolSeat(siteId: string, parcel: number, accessKey?:
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
+  // CR-002: plan hamaca limit (a pool seat is one InventoryItem row = one hamaca).
+  const hamacaLimit = await checkHamacaLimit(siteId, 1)
+  if (!hamacaLimit.allowed) return { status: 'error', errors: [hamacaLimitMessage(hamacaLimit)] }
+
   // Find the highest existing pool number in this parcel's pool band
   const poolNum = await nextPoolNumber(siteId, parcel)
   if ('error' in poolNum) {
@@ -3049,6 +3054,10 @@ export async function addSeatToGroup(siteId: string, itemId: string, accessKey?:
   if (anchor.status === 'pool' && !anchor.sunbedGroupId) {
     return { status: 'error', errors: ['Cannot add a group seat to a free pool seat'] }
   }
+
+  // CR-002: plan hamaca limit (a pool seat is one InventoryItem row = one hamaca).
+  const hamacaLimit = await checkHamacaLimit(siteId, 1)
+  if (!hamacaLimit.allowed) return { status: 'error', errors: [hamacaLimitMessage(hamacaLimit)] }
 
   // Compute next pool number before entering the transaction (avoids holding the
   // transaction open while doing a findMany that isn't write-conflicting anyway).

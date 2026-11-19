@@ -16,6 +16,7 @@
  */
 
 import prisma from '../index'
+import { capSourceKey } from './commission-cap'
 import {
   loadFeeContext,
   loadTabFeeContext,
@@ -23,6 +24,8 @@ import {
   chargeableServiceFee,
   resolveServiceFee,
   serviceFeeForUnits,
+  cappedCommission,
+  rentalCapSourceKey,
   round,
 } from './payment'
 import {
@@ -31,6 +34,7 @@ import {
 } from './reservation-payment'
 import { markRentalCheckoutStarted, markRentalCheckoutFailed } from './rental-payment'
 import { getOnlineAdapter } from './payment-providers'
+import { checkCheckoutAllowed } from './plan-gate'
 import {
   ProviderNotReadyError,
   ProviderNotWiredError,
@@ -76,6 +80,7 @@ export type CheckoutFailure = {
     | 'provider_unavailable'
     | 'provider_error'
     | 'no_checkout'
+    | 'plan_gated'
 }
 
 type ResolveResult =
@@ -107,15 +112,9 @@ interface FeeCtxLike {
   tier: Parameters<typeof resolveServiceFee>[4]
 }
 
-/** The three-tier cascade + launch-offer waiver, identical to every Mollie path. */
-function commissionFor(
-  ctx: FeeCtxLike,
-  serviceCode: string,
-  amount: number,
-  bookingCreatedAt: Date,
-  units = 1,
-): number {
-  const matchedFee = chargeableServiceFee(
+/** The cascade-resolved fee after the launch-offer waiver, identical to every Mollie path. */
+function matchedFeeFor(ctx: FeeCtxLike, serviceCode: string, bookingCreatedAt: Date) {
+  return chargeableServiceFee(
     resolveServiceFee(
       ctx.siteFees,
       ctx.partnerAccount?.serviceFees ?? [],
@@ -126,8 +125,43 @@ function commissionFor(
     ctx.partnerAccount,
     bookingCreatedAt,
   )
+}
+
+/** The three-tier cascade + launch-offer waiver, identical to every Mollie path (uncapped codes). */
+function commissionFor(
+  ctx: FeeCtxLike,
+  serviceCode: string,
+  amount: number,
+  bookingCreatedAt: Date,
+  units = 1,
+): number {
   // Commission rule: serviceFeeForUnits (fixed per unit, percentage once on the total).
-  return serviceFeeForUnits(matchedFee, { total: amount, units })
+  return serviceFeeForUnits(matchedFeeFor(ctx, serviceCode, bookingCreatedAt), { total: amount, units })
+}
+
+/**
+ * Sunbed / rental commission with the CR-002 monthly cap: decided and reserved here (Stripe
+ * `application_fee_amount`, Viva online `isvAmount`), read back by `processConfirmed*` under the
+ * same `sourceKey`, so collected === invoiced.
+ */
+async function cappedCommissionFor(
+  ctx: FeeCtxLike,
+  siteId: string,
+  serviceCode: 'sunbed-rental' | 'equipment-rental',
+  amount: number,
+  bookingCreatedAt: Date,
+  units: number,
+  sourceKey: string,
+): Promise<number> {
+  const fee = matchedFeeFor(ctx, serviceCode, bookingCreatedAt)
+  return cappedCommission('reserve', {
+    siteId,
+    serviceCode,
+    fee,
+    partnerAccount: ctx.partnerAccount as Parameters<typeof cappedCommission>[1]['partnerAccount'],
+    uncapped: serviceFeeForUnits(fee, { total: amount, units }),
+    sourceKey,
+  })
 }
 
 interface PartnerLike {
@@ -188,7 +222,10 @@ export async function resolveCheckoutIntent(input: CheckoutInput): Promise<Resol
           amount,
           currency: 'EUR',
           serviceCode: 'sunbed-rental',
-          applicationFee: commissionFor(feeCtxFromSite(ctx), 'sunbed-rental', amount, reservation.createdAt, reservation._count.items),
+          applicationFee: await cappedCommissionFor(
+            feeCtxFromSite(ctx), reservation.siteId, 'sunbed-rental', amount, reservation.createdAt,
+            reservation._count.items, capSourceKey('reservation', reservation.id),
+          ),
           description: `Reservation ${reservation.id}`,
           meta: withExtra(
             { type: 'reservation', entityId: reservation.id, siteId: reservation.siteId },
@@ -229,7 +266,10 @@ export async function resolveCheckoutIntent(input: CheckoutInput): Promise<Resol
           amount,
           currency: 'EUR',
           serviceCode: 'equipment-rental',
-          applicationFee: commissionFor(feeCtxFromSite(ctx), 'equipment-rental', amount, first.createdAt, bookings.length),
+          applicationFee: await cappedCommissionFor(
+            feeCtxFromSite(ctx), first.siteId, 'equipment-rental', amount, first.createdAt,
+            bookings.length, rentalCapSourceKey(bookings.map((b) => b.id)),
+          ),
           description: `Equipment rental ${first.id}`,
           meta: withExtra(
             { type: 'rental-booking', entityId: first.id, bookingIds, siteId: first.siteId },
@@ -430,6 +470,11 @@ async function recordFailed(input: CheckoutInput, intent: CheckoutIntent) {
 export async function createOnlineCheckout(
   input: CheckoutInput,
 ): Promise<{ status: 'ok'; checkoutUrl: string; paymentRef: string } | CheckoutFailure> {
+  // CR-002 plan gate, BEFORE resolve (resolve reserves commission-cap headroom).
+  const gate = await checkCheckoutAllowed(input)
+  if (gate === 'not_found') return fail('not_found', 'Not found')
+  if (!gate.allowed) return fail('plan_gated', gate.message)
+
   const resolved = await resolveCheckoutIntent(input)
   if (resolved.status === 'error') return resolved
   const { intent, account } = resolved

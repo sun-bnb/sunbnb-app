@@ -76,7 +76,7 @@ export const moneyProvider: InspectProvider = {
       ok: true,
       model: 'The guest pays the listed price only. The PARTNER invoice is that gross price; the platform commission is a separate invoice billed to the partner (never added to the guest total, never netted from the partner invoice). All prices are VAT-inclusive.',
       cascade: 'site override -> partner account override -> platform settings (the plan-specific fee first, then the default). A launch-offer waiver can zero the charged commission.',
-      plan: fc.tier ?? 'STARTER',
+      plan: fc.tier ?? 'GRATIS',
       services,
       launchOffer: charged || !sunbedFee ? 'not waiving commission' : 'commission waived by the launch offer for bookings in its window',
       vat: {

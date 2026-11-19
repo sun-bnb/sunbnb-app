@@ -182,7 +182,7 @@ describe('submitForm', () => {
     vi.mocked(prisma.partnerAccount.create).mockResolvedValue({} as any)
     vi.mocked(prisma.subscriptionPlan.findUnique).mockResolvedValue({
       id: 'plan-starter',
-      tier: 'STARTER',
+      tier: 'GRATIS',
     } as any)
     vi.mocked(prisma.subscription.create).mockResolvedValue({} as any)
 

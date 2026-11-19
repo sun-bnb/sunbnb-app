@@ -126,18 +126,18 @@ describe('resolveServiceFee', () => {
   })
 
   it('tier-specific platform fee preferred over null-tier', () => {
-    const tierFee = makeFee({ id: 'tier', settingsId: 'set-1', subscriptionTier: 'STARTER' })
+    const tierFee = makeFee({ id: 'tier', settingsId: 'set-1', subscriptionTier: 'GRATIS' })
     const defaultFee = makeFee({ id: 'default', settingsId: 'set-1', subscriptionTier: null })
 
-    const result = resolveServiceFee([], [], [tierFee, defaultFee], 'sunbed-rental', 'STARTER' as any)
+    const result = resolveServiceFee([], [], [tierFee, defaultFee], 'sunbed-rental', 'GRATIS' as any)
     expect(result?.id).toBe('tier')
   })
 
   it('falls back to null-tier platform fee when tier does not match', () => {
-    const tierFee = makeFee({ id: 'tier', settingsId: 'set-1', subscriptionTier: 'PRO' })
+    const tierFee = makeFee({ id: 'tier', settingsId: 'set-1', subscriptionTier: 'TEMPORADA' })
     const defaultFee = makeFee({ id: 'default', settingsId: 'set-1', subscriptionTier: null })
 
-    const result = resolveServiceFee([], [], [tierFee, defaultFee], 'sunbed-rental', 'STARTER' as any)
+    const result = resolveServiceFee([], [], [tierFee, defaultFee], 'sunbed-rental', 'GRATIS' as any)
     expect(result?.id).toBe('default')
   })
 
@@ -173,19 +173,19 @@ describe('resolveServiceFee', () => {
     const platformFee = makeFee({
       id: 'platform-tier',
       settingsId: 'set-1',
-      subscriptionTier: 'STARTER' as any,
+      subscriptionTier: 'GRATIS' as any,
       chargeType: 'percentage',
       percentage: 5,
       feeAmount: null,
     })
 
-    // Account fee wins for STARTER tier
-    const resultStarter = resolveServiceFee([], [accountFee], [platformFee], 'sunbed-rental', 'STARTER' as any)
+    // Account fee wins for GRATIS tier
+    const resultStarter = resolveServiceFee([], [accountFee], [platformFee], 'sunbed-rental', 'GRATIS' as any)
     expect(resultStarter?.id).toBe('account-waiver')
     expect(resultStarter?.percentage).toBe(0)
 
     // Account fee also wins when caller passes PRO tier
-    const resultPro = resolveServiceFee([], [accountFee], [platformFee], 'sunbed-rental', 'PRO' as any)
+    const resultPro = resolveServiceFee([], [accountFee], [platformFee], 'sunbed-rental', 'TEMPORADA' as any)
     expect(resultPro?.id).toBe('account-waiver')
     expect(resultPro?.percentage).toBe(0)
   })

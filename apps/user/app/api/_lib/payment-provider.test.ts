@@ -34,6 +34,9 @@ vi.mock('@repo/data/reservation-payment', () => ({
   refundReservationVivaPayment: vi.fn(),
 }))
 
+const { mockReverseCap } = vi.hoisted(() => ({ mockReverseCap: vi.fn().mockResolvedValue(0) }))
+vi.mock('@repo/data/commission-cap', () => ({ reverseCapForRefundedPayment: mockReverseCap }))
+
 import prisma from '@repo/data/PrismaCient'
 import { refundReservationVivaPayment } from '@repo/data/reservation-payment'
 import {
@@ -255,5 +258,19 @@ describe('Stripe branches', () => {
     mockAcctSite.mockResolvedValue(null)
     await expect(issueRefund('stripe_cs_cs_1')).rejects.toThrow()
     expect(mockRefundPI).not.toHaveBeenCalled()
+  })
+})
+
+describe('issueRefund — commission-cap reversal (CR-002, T-149)', () => {
+  it('hands every successful refund to the cap ledger, and none that failed', async () => {
+    mockReverseCap.mockClear()
+    vi.mocked(refundReservationVivaPayment).mockResolvedValue({ status: 'ok' })
+    await issueRefund('viva_s1', { reservationId: 'res-1' })
+    expect(mockReverseCap).toHaveBeenCalledWith('viva_s1')
+
+    mockReverseCap.mockClear()
+    vi.mocked(refundReservationVivaPayment).mockResolvedValue({ status: 'error', error: 'declined' })
+    await expect(issueRefund('viva_s1', { reservationId: 'res-1' })).rejects.toThrow('declined')
+    expect(mockReverseCap).not.toHaveBeenCalled()
   })
 })

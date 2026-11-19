@@ -174,7 +174,7 @@ describe('saveGeneral', () => {
     // type:'unpaid' requires the off-platform-billing entitlement; grant it so the
     // update proceeds (this test exercises price-null logic, not the gate).
     vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValueOnce({
-      tier: 'BUSINESS', name: 'Business', monthlyPrice: 0, maxSites: 999,
+      tier: 'GRUPO', name: 'Business', monthlyPrice: 0, maxSites: 999,
       isCustom: false, features: { OFF_PLATFORM_BILLING: true },
     } as any)
 
@@ -608,7 +608,7 @@ describe('saveGeneral — off-platform billing entitlement', () => {
   it('rejects type:unpaid when OFF_PLATFORM_BILLING feature is false', async () => {
     authorizeOwner()
     mockGetEffective.mockResolvedValue({
-      tier: 'STARTER',
+      tier: 'GRATIS',
       name: 'Starter',
       monthlyPrice: 0,
       maxSites: 1,
@@ -619,14 +619,14 @@ describe('saveGeneral — off-platform billing entitlement', () => {
     const res = await saveGeneral(baseInput)
 
     expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Off-platform billing')
+    expect(res.errors?.[0]).toContain('Pay-on-site mode is turned off')
     expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
   })
 
   it('allows type:unpaid when OFF_PLATFORM_BILLING feature is true', async () => {
     authorizeOwner()
     mockGetEffective.mockResolvedValue({
-      tier: 'PRO',
+      tier: 'TEMPORADA',
       name: 'Pro',
       monthlyPrice: 49,
       maxSites: 5,
@@ -644,17 +644,46 @@ describe('saveGeneral — off-platform billing entitlement', () => {
     )
   })
 
-  it('allows type:paid regardless of OFF_PLATFORM_BILLING feature', async () => {
+  it('allows type:paid when the plan includes ONLINE_PAYMENTS', async () => {
     authorizeOwner()
-    // Feature is false but type is 'paid' — should not call entitlement check logic
+    mockGetEffective.mockResolvedValue({
+      features: { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: true, FOOD_AND_BEVERAGE: true },
+    } as any)
     vi.mocked(prisma.site.update).mockResolvedValue({} as any)
     vi.mocked(prisma.$executeRaw).mockResolvedValue(1 as any)
 
     const res = await saveGeneral({ ...baseInput, type: 'paid', price: '20', vat: '21' })
 
     expect(res.status).toBe('ok')
-    // getEffectiveSubscriptionForUser must NOT have been called for type:paid
-    expect(mockGetEffective).not.toHaveBeenCalled()
+  })
+
+  it('Gratis (no ONLINE_PAYMENTS) cannot switch a site to type:paid', async () => {
+    authorizeOwner()
+    mockGetEffective.mockResolvedValue({
+      features: { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: false, FOOD_AND_BEVERAGE: false },
+    } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ type: 'unpaid', userId: 'owner-1' } as any)
+
+    const res = await saveGeneral({ ...baseInput, type: 'paid', price: '20', vat: '21' })
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/upgrade/i)
+    expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
+  })
+
+  it('Gratis CAN set type:unpaid', async () => {
+    authorizeOwner()
+    mockGetEffective.mockResolvedValue({
+      features: { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: false, FOOD_AND_BEVERAGE: false },
+    } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ type: 'paid' } as any)
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.$executeRaw).mockResolvedValue(1 as any)
+
+    const res = await saveGeneral({ ...baseInput, type: 'unpaid' })
+
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.site.update)).toHaveBeenCalled()
   })
 
   it('allows editing an already-unpaid site without the entitlement', async () => {
@@ -682,7 +711,7 @@ describe('submitForm — off-platform billing entitlement', () => {
   it('rejects type:unpaid when OFF_PLATFORM_BILLING feature is false', async () => {
     mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
     mockGetEffective.mockResolvedValue({
-      tier: 'STARTER',
+      tier: 'GRATIS',
       name: 'Starter',
       monthlyPrice: 0,
       maxSites: 1,
@@ -699,14 +728,14 @@ describe('submitForm — off-platform billing entitlement', () => {
     const res = await submitForm({ status: '' }, formData)
 
     expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Off-platform billing')
+    expect(res.errors?.[0]).toContain('Pay-on-site mode is turned off')
     expect(vi.mocked(prisma.site.create)).not.toHaveBeenCalled()
   })
 
   it('allows type:unpaid when OFF_PLATFORM_BILLING feature is true', async () => {
     mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
     mockGetEffective.mockResolvedValue({
-      tier: 'PRO',
+      tier: 'TEMPORADA',
       name: 'Pro',
       monthlyPrice: 49,
       maxSites: 5,

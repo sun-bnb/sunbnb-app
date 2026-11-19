@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { useTranslations } from 'next-intl'
-import { PRICING_TIERS, PRICING_TIER_ORDER } from '@repo/data/pricing-tiers'
+import PlanFeeNotes from '../plan-fee-notes'
 import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
@@ -69,22 +69,18 @@ function WizardPriceBreakdown({
   const partnerBase = vatRate > 0 ? round(partnerGross / (1 + vatRate / 100)) : partnerGross
   const partnerVat = round(partnerGross - partnerBase)
 
-  // Find next tier with a better fee
-  const tierIdx = PRICING_TIER_ORDER.indexOf(tier as typeof PRICING_TIER_ORDER[number])
-  const nextTier = tierIdx >= 0 && tierIdx < PRICING_TIER_ORDER.length - 1 ? PRICING_TIER_ORDER[tierIdx + 1] : null
-
   return (
     <div className="mt-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5 text-xs">
       <div className="flex justify-between text-gray-500 mb-1">
-        <span>Customer pays</span>
+        <span>{t('customerPays')}</span>
         <span>{priceNum.toFixed(2)} &euro;</span>
       </div>
       {showCustomFee ? (
         <div className="flex justify-between mb-1">
           <span className="text-gray-500">
-            Service fee
+            {t('serviceFee')}
             <span className="ml-1.5 inline-block rounded-sm bg-indigo-50 px-1 text-[10px] font-medium text-indigo-600 align-middle">
-              special rate
+              {t('customRate')}
             </span>
           </span>
           <span className="text-right leading-tight">
@@ -99,28 +95,20 @@ function WizardPriceBreakdown({
       ) : feeAmount > 0 ? (
         <div className="flex justify-between text-gray-500 mb-1">
           <span>
-            Service fee
+            {t('serviceFee')}
             {serviceFee?.chargeType === 'fixed' ? '' : ` (${(serviceFee?.percentage ?? 0).toFixed(0)}%)`}
           </span>
           <span className="text-red-500">&minus;{feeAmount.toFixed(2)} &euro;</span>
         </div>
       ) : null}
-      {feeAmount > 0 && nextTier && !serviceFee?.overridden && (
-        <div className="text-[11px] text-indigo-500 mb-1">
-          {t('upgradeTier', {
-            tier: PRICING_TIERS[nextTier].name,
-            fee: `${PRICING_TIERS[nextTier].commissionPercent}%`,
-          })}
-        </div>
-      )}
       <div className="border-t border-gray-200 my-1.5" />
       <div className="flex justify-between font-medium text-gray-800 mb-1">
-        <span>You receive</span>
+        <span>{t('youReceive')}</span>
         <span>{partnerGross.toFixed(2)} &euro;</span>
       </div>
       {vatRate > 0 && (
         <div className="flex justify-between text-gray-400">
-          <span>incl. VAT {vatRate}%</span>
+          <span>{t('inclVat', { rate: vatRate })}</span>
           <span>{partnerVat.toFixed(2)} &euro;</span>
         </div>
       )}
@@ -143,7 +131,7 @@ export default function StepDetails({
   baseServiceFee?: WizardFeeData | null
   features?: Record<string, boolean> | null
 }) {
-
+  const t = useTranslations('SiteGeneral')
   const isPaid = data.type === 'paid'
   const canUseAvailabilityOnly = features?.OFF_PLATFORM_BILLING ?? false
 
@@ -262,7 +250,7 @@ export default function StepDetails({
               No payment collected on the platform. Ideal when billing is handled externally, e.g. hotel guests.
             </p>
             {!canUseAvailabilityOnly && (
-              <p className="text-xs text-amber-600 mt-1.5 font-medium">Pro or Business plan required</p>
+              <p className="text-xs text-amber-600 mt-1.5 font-medium">{t('notInPlan')}</p>
             )}
           </button>
         </div>
@@ -299,6 +287,7 @@ export default function StepDetails({
             baseServiceFee={baseServiceFee}
             tier={tier}
           />
+          <PlanFeeNotes tier={tier} />
         </>
       )}
 

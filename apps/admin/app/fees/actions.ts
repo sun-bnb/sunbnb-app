@@ -63,7 +63,7 @@ export async function saveServiceFee(input: {
     settingsId: input.settingsId.trim(),
     siteId: input.siteId?.trim() || null,
     accountId: input.accountId?.trim() || null,
-    subscriptionTier: (input.subscriptionTier as 'STARTER' | 'PRO' | 'BUSINESS' | undefined) || null,
+    subscriptionTier: (input.subscriptionTier as 'GRATIS' | 'TEMPORADA' | 'GRUPO' | undefined) || null,
     chargeType: input.chargeType.trim(),
     feeAmount: input.feeAmount ?? null,
     percentage: input.percentage ?? null,

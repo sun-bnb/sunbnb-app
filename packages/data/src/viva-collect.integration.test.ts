@@ -25,6 +25,7 @@ import { applyTransition } from './reservation-machine-apply'
 import { getReservationPaymentStatus } from './reservation-payment'
 import { siteDayBounds } from './site-day'
 import { stubState, vivaRefFromSession, getVivaClient } from './viva'
+import { capMonthKey, CAP_ENTRY_STATUS } from './commission-cap'
 
 const { createSaleSpy } = vi.hoisted(() => ({ createSaleSpy: vi.fn() }))
 
@@ -55,6 +56,7 @@ let terminal: Awaited<ReturnType<typeof createTestVivaTerminal>>
 
 beforeEach(async () => {
   await cleanDatabase()
+  await prisma.commissionCapEntry.deleteMany({})
   resetCounter()
   createSaleSpy.mockClear()
   stubState.reset()
@@ -93,7 +95,7 @@ async function walkIn(n: number) {
 }
 
 describe('collect.start card-present (Viva)', () => {
-  it('writes a viva_ ref + processing, and sends the sunbed-rental cascade fee (fixed default) in cents', async () => {
+  it('writes a viva_ ref + processing, and sends an ISV fee of 0 (no Sunbnb commission on card at the venue, CR-002 M-68)', async () => {
     const { reservation, amount } = await walkIn(1)
     const result = await applyTransition(reservation.id, 'collect.start', {
       collect: { method: 'card', terminalId: terminal.terminalId },
@@ -120,24 +122,36 @@ describe('collect.start card-present (Viva)', () => {
     expect(req.terminalId).toBe(terminal.terminalId)
     expect(req.cashRegisterId).toBe(terminal.cashRegisterId)
     expect(req.isvDetails.terminalMerchantId).toBe('merchant_1')
-    expect(req.isvDetails.amount).toBe(100) // default bootstrap fee: fixed €1.00 → 100 cents
+    expect(req.isvDetails.amount).toBe(0) // card at the venue: no commission, whatever the cascade says
+    // Nothing reserved against the CR-002 monthly cap.
+    expect(await prisma.commissionCapEntry.count({ where: { siteId: site.id } })).toBe(0)
   })
 
-  it('fee-guard failure (fee >= amount) reverts to cash, no viva ref written', async () => {
+  it('even a 150% site fee takes no commission on the terminal: the sale goes out with ISV fee 0', async () => {
     const settings = await createTestSettings()
-    // Site-level override: a 150% fee exceeds the sale amount — assertValidIsvFee rejects it.
     await createTestServiceFee(settings.id, { siteId: site.id, chargeType: 'percentage', percentage: 150 })
 
     const { reservation } = await walkIn(1)
     const result = await applyTransition(reservation.id, 'collect.start', {
       collect: { method: 'card', terminalId: terminal.terminalId },
     })
-    expect(result.outcome).toBe('effect-failed')
-    if (result.outcome === 'effect-failed') expect(result.effect).toBe('vivaSale')
+    expect(result.outcome).toBe('applied')
+    const req = createSaleSpy.mock.calls[0]![0] as { isvDetails: { amount: number } }
+    expect(req.isvDetails.amount).toBe(0)
+    expect(await prisma.commissionCapEntry.count({ where: { siteId: site.id } })).toBe(0)
+  })
 
+  it('a site already at its monthly cap can still take a card at the venue (the cap refusal is gone)', async () => {
+    await prisma.commissionCapEntry.create({
+      data: { siteId: site.id, month: capMonthKey(new Date()), sourceKey: 'reservation:seed-cap', uncappedAmount: 199, amount: 199, status: CAP_ENTRY_STATUS.TAKEN },
+    })
+    const { reservation } = await walkIn(1)
+    const result = await applyTransition(reservation.id, 'collect.start', {
+      collect: { method: 'card', terminalId: terminal.terminalId },
+    })
+    expect(result.outcome).toBe('applied')
     const after = await prisma.reservation.findUniqueOrThrow({ where: { id: reservation.id } })
-    expect(after.status).toBe('paid-in-cash')
-    expect(after.paymentRef).toBeNull()
+    expect(after.paymentRef).toMatch(/^viva_/)
   })
 
   it('missing terminalId ⇒ effect-failed, reservation stays cash', async () => {
@@ -220,7 +234,9 @@ describe('collect.abandon card-present (Viva)', () => {
     const after = await prisma.reservation.findUniqueOrThrow({ where: { id: reservation.id } })
     expect(after.status).toBe('complete')
     expect(after.operationalStatus).toBe('walked-in')
-    expect(await prisma.invoice.count({ where: { reservationId: reservation.id } })).toBeGreaterThanOrEqual(1)
+    // PARTNER receipt only: ISV fee 0 collected === 0 commission invoiced (no PLATFORM invoice).
+    expect(await prisma.invoice.count({ where: { reservationId: reservation.id, issuerType: 'PARTNER' } })).toBe(1)
+    expect(await prisma.invoice.count({ where: { reservationId: reservation.id, issuerType: 'PLATFORM' } })).toBe(0)
   })
 
   it('abandon while the abort cannot be resolved (ambiguous cash register) ⇒ stays processing, never reverts (the deliberate divergence)', async () => {

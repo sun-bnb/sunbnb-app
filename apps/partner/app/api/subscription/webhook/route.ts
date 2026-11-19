@@ -5,7 +5,7 @@
  * Handles:
  * - customer.subscription.created  → sync new subscription
  * - customer.subscription.updated  → sync plan changes, status changes
- * - customer.subscription.deleted  → downgrade to STARTER
+ * - customer.subscription.deleted  → clear the Stripe link, keep the plan (CR-002)
  * - invoice.payment_failed         → mark subscription as PAST_DUE
  *
  * Setup:

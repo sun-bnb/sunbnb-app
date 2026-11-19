@@ -153,8 +153,10 @@ export interface VivaClient {
 
 /**
  * Thrown by `createSale` (both the HTTP client and the stub) before any
- * network/store write when the ISV fee is non-positive or would meet/exceed
- * the sale amount. Viva declines a payment whose fee is ≥ the sale — we refuse
+ * network/store write when the ISV fee is negative or would meet/exceed
+ * the sale amount. A ZERO fee is allowed: card at the venue carries no
+ * Sunbnb commission (CR-002, M-68); whether Viva itself accepts
+ * `isvDetails.amount: 0` is unconfirmed (track 024 Q2/Q3). Viva declines a payment whose fee is ≥ the sale — we refuse
  * client-side first rather than spending a round trip (and a customer's card
  * tap) on a request Viva will reject.
  */
@@ -164,7 +166,7 @@ export class VivaFeeGuardError extends Error {
     public readonly isvFeeAmount: number,
   ) {
     super(
-      `Viva ISV fee guard: isvDetails.amount (${isvFeeAmount}) must be > 0 and < amount (${amount})`,
+      `Viva ISV fee guard: isvDetails.amount (${isvFeeAmount}) must be >= 0 and < amount (${amount})`,
     )
     this.name = 'VivaFeeGuardError'
   }
@@ -175,7 +177,7 @@ export class VivaFeeGuardError extends Error {
  * one place, one test surface. Both amounts are integer cents.
  */
 export function assertValidIsvFee(amount: number, isvFeeAmount: number): void {
-  if (isvFeeAmount <= 0 || isvFeeAmount >= amount) {
+  if (isvFeeAmount < 0 || isvFeeAmount >= amount) {
     throw new VivaFeeGuardError(amount, isvFeeAmount)
   }
 }

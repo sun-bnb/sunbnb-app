@@ -7,6 +7,8 @@
     "./auth": "./src/auth.ts",
     "./payment": "./src/payment.ts",
     "./subscription": "./src/subscription.ts",
+    "./plan-gate": "./src/plan-gate.ts",
+    "./commission-cap": "./src/commission-cap.ts",
     "./TextField": "./src/TextField.tsx",
     "./button": "./src/button.tsx",
     "./card": "./src/card.tsx",
@@ -110,6 +112,9 @@
       ],
       "subscription": [
         "./src/subscription.ts"
+      ],
+      "commission-cap": [
+        "./src/commission-cap.ts"
       ],
       "TextField": [
         "./src/TextField.tsx"

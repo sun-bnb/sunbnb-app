@@ -6,10 +6,35 @@ datasource db {
   provider = "postgresql"
 }
 
+/// CR-002 plans. Stored under the legacy labels via @map (no enum DDL, so clients already
+/// deployed on the shared TEST DB keep reading the same values). Renaming the stored labels
+/// (ALTER TYPE ... RENAME VALUE) is optional later cleanup and must ship with its code.
 enum SubscriptionTier {
-  STARTER
-  PRO
-  BUSINESS
+  GRATIS    @map("STARTER")
+  TEMPORADA @map("PRO")
+  GRUPO     @map("BUSINESS")
+}
+
+/// CR-002 monthly commission cap ledger. One row per payable (sourceKey), counted against
+/// (siteId, month). month = Europe/Madrid calendar month the payment was CREATED in (M-65).
+/// The amount is decided once, at charge creation, under a pg_advisory_xact_lock on
+/// (site, month), and the PLATFORM invoice reads it back, so collected === invoiced.
+/// status: 'reserved' (charge created) | 'taken' (invoiced) | 'released' (failed / expired).
+/// Usage = sum(amount) of reserved + taken rows. Refunds that reverse commission lower amount.
+model CommissionCapEntry {
+  id             String   @id @default(cuid())
+  siteId         String   @map("site_id")
+  month          String
+  sourceKey      String   @unique @map("source_key")
+  uncappedAmount Float    @map("uncapped_amount")
+  amount         Float
+  status         String   @default("reserved")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  site           Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, month])
+  @@map("commission_cap_entry")
 }
 
 enum SubscriptionStatus {
@@ -19,16 +44,20 @@ enum SubscriptionStatus {
 }
 
 model SubscriptionPlan {
-  id              String           @id @default(cuid())
-  tier            SubscriptionTier @unique
-  name            String
-  monthlyPrice    Float            @map("monthly_price")
-  maxSites        Int              @map("max_sites")
-  stripeProductId String?          @map("stripe_product_id")
-  stripePriceId   String?          @map("stripe_price_id")
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  subscriptions   Subscription[]
+  id                          String           @id @default(cuid())
+  tier                        SubscriptionTier @unique
+  name                        String
+  monthlyPrice                Float            @map("monthly_price")
+  maxSites                    Int              @map("max_sites")
+  /// CR-002: loungers (hamacas) allowed per site; NULL = no limit / custom (Grupo).
+  maxHamacasPerSite           Int?             @map("max_hamacas_per_site")
+  /// CR-002: monthly cap (EUR, excl. IVA) on plan-rate sunbed + rental commission per site; NULL = uncapped.
+  monthlyCommissionCapPerSite Float?           @map("monthly_commission_cap_per_site")
+  stripeProductId             String?          @map("stripe_product_id")
+  stripePriceId               String?          @map("stripe_price_id")
+  createdAt                   DateTime         @default(now())
+  updatedAt                   DateTime         @updatedAt
+  subscriptions               Subscription[]
 }
 
 model Subscription {
@@ -275,14 +304,16 @@ model PartnerAccount {
 }
 
 model CustomSubscription {
-  id               String         @id @default(cuid())
-  partnerAccountId String         @unique @map("partner_account_id")
-  maxSites         Int?           @map("max_sites")
-  notes            String?
-  featureOverrides Json?          @map("feature_overrides")
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  partnerAccount   PartnerAccount @relation(fields: [partnerAccountId], references: [userId], onDelete: Cascade)
+  id                String         @id @default(cuid())
+  partnerAccountId  String         @unique @map("partner_account_id")
+  maxSites          Int?           @map("max_sites")
+  /// CR-002: per-partner hamaca limit (Grupo agreements); wins over the plan.
+  maxHamacasPerSite Int?           @map("max_hamacas_per_site")
+  notes             String?
+  featureOverrides  Json?          @map("feature_overrides")
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  partnerAccount    PartnerAccount @relation(fields: [partnerAccountId], references: [userId], onDelete: Cascade)
 }
 
 model Site {
@@ -373,16 +404,17 @@ model Site {
   // locationLat/locationLng via tz-lookup at read time. See src/site-day.ts.
   timeZone                   String?                  @map("time_zone")
 
-  inventoryItems InventoryItem[]
-  layoutElements LayoutElement[]
-  orders         Order[]
-  products       Product[]
-  rentalItems    RentalItem[]
-  rentalBookings RentalBooking[]
-  reservations   Reservation[]
-  serviceFees    ServiceFee[]
-  sunbedGroups   SunbedGroup[]
-  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inventoryItems       InventoryItem[]
+  layoutElements       LayoutElement[]
+  orders               Order[]
+  products             Product[]
+  rentalItems          RentalItem[]
+  rentalBookings       RentalBooking[]
+  reservations         Reservation[]
+  serviceFees          ServiceFee[]
+  commissionCapEntries CommissionCapEntry[]
+  sunbedGroups         SunbedGroup[]
+  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   workingHours           SiteWorkingHours[]
   brand                  SiteBrand?

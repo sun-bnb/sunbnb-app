@@ -155,13 +155,22 @@ describe('createVivaHttpClient — createSale', () => {
     expect(body.isvDetails.sourceCode).toBe('custom-src')
   })
 
-  it('rejects isvDetails.amount <= 0 without making any network call', async () => {
+  it('rejects a negative isvDetails.amount without making any network call', async () => {
     const fetchSpy = mockFetchSequence()
     const client = createVivaHttpClient(CONFIG)
     await expect(
-      client.createSale(saleReq({ isvDetails: { amount: 0, terminalMerchantId: 'm' } })),
+      client.createSale(saleReq({ isvDetails: { amount: -1, terminalMerchantId: 'm' } })),
     ).rejects.toThrow(VivaFeeGuardError)
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('sends isvDetails.amount 0 (card at the venue carries no Sunbnb commission, CR-002 M-68)', async () => {
+    const fetchSpy = mockFetchSequence(tokenResponse(), { ok: true, status: 200, body: null })
+    const client = createVivaHttpClient(CONFIG)
+    await client.createSale(saleReq({ isvDetails: { amount: 0, terminalMerchantId: 'm' } }))
+    const body = JSON.parse(call(fetchSpy, 1)[1].body as string)
+    expect(body.isvDetails.amount).toBe(0)
+    expect(body.isvDetails.terminalMerchantId).toBe('m')
   })
 
   it('rejects isvDetails.amount >= amount without making any network call', async () => {

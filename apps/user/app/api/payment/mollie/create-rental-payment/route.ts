@@ -12,10 +12,13 @@
  */
 
 import prisma from '@repo/data/PrismaCient'
+import { checkChargeAllowed } from '@repo/data/plan-gate'
 import {
   loadFeeContext,
   chargeableServiceFee, resolveServiceFee,
   serviceFeeForUnits,
+  cappedCommission,
+  rentalCapSourceKey,
   round,
 } from '@repo/data/payment'
 import { isTestMode } from '@repo/data/env'
@@ -97,6 +100,12 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Some bookings are not in pending state' }, { status: 400 })
   }
 
+  // CR-002 plan gate: Gratis partners take no online card payment.
+  const gate = await checkChargeAllowed('rental', { siteId: bookings[0]!.siteId })
+  if (!gate.allowed) {
+    return Response.json({ error: gate.message }, { status: 403 })
+  }
+
   // Calculate total amount from DB (don't trust client)
   const paymentAmount = round(
     bookings.reduce((sum, b) => sum + (b.paymentAmount ?? b.totalPrice ?? 0), 0)
@@ -148,7 +157,15 @@ export async function POST(request: NextRequest) {
     bookings[0]!.createdAt
   )
   // Commission rule: serviceFeeForUnits (fixed per booking line, percentage once on the total) — same {total, units} as the PLATFORM invoice.
-  const applicationFeeAmount = serviceFeeForUnits(matchedFee, { total: paymentAmount, units: bookings.length })
+  // CR-002: capped per site per month, decided once here, read back by processConfirmedRentalBooking.
+  const applicationFeeAmount = await cappedCommission('reserve', {
+    siteId,
+    serviceCode: 'equipment-rental',
+    fee: matchedFee,
+    partnerAccount,
+    uncapped: serviceFeeForUnits(matchedFee, { total: paymentAmount, units: bookings.length }),
+    sourceKey: rentalCapSourceKey(bookings.map((b) => b.id)),
+  })
 
   const amountValue = paymentAmount.toFixed(2)
   const feeValue = applicationFeeAmount.toFixed(2)

@@ -57,6 +57,7 @@ vi.mock('@/app/api/_lib/mollie', () => ({
 // ── Import after mocks ────────────────────────────────────────────────────────
 import { POST } from './route'
 import prisma from '@repo/data/PrismaCient'
+import { checkChargeAllowed } from '@repo/data/plan-gate'
 import { isFlagEnabled } from '@/app/flags'
 
 const mockIsFlagEnabled = vi.mocked(isFlagEnabled)
@@ -137,6 +138,27 @@ beforeEach(() => {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
+  describe('CR-002 plan gate', () => {
+    it('returns 403 and never calls Mollie or writes when the plan gate refuses', async () => {
+      mockAuth.mockResolvedValue({ user: { id: VALID_USER_ID } })
+      vi.mocked(prisma.tableReservation.findUnique).mockResolvedValue(validTableReservation() as any)
+      vi.mocked(checkChargeAllowed).mockResolvedValueOnce({
+        allowed: false,
+        feature: 'ONLINE_PAYMENTS',
+        message: 'This venue takes payment on site only',
+      })
+      const res = await POST(makeRequest({ redirectUrl: REDIRECT_URL }), {
+        params: Promise.resolve({ id: VALID_RESERVATION_ID }),
+      })
+      expect(res.status).toBe(403)
+      expect((await res.json()).error).toBe('This venue takes payment on site only')
+      expect(checkChargeAllowed).toHaveBeenCalledWith('table-deposit', { restaurantId: 'restaurant-1' })
+      expect(mockPaymentsCreate).not.toHaveBeenCalled()
+      expect(mockGetValidMollieToken).not.toHaveBeenCalled()
+      expect(prisma.tableReservation.update).not.toHaveBeenCalled()
+    })
+  })
+
   describe('feature flag gate', () => {
     it('returns 404 when restaurants flag is off', async () => {
       mockIsFlagEnabled.mockResolvedValue(false)

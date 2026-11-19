@@ -95,6 +95,13 @@ const prisma = {
   customSubscription: {
     findUnique: vi.fn(),
   },
+  commissionCapEntry: {
+    findUnique: vi.fn(),
+    aggregate: vi.fn(),
+    upsert: vi.fn(),
+    updateMany: vi.fn(),
+    update: vi.fn(),
+  },
   user: {
     findUnique: vi.fn(),
     findMany: vi.fn(),

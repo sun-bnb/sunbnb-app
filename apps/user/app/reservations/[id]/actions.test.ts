@@ -27,6 +27,7 @@ import {
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { checkFoodOrderingAllowed } from '@repo/data/plan-gate'
 import { applyTransition } from '@repo/data/reservation-machine-apply'
 import { processConfirmedOrder } from '@repo/data/payment'
 import { issueRefund } from '@/app/api/_lib/payment-provider'
@@ -169,6 +170,30 @@ describe('getProducts', () => {
 // ─── createOrder ───────────────────────────────────────────────────────────
 
 describe('createOrder', () => {
+  it('refuses with the plan-gate message and writes nothing when food ordering is gated (CR-002)', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      userId: 'owner-1',
+      appSalesEnabled: true,
+    } as any)
+    vi.mocked(checkFoodOrderingAllowed).mockResolvedValueOnce({
+      allowed: false,
+      feature: 'FOOD_AND_BEVERAGE',
+      message: 'Food and drink ordering is not available at this venue',
+    })
+
+    const res = await createOrder({
+      siteId: 'site-1',
+      items: [{ product: { id: 'p-1' }, quantity: 1 }],
+    })
+    expect(res).toEqual({
+      status: 'error',
+      errors: ['Food and drink ordering is not available at this venue'],
+    })
+    expect(checkFoodOrderingAllowed).toHaveBeenCalledWith({ siteId: 'site-1' })
+    expect(prisma.order.create).not.toHaveBeenCalled()
+  })
+
   it('returns error when siteId is missing', async () => {
     mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
     const res = await createOrder({

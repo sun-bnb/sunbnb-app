@@ -19,7 +19,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest'
 import { cleanDatabase, disconnectDatabase, prisma } from '@/app/test/setup'
-import { createTestUser, createTestSite, createTestInventoryItem } from '@/app/test/fixtures'
+import { createTestUser, createTestSite, createTestInventoryItem, createTestPartnerAccount } from '@/app/test/fixtures'
 
 let mockUserId: string | null = null
 
@@ -321,6 +321,7 @@ describe('deleteInventoryItems — bulk parcel delete (real DB)', () => {
 describe('syncChairsWithLayout rearrange — pure rotation is set-based and pair-stable (real DB)', () => {
   it('rotating a large paired parcel keeps every SunbedGroup and pairId IDENTICAL (no dissolve/re-mint churn)', async () => {
     const user = await createTestUser()
+    await createTestPartnerAccount(user.id) // CR-002: 200 seats exceed the Gratis default
     mockUserId = user.id
     const site = await createTestSite(user.id, { layoutMode: 'geo' })
 

@@ -16,6 +16,7 @@
  */
 
 import prisma from '@repo/data/PrismaCient'
+import { checkChargeAllowed } from '@repo/data/plan-gate'
 import {
   loadFeeContext,
   chargeableServiceFee, resolveServiceFee,
@@ -80,6 +81,12 @@ export async function POST(request: NextRequest) {
 
   if (order.paymentRef) {
     return Response.json({ error: 'Payment already created' }, { status: 400 })
+  }
+
+  // CR-002 plan gate: Gratis partners take no online card payment.
+  const gate = await checkChargeAllowed('order', { siteId: order.siteId })
+  if (!gate.allowed) {
+    return Response.json({ error: gate.message }, { status: 403 })
   }
 
   // Fees are included in the product price — customer pays exactly productAmount.

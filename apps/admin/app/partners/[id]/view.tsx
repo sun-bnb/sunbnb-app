@@ -154,8 +154,8 @@ function regimeExplanation(regime: TaxRegime): string {
 }
 
 function tierBadgeColor(tier: string) {
-  if (tier === "BUSINESS") return "bg-purple-400/20 text-purple-300"
-  if (tier === "PRO") return "bg-blue-400/20 text-blue-300"
+  if (tier === "GRUPO") return "bg-purple-400/20 text-purple-300"
+  if (tier === "TEMPORADA") return "bg-blue-400/20 text-blue-300"
   return "bg-gray-700 text-gray-300"
 }
 

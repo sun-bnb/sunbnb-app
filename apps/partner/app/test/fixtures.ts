@@ -22,13 +22,31 @@ export async function createTestUser(overrides: Record<string, any> = {}) {
 /**
  * Creates a PartnerAccount for the given user.
  * Required before createTestSubscription — Subscription references PartnerAccount by userId.
+ *
+ * CR-002: a partner with no subscription is on Gratis (no online payments, no F&B,
+ * 100 hamacas per site). Tests written before the catalogue assume an entitled
+ * partner, so the fixture grants a CustomSubscription override (online payments, F&B,
+ * a large hamaca limit). Plan-gating tests pass `{ planGated: true }` to get a bare
+ * Gratis partner; @repo/data's plan-gate integration tests pin the gate itself.
  */
 export async function createTestPartnerAccount(
   userId: string,
   overrides: Record<string, any> = {}
 ) {
+  const { planGated, ...rest } = overrides
+  overrides = rest
   return prisma.partnerAccount.create({
     data: {
+      ...(planGated
+        ? {}
+        : {
+            customSubscription: {
+              create: {
+                featureOverrides: { ONLINE_PAYMENTS: true, FOOD_AND_BEVERAGE: true },
+                maxHamacasPerSite: 100000,
+              },
+            },
+          }),
       userId,
       firstName: 'Test',
       lastName: 'Partner',
@@ -51,14 +69,14 @@ export async function createTestPartnerAccount(
  */
 export async function createTestSubscription(
   partnerAccountId: string,
-  tier: 'STARTER' | 'PRO' | 'BUSINESS' = 'STARTER'
+  tier: 'GRATIS' | 'TEMPORADA' | 'GRUPO' = 'GRATIS'
 ) {
   const plan = await prisma.subscriptionPlan.create({
     data: {
       tier,
       name: `${tier} Plan`,
-      monthlyPrice: tier === 'STARTER' ? 9.99 : tier === 'PRO' ? 29.99 : 79.99,
-      maxSites: tier === 'STARTER' ? 1 : tier === 'PRO' ? 5 : 20,
+      monthlyPrice: tier === 'GRATIS' ? 9.99 : tier === 'TEMPORADA' ? 29.99 : 79.99,
+      maxSites: tier === 'GRATIS' ? 1 : tier === 'TEMPORADA' ? 5 : 20,
     },
   })
 

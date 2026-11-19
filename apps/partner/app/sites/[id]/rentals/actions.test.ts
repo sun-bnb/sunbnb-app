@@ -28,6 +28,7 @@ import {
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { getEffectiveSubscriptionForUser } from '@repo/data/subscription'
 
 const mockAuth = vi.mocked(auth)
 
@@ -552,5 +553,26 @@ describe('getRentalItems', () => {
     const res = await getRentalItems(SITE_ID)
     expect(res.status).toBe('ok')
     expect((res as any).items).toEqual([])
+  })
+})
+
+describe('setRentalPaymentType — plan gating (CR-002)', () => {
+  const gratis = { features: { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: false, FOOD_AND_BEVERAGE: false } } as any
+
+  it("Gratis cannot set online ('paid') rental payment", async () => {
+    authenticateAsOwner()
+    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValueOnce(gratis)
+    const res = await setRentalPaymentType(SITE_ID, 'paid')
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/upgrade/i)
+    expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
+  })
+
+  it("Gratis CAN set 'unpaid' rental payment", async () => {
+    authenticateAsOwner()
+    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValueOnce(gratis)
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+    const res = await setRentalPaymentType(SITE_ID, 'unpaid')
+    expect(res.status).toBe('ok')
   })
 })

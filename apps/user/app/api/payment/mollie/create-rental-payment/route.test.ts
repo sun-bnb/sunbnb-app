@@ -28,6 +28,8 @@ vi.mock('@repo/data/payment', () => ({
   chargeableServiceFee: vi.fn((fee: unknown) => fee),
   calculateServiceFeeAmount: vi.fn().mockReturnValue(0),
   serviceFeeForUnits: vi.fn().mockReturnValue(0),
+  cappedCommission: vi.fn(async (_phase: string, i: { uncapped: number }) => i.uncapped),
+  rentalCapSourceKey: vi.fn((ids: string[]) => `rental:${[...ids].sort()[0]}`),
   round: (v: number) => Math.round(v * 100) / 100,
 }))
 

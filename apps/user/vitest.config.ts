@@ -41,6 +41,7 @@ export default defineConfig({
       '@repo/data/device-claim': path.resolve(__dirname, '__mocks__/@repo/data/device-claim'),
       '@repo/data/reservations': path.resolve(__dirname, '__mocks__/@repo/data/reservations'),
       '@repo/data/reservation-payment': path.resolve(__dirname, '__mocks__/@repo/data/reservation-payment'),
+      '@repo/data/plan-gate': path.resolve(__dirname, '__mocks__/@repo/data/plan-gate'),
     },
   },
 })

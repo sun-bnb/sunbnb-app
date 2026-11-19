@@ -20,6 +20,7 @@ import {
   spacePositions,
 } from './geometry'
 import { recomputeSeatLabels } from '@repo/data/seat-label-db'
+import { checkHamacaLimit, hamacaLimitMessage } from '@repo/data/plan-gate'
 import {
   ensurePlacedSeatsHaveUnits,
   pruneEmptyUnits,
@@ -63,6 +64,9 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
   const itemGroupData = buildItemGroupData(config, layoutMode)
 
   if (mode === 'create') {
+    // CR-002: plan hamaca limit — a new parcel adds `generated.length` rows.
+    const limit = await checkHamacaLimit(siteId, generated.length)
+    if (!limit.allowed) return { status: 'error', errors: [hamacaLimitMessage(limit)] }
 
     const itemGroup = await prisma.itemGroup.create({
       data: itemGroupData
@@ -127,6 +131,18 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
       itemGroupData,
       layoutMode,
     )
+
+    // CR-002: plan hamaca limit on the NET growth only (a resize that shrinks or keeps
+    // the count, or moves/rotates, is never blocked — over-limit venues keep everything).
+    // Checked before any write in this branch.
+    {
+      const m = matchSeats(existing, shiftedGenerated)
+      const netAdding = m.vacant.length - m.surplus.length
+      if (netAdding > 0) {
+        const limit = await checkHamacaLimit(siteId, netAdding)
+        if (!limit.allowed) return { status: 'error', errors: [hamacaLimitMessage(limit)] }
+      }
+    }
 
     let itemGroup = null
     if (existing.length > 0 && !(existing[0]?.itemGroupId)) {
@@ -221,7 +237,6 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
     // is created or removed.
     const surplusSeats = surplus
     const vacantPositions = vacant
-
     if (surplusSeats.length > 0) {
       const surplusIds = surplusSeats.map((seat) => seat.id)
 

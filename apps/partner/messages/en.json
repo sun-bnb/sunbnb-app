@@ -549,15 +549,13 @@
     "integratedPaymentsDesc": "Customers pay when booking. Payment is collected and settled through the platform.",
     "offPlatformBilling": "Off-platform billing",
     "offPlatformBillingDesc": "No payment collected on the platform. Ideal when billing is handled externally, e.g. hotel guests.",
-    "proOrBusinessRequired": "Pro or Business plan required",
     "basePrice": "Base price (€)",
     "basePriceHelper": "The price your customers will pay",
     "taxRate": "Tax rate (%)",
     "taxRateHelper": "Applied to all sales",
     "customerPays": "Customer pays",
-    "serviceFee": "Service fee",
+    "serviceFee": "Sunbnb commission",
     "customRate": "special rate",
-    "upgradeTier": "Upgrade to {tier} for {fee} service fee",
     "youReceive": "You receive",
     "inclVat": "incl. VAT {rate}%",
     "noServiceFee": "No service fee configured for sunbed-rental",
@@ -602,7 +600,8 @@
     "deletePermanently": "Delete permanently",
     "deleting": "Deleting…",
     "changePaymentProvider": "Change in Account → Payments",
-    "tapToPayNote": "Card payments at the lounger use Tap to Pay in the Sunbnb Floor app."
+    "tapToPayNote": "Card payments at the lounger use Tap to Pay in the Sunbnb Floor app.",
+    "notInPlan": "Not included in your plan"
   },
   "SiteContent": {
     "coverPhoto": "Cover photo",
@@ -1149,6 +1148,7 @@
     "save": "Save",
     "cancel": "Cancel",
     "delete": "Delete",
+    "deleteConfirmTitle": "Delete item?",
     "deleteConfirmBody": "Are you sure you want to delete {name}?",
     "noItems": "No rental items yet. Add your first item.",
     "equipmentRentalDesc": "Allow guests to rent surfboards, kayaks, umbrellas and other equipment through the app.",
@@ -1687,11 +1687,11 @@
       },
       "listed": {
         "title": "Guests pay your price",
-        "body": "Nothing is added on top for the guest. The commission is deducted from the sale, and Sunbnb invoices it to you separately."
+        "body": "Nothing is added on top for the guest, ever. The commission is deducted from the sale, and Sunbnb invoices it to you separately."
       },
       "commission": {
         "title": "Commission by plan",
-        "body": "{starter}%, {pro}% or {business}% depending on your plan, on sunbed bookings, food and drink, and rentals sold through Sunbnb."
+        "body": "{gratis}% on Gratis. {temporada}% on Temporada, capped at €{cap} per site per month. {fnb}% on food and drink. Card processing is billed at the payment provider's cost, as its own line."
       },
       "cash": {
         "title": "No commission on cash",
@@ -1700,21 +1700,23 @@
     },
     "plans": {
       "title": "Plans",
-      "subtitle": "The commission is what you pay on each sale. A monthly plan lowers it and adds venues.",
-      "free": "Free",
-      "freeNote": "no monthly fee",
-      "perMonth": "/ month",
+      "subtitle": "You pay commission only on what guests pay online. No plan has a monthly fee.",
       "mostChosen": "Most chosen",
-      "commissionLabel": "commission on each purchase through Sunbnb",
-      "oneVenue": "1 venue",
-      "starterAll": "Sunbed bookings, orders and rentals",
-      "upToVenues": "Up to {count} venues",
-      "everythingIn": "Everything in {plan}",
-      "offPlatform": "Off-platform billing",
-      "branded": "Branded booking page",
-      "supportCommunity": "Community support",
-      "supportPriority": "Priority support",
-      "supportDedicated": "Dedicated support",
+      "commissionLabel": "commission on online-paid sunbed and rental bookings",
+      "noMonthlyFee": "No monthly fee",
+      "sites": "{count, plural, one {# site} other {Up to # sites}}",
+      "hamacas": "Up to {count} sunbeds per site",
+      "perAgreement": "Sites and sunbeds per agreement",
+      "onlinePayments": "Online card payments and food and drink ordering",
+      "cap": "Commission capped at €{cap} per site per month",
+      "foodAndDrink": "{pct}% commission on food and drink",
+      "processing": "Card processing billed at provider cost, as its own line",
+      "payOnSite": "Guests pay on site only: no online card payment, no food and drink ordering",
+      "includedAll": "Sunbed booking, satellite sunbed map, QR booking without a guest account, staff link and equipment rentals",
+      "quote": "Request a quote",
+      "quoteHeadline": "Custom",
+      "quoteNote": "Commission and limits agreed with you",
+      "quoteSubject": "Grupo plan quote request",
       "cta": "Get started"
     },
     "start": {
@@ -2180,5 +2182,35 @@
       "waitReply": "Wait for the assistant to finish replying.",
       "canned": "I've aligned the photo — please propose the layout."
     }
+  },
+  "PlanFees": {
+    "commission": "Sunbnb commission: {pct}% on sunbed and rental bookings paid online",
+    "commissionCapped": "Sunbnb commission: {pct}% on sunbed and rental bookings paid online, capped at €{cap} per site per month",
+    "commissionAgreed": "Sunbnb commission: as agreed for your plan",
+    "foodAndDrink": "Food and drink: {pct}% commission",
+    "processing": "Card processing: billed at the payment provider's cost, as its own line, separate from the Sunbnb commission",
+    "noGuestFee": "Guests pay your listed price. Nothing is added for them.",
+    "gratisUpgrade": "On your plan guests pay on site only. Upgrade to {plan} to take card payments online and food and drink orders.",
+    "seePlans": "See plans",
+    "notInPlan": "Not included in your plan",
+    "commissionTitle": "Sunbnb commission"
+  },
+  "Subscription": {
+    "title": "Subscription",
+    "subtitle": "Manage your plan and site limits",
+    "currentPlan": "Current plan",
+    "sitesUsed": "Sites used",
+    "custom": "(custom)",
+    "pastDue": "Your payment is past due. Please update your billing information.",
+    "current": "Current",
+    "currentButton": "Current plan",
+    "freePlan": "Free plan",
+    "badgeGratis": "Free",
+    "badgeGrupo": "Custom",
+    "enableOnline": "Connect a payment provider",
+    "manageBilling": "Manage billing",
+    "opening": "Opening…",
+    "infoTitle": "How plans are billed",
+    "infoBody": "No plan has a monthly fee. Card processing is billed at the provider's cost as its own line, separate from the Sunbnb commission. Guests never pay a fee."
   }
 }

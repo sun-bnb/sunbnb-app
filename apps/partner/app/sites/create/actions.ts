@@ -7,6 +7,7 @@ import { validateImageFile, safeBlobKey } from '@/lib/validation'
 import { createSiteWithCode } from '@/lib/site-create'
 import prisma from '@repo/data/PrismaCient'
 import { canCreateSite, getEffectiveSubscriptionForUser } from '@repo/data/subscription'
+import { planGateError } from '@/lib/plan-features'
 import { put } from '@vercel/blob'
 import sharp from 'sharp'
 
@@ -50,7 +51,7 @@ export async function createSite(
     if (!effective.features.OFF_PLATFORM_BILLING) {
       return {
         status: 'error',
-        errors: ['Off-platform billing requires a Pro/Business plan or an admin override'],
+        errors: ['Pay-on-site mode is turned off for this account; contact Sunbnb support'],
       }
     }
   }
@@ -58,10 +59,18 @@ export async function createSite(
   const price = Number(input.price)
   const vat = Number(input.vat)
 
+  // CR-002: the default site type is 'paid' (online payments). A partner whose plan lacks
+  // ONLINE_PAYMENTS (Gratis) gets an unpaid, pay-on-site venue instead of a refusal.
+  let siteType = input.type || 'paid'
+  if (siteType === 'paid') {
+    const gate = await planGateError(session.user.id!, ['ONLINE_PAYMENTS'])
+    if (gate) siteType = 'unpaid'
+  }
+
   // 1. Create the site (with its minted QR code — track 022)
   const { id: siteId } = await createSiteWithCode({
     name: input.name.trim(),
-    type: input.type || 'paid',
+    type: siteType,
     price: price > 0 ? price : null,
     vat: vat > 0 ? vat : null,
     locationLat: input.locationLat,

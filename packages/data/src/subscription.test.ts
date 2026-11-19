@@ -6,6 +6,11 @@ import {
   PRICING_TIERS,
   PRICING_TIER_ORDER,
   COMMISSIONED_SERVICE_CODES,
+  CAPPED_SERVICE_CODES,
+  DEFAULT_TIER,
+  FEATURED_TIER,
+  GRUPO_DEFAULT_MAX_SITES,
+  planRowMaxSites,
 } from './subscription'
 import type { SubscriptionTier } from '@prisma/client'
 
@@ -16,9 +21,11 @@ const makePlan = (overrides: Partial<{
   name: string
   monthlyPrice: number
   maxSites: number
+  maxHamacasPerSite: number | null
+  monthlyCommissionCapPerSite: number | null
 }> = {}) => ({
-  tier:         'STARTER' as SubscriptionTier,
-  name:         'Starter',
+  tier:         'GRATIS' as SubscriptionTier,
+  name:         'Gratis',
   monthlyPrice: 0,
   maxSites:     1,
   ...overrides,
@@ -68,30 +75,30 @@ describe('resolveEffectiveSubscription', () => {
     expect(result.isCustom).toBe(false)
   })
 
-  it('tier falls back to STARTER when plan is null', () => {
+  it('tier falls back to GRATIS when plan is null', () => {
     const result = resolveEffectiveSubscription(null, null)
-    expect(result.tier).toBe('STARTER')
+    expect(result.tier).toBe('GRATIS')
   })
 
   it('tier comes from the plan when plan is provided', () => {
     const result = resolveEffectiveSubscription(
-      makePlan({ tier: 'PRO' as SubscriptionTier }),
+      makePlan({ tier: 'TEMPORADA' as SubscriptionTier }),
       null,
     )
-    expect(result.tier).toBe('PRO')
+    expect(result.tier).toBe('TEMPORADA')
   })
 
   it('name falls back to Starter when plan is null', () => {
     const result = resolveEffectiveSubscription(null, null)
-    expect(result.name).toBe('Starter')
+    expect(result.name).toBe('Gratis')
   })
 
   it('name comes from the plan when plan is provided', () => {
     const result = resolveEffectiveSubscription(
-      makePlan({ name: 'Pro Plan' }),
+      makePlan({ name: 'Temporada Plan' }),
       null,
     )
-    expect(result.name).toBe('Pro Plan')
+    expect(result.name).toBe('Temporada Plan')
   })
 
   it('monthlyPrice falls back to 0 when plan is null', () => {
@@ -107,87 +114,87 @@ describe('resolveEffectiveSubscription', () => {
     expect(result.monthlyPrice).toBe(49)
   })
 
-  it('custom maxSites wins over plan even for non-STARTER tiers', () => {
+  it('custom maxSites wins over plan even for non-GRATIS tiers', () => {
     const result = resolveEffectiveSubscription(
-      makePlan({ tier: 'BUSINESS' as SubscriptionTier, maxSites: 10 }),
+      makePlan({ tier: 'GRUPO' as SubscriptionTier, maxSites: 10 }),
       { maxSites: 2 },
     )
     expect(result.maxSites).toBe(2)
-    expect(result.tier).toBe('BUSINESS')
+    expect(result.tier).toBe('GRUPO')
     expect(result.isCustom).toBe(true)
   })
 
   it('returns features computed from tier when no custom overrides', () => {
-    const pro = resolveEffectiveSubscription(makePlan({ tier: 'PRO' as SubscriptionTier }), null)
-    expect(pro.features.OFF_PLATFORM_BILLING).toBe(true)
+    const pro = resolveEffectiveSubscription(makePlan({ tier: 'TEMPORADA' as SubscriptionTier }), null)
+    expect(pro.features.ONLINE_PAYMENTS).toBe(true)
 
-    const starter = resolveEffectiveSubscription(makePlan({ tier: 'STARTER' as SubscriptionTier }), null)
-    expect(starter.features.OFF_PLATFORM_BILLING).toBe(false)
+    const starter = resolveEffectiveSubscription(makePlan({ tier: 'GRATIS' as SubscriptionTier }), null)
+    expect(starter.features.ONLINE_PAYMENTS).toBe(false)
   })
 
   it('returns features with override applied when featureOverrides set on custom', () => {
     const result = resolveEffectiveSubscription(
-      makePlan({ tier: 'STARTER' as SubscriptionTier }),
-      { maxSites: null, featureOverrides: { OFF_PLATFORM_BILLING: true } },
+      makePlan({ tier: 'GRATIS' as SubscriptionTier }),
+      { maxSites: null, featureOverrides: { ONLINE_PAYMENTS: true } },
     )
-    expect(result.features.OFF_PLATFORM_BILLING).toBe(true)
+    expect(result.features.ONLINE_PAYMENTS).toBe(true)
   })
 
-  it('override false wins over PRO tier default true', () => {
+  it('override false wins over TEMPORADA tier default true', () => {
     const result = resolveEffectiveSubscription(
-      makePlan({ tier: 'PRO' as SubscriptionTier }),
-      { maxSites: null, featureOverrides: { OFF_PLATFORM_BILLING: false } },
+      makePlan({ tier: 'TEMPORADA' as SubscriptionTier }),
+      { maxSites: null, featureOverrides: { ONLINE_PAYMENTS: false } },
     )
-    expect(result.features.OFF_PLATFORM_BILLING).toBe(false)
+    expect(result.features.ONLINE_PAYMENTS).toBe(false)
   })
 
-  it('features use STARTER defaults when plan is null', () => {
+  it('features use GRATIS defaults when plan is null', () => {
     const result = resolveEffectiveSubscription(null, null)
-    expect(result.features.OFF_PLATFORM_BILLING).toBe(TIER_FEATURE_DEFAULTS['STARTER'].OFF_PLATFORM_BILLING)
+    expect(result.features.ONLINE_PAYMENTS).toBe(TIER_FEATURE_DEFAULTS['GRATIS'].ONLINE_PAYMENTS)
   })
 })
 
 // ─── resolveEffectiveFeatures() ─────────────────────────────────────────────
 
 describe('resolveEffectiveFeatures', () => {
-  it('override true wins over STARTER tier default false', () => {
-    const result = resolveEffectiveFeatures('STARTER', { OFF_PLATFORM_BILLING: true })
-    expect(result.OFF_PLATFORM_BILLING).toBe(true)
+  it('override true wins over GRATIS tier default false', () => {
+    const result = resolveEffectiveFeatures('GRATIS', { ONLINE_PAYMENTS: true })
+    expect(result.ONLINE_PAYMENTS).toBe(true)
   })
 
-  it('override false wins over PRO tier default true', () => {
-    const result = resolveEffectiveFeatures('PRO', { OFF_PLATFORM_BILLING: false })
-    expect(result.OFF_PLATFORM_BILLING).toBe(false)
+  it('override false wins over TEMPORADA tier default true', () => {
+    const result = resolveEffectiveFeatures('TEMPORADA', { ONLINE_PAYMENTS: false })
+    expect(result.ONLINE_PAYMENTS).toBe(false)
   })
 
   it('falls back to tier default when key not in overrides', () => {
-    const resultPro = resolveEffectiveFeatures('PRO', {})
-    expect(resultPro.OFF_PLATFORM_BILLING).toBe(true)
+    const resultPro = resolveEffectiveFeatures('TEMPORADA', {})
+    expect(resultPro.ONLINE_PAYMENTS).toBe(true)
 
-    const resultStarter = resolveEffectiveFeatures('STARTER', {})
-    expect(resultStarter.OFF_PLATFORM_BILLING).toBe(false)
+    const resultStarter = resolveEffectiveFeatures('GRATIS', {})
+    expect(resultStarter.ONLINE_PAYMENTS).toBe(false)
   })
 
   it('null overrides falls back to tier default', () => {
-    expect(resolveEffectiveFeatures('PRO', null).OFF_PLATFORM_BILLING).toBe(true)
-    expect(resolveEffectiveFeatures('STARTER', null).OFF_PLATFORM_BILLING).toBe(false)
+    expect(resolveEffectiveFeatures('TEMPORADA', null).ONLINE_PAYMENTS).toBe(true)
+    expect(resolveEffectiveFeatures('GRATIS', null).ONLINE_PAYMENTS).toBe(false)
   })
 
-  it('null tier uses STARTER defaults', () => {
+  it('null tier uses GRATIS defaults', () => {
     const result = resolveEffectiveFeatures(null, null)
-    expect(result.OFF_PLATFORM_BILLING).toBe(TIER_FEATURE_DEFAULTS['STARTER'].OFF_PLATFORM_BILLING)
+    expect(result.ONLINE_PAYMENTS).toBe(TIER_FEATURE_DEFAULTS['GRATIS'].ONLINE_PAYMENTS)
   })
 
   it('null tier with override true gives true', () => {
-    const result = resolveEffectiveFeatures(null, { OFF_PLATFORM_BILLING: true })
-    expect(result.OFF_PLATFORM_BILLING).toBe(true)
+    const result = resolveEffectiveFeatures(null, { ONLINE_PAYMENTS: true })
+    expect(result.ONLINE_PAYMENTS).toBe(true)
   })
 
   it('returns false for a feature key absent from tier defaults', () => {
     // Simulate a future feature not yet in TIER_FEATURE_DEFAULTS by temporarily
     // checking that keys in SUBSCRIPTION_FEATURES but not in defaults resolve to false.
-    // For OFF_PLATFORM_BILLING this is exercised above; this test documents the fallback:
-    const result = resolveEffectiveFeatures('STARTER', null)
+    // For ONLINE_PAYMENTS this is exercised above; this test documents the fallback:
+    const result = resolveEffectiveFeatures('GRATIS', null)
     // All keys must be present and be booleans
     for (const key of Object.keys(result) as (keyof typeof result)[]) {
       expect(typeof result[key]).toBe('boolean')
@@ -195,63 +202,82 @@ describe('resolveEffectiveFeatures', () => {
   })
 })
 
-// ─── PRICING_TIERS (the published ladder) ───────────────────────────────────
+// ─── PRICING_TIERS (the published catalogue, CR-002) ────────────────────────
 //
-// These are not "does the constant still say what it says" assertions — they
-// pin the SHAPE a pricing ladder has to have to be sellable. A partner who pays
-// more must never get less, or the upgrade button is a downgrade button, and
-// the paid tiers must actually buy something or the page is a lie.
+// These pin the SHAPE the decided model (F-9) has to have, not the literal
+// constants: a partner who moves up never gets less, F&B never carries
+// commission, and Gratis cannot take card payments.
 
 describe('PRICING_TIERS', () => {
-  it('covers every tier the enum can hold, in ascending order', () => {
+  it('covers every tier the enum can hold, free first', () => {
     expect(PRICING_TIER_ORDER).toEqual(Object.keys(PRICING_TIERS))
+    expect(PRICING_TIER_ORDER[0]).toBe('GRATIS')
+    expect(DEFAULT_TIER).toBe('GRATIS')
   })
 
-  it('Starter is genuinely free — the landing page promises "Free forever"', () => {
-    expect(PRICING_TIERS.STARTER.monthlyPrice).toBe(0)
+  it('names are Gratis, Temporada and Grupo; Temporada is featured', () => {
+    expect(PRICING_TIER_ORDER.map((t) => PRICING_TIERS[t].name)).toEqual(['Gratis', 'Temporada', 'Grupo'])
+    expect(FEATURED_TIER).toBe('TEMPORADA')
   })
 
-  it('monthly price strictly increases up the ladder', () => {
-    const prices = PRICING_TIER_ORDER.map((t) => PRICING_TIERS[t].monthlyPrice)
-    for (let i = 1; i < prices.length; i++) {
-      expect(prices[i]).toBeGreaterThan(prices[i - 1]!)
-    }
+  it('no plan bills a fixed monthly price', () => {
+    for (const tier of PRICING_TIER_ORDER) expect(PRICING_TIERS[tier].monthlyPrice).toBe(0)
   })
 
-  it('site allowance never shrinks as the price rises', () => {
-    // The mockup's Starter card once read "Unlimited beaches & venues" above a
-    // Pro card capped at 3 — upgrading would have COST the partner capacity.
-    const caps = PRICING_TIER_ORDER.map((t) => PRICING_TIERS[t].maxSites)
-    for (let i = 1; i < caps.length; i++) {
-      expect(caps[i]).toBeGreaterThan(caps[i - 1]!)
-    }
-  })
-
-  it('commission strictly falls as the price rises — that is what the fee buys', () => {
-    const rates = PRICING_TIER_ORDER.map((t) => PRICING_TIERS[t].commissionPercent)
-    for (let i = 1; i < rates.length; i++) {
-      expect(rates[i]).toBeLessThan(rates[i - 1]!)
-    }
-  })
-
-  it('every tier takes a positive commission — no tier is a free ride', () => {
-    // A 0% tier makes the PLATFORM commission invoice a zero-total document and
-    // leaves the marketplace with no revenue on that partner's sales.
+  it('no commission on food and drink, on any plan', () => {
     for (const tier of PRICING_TIER_ORDER) {
-      expect(PRICING_TIERS[tier].commissionPercent).toBeGreaterThan(0)
+      expect(PRICING_TIERS[tier].commissionPercent['food-and-beverage']).toBe(0)
     }
   })
 
-  it('every tier allows at least one site', () => {
+  it('Temporada takes 2% on sunbeds and rentals, capped at EUR 199 per site per month', () => {
+    const t = PRICING_TIERS.TEMPORADA
+    expect(t.commissionPercent['sunbed-rental']).toBe(2)
+    expect(t.commissionPercent['equipment-rental']).toBe(2)
+    expect(t.monthlyCommissionCapPerSite).toBe(199)
+  })
+
+  it('Gratis takes no commission and cannot take online payments', () => {
+    for (const code of COMMISSIONED_SERVICE_CODES) {
+      expect(PRICING_TIERS.GRATIS.commissionPercent[code]).toBe(0)
+    }
+    expect(PRICING_TIERS.GRATIS.onlinePayments).toBe(false)
+    expect(resolveEffectiveFeatures('GRATIS', null).ONLINE_PAYMENTS).toBe(false)
+    expect(resolveEffectiveFeatures('GRATIS', null).FOOD_AND_BEVERAGE).toBe(false)
+  })
+
+  it('limits: Gratis 1 site / 100 hamacas, Temporada 3 / 300, Grupo per agreement', () => {
+    expect(PRICING_TIERS.GRATIS.maxSites).toBe(1)
+    expect(PRICING_TIERS.GRATIS.maxHamacasPerSite).toBe(100)
+    expect(PRICING_TIERS.TEMPORADA.maxSites).toBe(3)
+    expect(PRICING_TIERS.TEMPORADA.maxHamacasPerSite).toBe(300)
+    expect(PRICING_TIERS.GRUPO.maxSites).toBeNull()
+    expect(PRICING_TIERS.GRUPO.maxHamacasPerSite).toBeNull()
+    expect(PRICING_TIERS.GRUPO.quoteOnly).toBe(true)
+    expect(planRowMaxSites('GRUPO')).toBe(GRUPO_DEFAULT_MAX_SITES)
+  })
+
+  it('moving up never costs capacity or commission', () => {
+    for (let i = 1; i < PRICING_TIER_ORDER.length; i++) {
+      const lo = PRICING_TIERS[PRICING_TIER_ORDER[i - 1]!]
+      const hi = PRICING_TIERS[PRICING_TIER_ORDER[i]!]
+      expect(planRowMaxSites(PRICING_TIER_ORDER[i]!)).toBeGreaterThanOrEqual(planRowMaxSites(PRICING_TIER_ORDER[i - 1]!))
+      expect(hi.maxHamacasPerSite ?? Infinity).toBeGreaterThanOrEqual(lo.maxHamacasPerSite ?? Infinity)
+    }
+    // Grupo's default (before a negotiated fee) is never above Temporada's.
+    for (const code of COMMISSIONED_SERVICE_CODES) {
+      expect(PRICING_TIERS.GRUPO.commissionPercent[code]).toBeLessThanOrEqual(PRICING_TIERS.TEMPORADA.commissionPercent[code])
+    }
+  })
+
+  it('off-platform (pay on site) is allowed on every plan', () => {
     for (const tier of PRICING_TIER_ORDER) {
-      expect(PRICING_TIERS[tier].maxSites).toBeGreaterThanOrEqual(1)
+      expect(resolveEffectiveFeatures(tier, null).OFF_PLATFORM_BILLING).toBe(true)
     }
   })
 
-  it('an entitlement is never withdrawn by paying more', () => {
-    // Feature defaults must be monotonic too: a key true on a cheaper tier has
-    // to stay true above it.
-    const keys = Object.keys(TIER_FEATURE_DEFAULTS.STARTER) as (keyof typeof TIER_FEATURE_DEFAULTS.STARTER)[]
+  it('an entitlement is never withdrawn by moving up', () => {
+    const keys = Object.keys(TIER_FEATURE_DEFAULTS.GRATIS) as (keyof typeof TIER_FEATURE_DEFAULTS.GRATIS)[]
     for (const key of keys) {
       let seenTrue = false
       for (const tier of PRICING_TIER_ORDER) {
@@ -262,14 +288,53 @@ describe('PRICING_TIERS', () => {
     }
   })
 
-  it('names every consumer purchase type the commission applies to', () => {
+  it('names every consumer purchase type, and caps only sunbeds and rentals', () => {
     // Seeding a code here creates its platform fee rows; omitting one silently
-    // drops that purchase type to the tier-null default (a flat €1), which is
-    // not what "commission per Sunbnb purchase" says on the card.
+    // drops that purchase type to the tier-null default (a flat EUR 1).
     expect([...COMMISSIONED_SERVICE_CODES]).toEqual([
       'sunbed-rental',
       'food-and-beverage',
       'equipment-rental',
     ])
+    expect([...CAPPED_SERVICE_CODES]).toEqual(['sunbed-rental', 'equipment-rental'])
+  })
+})
+
+// ─── hamaca limit + cap in resolveEffectiveSubscription ─────────────────────
+
+describe('resolveEffectiveSubscription — hamacas and cap', () => {
+  it('defaults to Gratis limits with no plan', () => {
+    const r = resolveEffectiveSubscription(null, null)
+    expect(r.maxHamacasPerSite).toBe(100)
+    expect(r.monthlyCommissionCapPerSite).toBeNull()
+  })
+
+  it('reads the plan row when the columns are present', () => {
+    const r = resolveEffectiveSubscription(
+      makePlan({ tier: 'TEMPORADA', maxHamacasPerSite: 300, monthlyCommissionCapPerSite: 199 }),
+      null,
+    )
+    expect(r.maxHamacasPerSite).toBe(300)
+    expect(r.monthlyCommissionCapPerSite).toBe(199)
+  })
+
+  it('falls back to the catalogue when the plan row did not select the columns', () => {
+    const r = resolveEffectiveSubscription(makePlan({ tier: 'TEMPORADA' }), null)
+    expect(r.maxHamacasPerSite).toBe(300)
+    expect(r.monthlyCommissionCapPerSite).toBe(199)
+  })
+
+  it('a custom hamaca limit (Grupo agreement) wins and marks the subscription custom', () => {
+    const r = resolveEffectiveSubscription(
+      makePlan({ tier: 'GRUPO', maxHamacasPerSite: null }),
+      { maxSites: null, maxHamacasPerSite: 800 },
+    )
+    expect(r.maxHamacasPerSite).toBe(800)
+    expect(r.isCustom).toBe(true)
+  })
+
+  it('a NULL limit on a Grupo row without agreement means no limit', () => {
+    const r = resolveEffectiveSubscription(makePlan({ tier: 'GRUPO', maxHamacasPerSite: null }), null)
+    expect(r.maxHamacasPerSite).toBeNull()
   })
 })

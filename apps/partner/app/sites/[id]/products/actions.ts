@@ -7,14 +7,21 @@ import { validateImageFile, isValidOrderPaymentType, isValidProductCategory } fr
 import prisma from '@repo/data/PrismaCient'
 import { isOwnerOrSudo } from '@/lib/owner-or-sudo'
 import { computeVatAndBaseAmounts } from '@repo/data/payment'
+import { sitePlanGateError } from '@/lib/plan-features'
 import { put } from '@vercel/blob'
 import sharp from 'sharp'
 import { setProductImage } from '@/lib/site-images'
 import { Product } from '@/types/shared'
 
 export async function toggleAppSales(siteId: string, enabled: boolean) {
-  const { error } = await requireSiteOwner(siteId)
+  const { session, error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error', errors: [error] }
+
+  // CR-002: food and drink ordering is a plan feature; turning it OFF is never blocked.
+  if (enabled && session) {
+    const gate = await sitePlanGateError(siteId, ['FOOD_AND_BEVERAGE'])
+    if (gate) return { status: 'error', errors: [gate] }
+  }
 
   await prisma.site.update({
     where: { id: siteId },
@@ -26,11 +33,17 @@ export async function toggleAppSales(siteId: string, enabled: boolean) {
 }
 
 export async function setOrderPaymentType(siteId: string, orderPaymentType: string) {
-  const { error } = await requireSiteOwner(siteId)
+  const { session, error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error', errors: [error] }
 
   if (!isValidOrderPaymentType(orderPaymentType)) {
     return { status: 'error', errors: ['Invalid order payment type'] }
+  }
+
+  // CR-002: online ('paid') order payment needs online payments + F&B; 'unpaid' is never gated.
+  if (orderPaymentType === 'paid' && session) {
+    const gate = await sitePlanGateError(siteId, ['ONLINE_PAYMENTS', 'FOOD_AND_BEVERAGE'])
+    if (gate) return { status: 'error', errors: [gate] }
   }
 
   await prisma.site.update({

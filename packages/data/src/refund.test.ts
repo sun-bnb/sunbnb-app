@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Mock the OAuth token authority and env probe so the module never touches the DB.
+vi.mock('./commission-cap', () => ({
+  reverseCapForRefundedPayment: vi.fn().mockResolvedValue(0),
+}))
 vi.mock('./mollie-tokens', () => ({
   getValidMollieToken: vi.fn().mockResolvedValue('test-token'),
 }))
@@ -234,5 +237,20 @@ describe('issueReservationRefund — provider dispatch (track 028)', () => {
     const res = await issueReservationRefund('pi_3Abc', PA)
     expect(res.status).toBe('error')
     expect((res as any).error).toMatch(/Unknown payment provider/)
+  })
+})
+
+describe('issueReservationRefund — commission-cap reversal (CR-002, T-149)', () => {
+  it('a successful refund gives the commission back through the cap ledger; a failed one does not', async () => {
+    const { reverseCapForRefundedPayment } = await import('./commission-cap')
+    vi.mocked(stripeAccountForPartner).mockResolvedValue('acct_1')
+    vi.mocked(stripeAdapter.refund).mockResolvedValueOnce(undefined)
+    expect((await issueReservationRefund('stripe_cs_cs_1', PA)).status).toBe('ok')
+    expect(reverseCapForRefundedPayment).toHaveBeenCalledWith('stripe_cs_cs_1')
+
+    vi.mocked(reverseCapForRefundedPayment).mockClear()
+    vi.mocked(vivaAdapter.refund).mockRejectedValueOnce(new Error('declined'))
+    expect((await issueReservationRefund('vso_1', PA)).status).toBe('error')
+    expect(reverseCapForRefundedPayment).not.toHaveBeenCalled()
   })
 })

@@ -34,6 +34,7 @@ import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { revalidatePath } from 'next/cache'
 import { recomputeSeatLabels } from '@repo/data/seat-label-db'
+import { checkHamacaLimit } from '@repo/data/plan-gate'
 
 const mockRequireSiteOwner = vi.mocked(requireSiteOwner)
 const mockAuth = vi.mocked(auth)
@@ -1175,5 +1176,40 @@ describe('parcel geometry excludes pool sentinels', () => {
     const { sql } = rawCall(0)
     expect(sql).toContain("status <> 'pool'")
     expect(sql).toContain('"group"')
+  })
+})
+
+describe('syncChairsWithLayout — plan hamaca limit (CR-002)', () => {
+  const config = { group: 1, rows: 1, seatsPerRow: 2, baseLat: 60.1, baseLng: 24.9,
+    horizontalGap: 2.5, verticalGap: 2.5, intraPairGap: 0.3, rotation: 0,
+    price: 25, category: 'sunbed', pairSeats: false }
+
+  it('refuses a new parcel that would pass the limit, with no group or seats written', async () => {
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ layoutMode: 'geo' } as any)
+    vi.mocked(checkHamacaLimit).mockResolvedValueOnce({ allowed: false, current: 100, limit: 100, adding: 2, tier: 'GRATIS' })
+
+    const res = await syncChairsWithLayout(SITE_ID, config as any, 'create')
+
+    expect(res).toEqual({ status: 'error', errors: [expect.stringMatching(/100 hamacas/)] })
+    expect(vi.mocked(checkHamacaLimit)).toHaveBeenCalledWith(SITE_ID, 2)
+    expect(vi.mocked(prisma.itemGroup.create)).not.toHaveBeenCalled()
+    expect(vi.mocked(prisma.inventoryItem.createMany)).not.toHaveBeenCalled()
+  })
+
+  it('rearranging an over-limit parcel without growing it is never blocked', async () => {
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ layoutMode: 'geo' } as any)
+    vi.mocked(checkHamacaLimit).mockResolvedValue({ allowed: false, current: 150, limit: 100, adding: 1, tier: 'GRATIS' })
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([
+      { id: 'a', number: 1, itemGroupId: 'g-1', sunbedGroupId: null, locationLat: '60.1', locationLng: '24.9', schematicX: null, schematicY: null },
+      { id: 'b', number: 2, itemGroupId: 'g-1', sunbedGroupId: null, locationLat: '60.1', locationLng: '24.9', schematicX: null, schematicY: null },
+    ] as any)
+    vi.mocked(prisma.itemGroup.update).mockResolvedValue({ id: 'g-1' } as any)
+
+    const res = await syncChairsWithLayout(SITE_ID, config as any, 'rearrange')
+
+    expect(res).not.toEqual(expect.objectContaining({ status: 'error' }))
+    expect(vi.mocked(checkHamacaLimit)).not.toHaveBeenCalled()
+    expect(vi.mocked(prisma.inventoryItem.createMany)).not.toHaveBeenCalled()
+    vi.mocked(checkHamacaLimit).mockResolvedValue({ allowed: true, current: 0, limit: 100, adding: 0, tier: 'GRATIS' })
   })
 })

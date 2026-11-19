@@ -5,6 +5,7 @@ import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { applyTransition } from '@repo/data/reservation-machine-apply'
 import { processConfirmedOrder } from '@repo/data/payment'
+import { checkFoodOrderingAllowed } from '@repo/data/plan-gate'
 import { isDemoPayment, isValidEntityId } from '@/app/api/_lib/payment-ids'
 import { issueRefund } from '@/app/api/_lib/payment-provider'
 import {
@@ -201,6 +202,12 @@ export async function createOrder(order: {
 
   if (!site.appSalesEnabled) {
     return { status: 'error', errors: ['Product ordering is not available for this site'] }
+  }
+
+  // CR-002 plan gate: Gratis partners take no food & drink ordering.
+  const foodGate = await checkFoodOrderingAllowed({ siteId: order.siteId })
+  if (!foodGate.allowed) {
+    return { status: 'error', errors: [foodGate.message] }
   }
 
   // ── Determine authenticated user ──────────────────────────────────────────

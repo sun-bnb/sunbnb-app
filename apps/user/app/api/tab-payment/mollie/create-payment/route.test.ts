@@ -29,6 +29,7 @@ vi.mock('@/app/api/_lib/mollie', () => ({
 // ── Import after mocks ────────────────────────────────────────────────────────
 import { POST } from './route'
 import prisma from '@repo/data/PrismaCient'
+import { checkChargeAllowed } from '@repo/data/plan-gate'
 import {
   calculateTabTotal,
   loadTabFeeContext,
@@ -108,6 +109,28 @@ beforeEach(() => {
 })
 
 describe('POST /api/tab-payment/mollie/create-payment', () => {
+  // ── CR-002 plan gate ────────────────────────────────────────────────────────
+
+  it('returns 403, reverts the claim and never calls Mollie when the plan gate refuses', async () => {
+    vi.mocked(checkChargeAllowed).mockResolvedValueOnce({
+      allowed: false,
+      feature: 'ONLINE_PAYMENTS',
+      message: 'This venue takes payment on site only',
+    })
+    const res = await POST(makeRequest({ tabId: VALID_TAB_ID, redirectUrl: REDIRECT_URL }))
+    expect(res.status).toBe(403)
+    expect((await res.json()).error).toBe('This venue takes payment on site only')
+    expect(checkChargeAllowed).toHaveBeenCalledWith('tab', { siteId: 'site-1', restaurantId: 'rest-1' })
+    // claim reverted back to open
+    expect(prisma.tableTab.updateMany).toHaveBeenLastCalledWith({
+      where: { id: VALID_TAB_ID, status: 'pending_payment' },
+      data: { status: 'open', paymentRef: null },
+    })
+    expect(mockPaymentsCreate).not.toHaveBeenCalled()
+    expect(mockGetValidMollieToken).not.toHaveBeenCalled()
+    expect(prisma.tableTab.update).not.toHaveBeenCalled()
+  })
+
   // ── Input validation ────────────────────────────────────────────────────────
 
   it('returns 400 when tabId is missing', async () => {

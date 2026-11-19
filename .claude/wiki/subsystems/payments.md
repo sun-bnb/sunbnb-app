@@ -37,9 +37,13 @@ subscriptions** (platform-as-merchant — a separate concern).
 | **Mollie for Platforms** | `tr_` | online | Card → partner's Mollie account; commission as `applicationFee` | live |
 | **Stripe Connect** | `stripe_cs_` (Checkout Session) | online | **Direct charge** on the partner's connected account (merchant of record); commission + processing pass-through as `application_fee_amount` | live (test-mode verified) |
 | **Viva Smart Checkout** | `vso_<orderCode>` | online | Card → partner's Viva account; ISV fee withheld by Viva, credited monthly (no pass-through) | **stub** until Viva KYC clears |
-| **Viva Cloud Terminal** | `viva_<sessionId>` | card-present | Server pushes the sale to the staff phone's Viva Terminal app ([[track:024-card-present-payments]]) | stub / vendor-gated |
-| **Stripe Tap to Pay** | `stripe_pi_` (PaymentIntent) | card-present | `card_present` PaymentIntent on the connected account; the floor app's Terminal SDK is the reader | built, Simulator run pending |
+| **Viva Cloud Terminal** | `viva_<sessionId>` | card-present | Server pushes the sale to the staff phone's Viva Terminal app ([[track:024-card-present-payments]]); ISV fee 0: no Sunbnb commission on card at the venue (CR-002, M-68; Viva acceptance of a 0 fee unconfirmed) | stub / vendor-gated |
+| **Stripe Tap to Pay** | `stripe_pi_` (PaymentIntent) | card-present | `card_present` PaymentIntent on the connected account; the floor app's Terminal SDK is the reader; application fee = processing pass-through only, no commission | built, Simulator run pending |
 | **Demo** | `pi_demo_<timestamp>` | faked | No money; same invoicing path | `NEXT_PUBLIC_DEMO_MODE` |
+
+**Card at the venue carries no Sunbnb commission** (CR-002, founder answer to M-68): `isCardPresentRef`
+(`viva_` or `stripe_pi_`) makes `processConfirmedReservation` book 0 commission and skip the monthly
+cap ledger entirely, so collected === invoiced and card sales never eat a site's cap headroom.
 
 `providerFromRef(ref)` is the single discriminator — every refund, status poll, webhook and
 reconcile branch dispatches on it. Never write a private `startsWith('tr_')`-style check; no

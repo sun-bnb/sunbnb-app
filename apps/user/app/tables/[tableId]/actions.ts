@@ -4,6 +4,7 @@ import { auth } from '@/app/auth'
 import { isFlagEnabled } from '@/app/flags'
 import prisma from '@repo/data/PrismaCient'
 import { calculateTabTotal } from '@repo/data/payment'
+import { checkFoodOrderingAllowed } from '@repo/data/plan-gate'
 import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 import {
   ORDER_COMPLETE,
@@ -121,6 +122,12 @@ export async function placeTabOrder(
 
   const restaurant = table.restaurant
   const restaurantId = restaurant.id
+
+  // CR-002 plan gate: Gratis partners take no food & drink ordering.
+  const foodGate = await checkFoodOrderingAllowed({ siteId: restaurant.siteId, restaurantId })
+  if (!foodGate.allowed) {
+    return { status: 'error', errors: [foodGate.message] }
+  }
 
   // ── Identity ────────────────────────────────────────────────────────────
   // Session user or anonId required. For anon callers we use the restaurant

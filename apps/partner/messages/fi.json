@@ -549,15 +549,13 @@
     "integratedPaymentsDesc": "Asiakkaat maksavat varauksen yhteydessä. Maksu kerätään ja tilitetään alustan kautta.",
     "offPlatformBilling": "Ulkopuolinen laskutus",
     "offPlatformBillingDesc": "Ei maksua alustalla. Soveltuu tilanteisiin, joissa laskutus hoidetaan ulkopuolella, esim. hotellivieraat.",
-    "proOrBusinessRequired": "Pro tai Business -tili vaaditaan",
     "basePrice": "Perushinta (€)",
     "basePriceHelper": "Hinta, jonka asiakkaasi maksavat",
     "taxRate": "Veroprosentti (%)",
     "taxRateHelper": "Sovelletaan kaikkiin myynteihin",
     "customerPays": "Asiakas maksaa",
-    "serviceFee": "Palvelumaksu",
+    "serviceFee": "Sunbnbin provisio",
     "customRate": "erikoishinta",
-    "upgradeTier": "Päivitä {tier}-tilaukseen saadaksesi {fee} palvelumaksun",
     "youReceive": "Saat",
     "inclVat": "sis. ALV {rate}%",
     "noServiceFee": "Aurinkosänkyjen vuokraukselle ei ole asetettu palvelumaksua",
@@ -602,7 +600,8 @@
     "deletePermanently": "Poista pysyvästi",
     "deleting": "Poistetaan…",
     "changePaymentProvider": "Vaihda kohdassa Tili → Maksut",
-    "tapToPayNote": "Korttimaksut aurinkotuolilla käyttävät Tap to Pay -toimintoa Sunbnb Floor -sovelluksessa."
+    "tapToPayNote": "Korttimaksut aurinkotuolilla käyttävät Tap to Pay -toimintoa Sunbnb Floor -sovelluksessa.",
+    "notInPlan": "Ei sisälly tilaukseesi"
   },
   "SiteContent": {
     "coverPhoto": "Kansikuva",
@@ -1173,7 +1172,8 @@
     "bookings": "{count, plural, one {# varaus} other {# varausta}}",
     "noItemsHint": "Lisää surfilautoja, kajakeja, aurinkovarjoja ja muuta",
     "deleteTitle": "Poistetaanko vuokrauskohde?",
-    "deleteWithBookings": "Tällä kohteella on {count} varaus(ta), jotka myös poistetaan."
+    "deleteWithBookings": "Tällä kohteella on {count} varaus(ta), jotka myös poistetaan.",
+    "category": "Luokka"
   },
   "Calendar": {
     "today": "Tänään",
@@ -1687,11 +1687,11 @@
       },
       "listed": {
         "title": "Asiakas maksaa sinun hintasi",
-        "body": "Asiakkaalle ei lisätä mitään. Provisio vähennetään myynnistä, ja Sunbnb laskuttaa sen sinulta erikseen."
+        "body": "Vieraalta ei koskaan veloiteta mitään lisäksi. Provisio vähennetään myynnistä, ja Sunbnb laskuttaa sen sinulta erikseen."
       },
       "commission": {
         "title": "Provisio paketin mukaan",
-        "body": "{starter} %, {pro} % tai {business} % paketista riippuen, Sunbnb:n kautta myydyistä tuolivarauksista, ruoasta ja juomasta sekä vuokrista."
+        "body": "{gratis} % Gratis-tilauksessa. {temporada} % Temporada-tilauksessa, enintään {cap} € kohdetta kohti kuukaudessa. {fnb} % ruoasta ja juomasta. Korttimaksujen käsittely laskutetaan maksupalvelun omakustannushintaan omana rivinään."
       },
       "cash": {
         "title": "Ei provisiota käteisestä",
@@ -1699,22 +1699,24 @@
       }
     },
     "plans": {
-      "title": "Paketit",
-      "subtitle": "Provisio on se, mitä maksat jokaisesta myynnistä. Kuukausipaketti laskee sitä ja tuo lisää paikkoja.",
-      "free": "Ilmainen",
-      "freeNote": "ei kuukausimaksua",
-      "perMonth": "/ kk",
+      "title": "Tilaukset",
+      "subtitle": "Maksat provisiota vain siitä, minkä vieraat maksavat verkossa. Missään tilauksessa ei ole kuukausimaksua.",
       "mostChosen": "Suosituin",
-      "commissionLabel": "provisio jokaisesta Sunbnb:n kautta tehdystä ostosta",
-      "oneVenue": "1 paikka",
-      "starterAll": "Tuolivaraukset, tilaukset ja vuokraus",
-      "upToVenues": "Enintään {count} paikkaa",
-      "everythingIn": "Kaikki {plan}-paketista",
-      "offPlatform": "Laskutus alustan ulkopuolella",
-      "branded": "Brändätty varaussivu",
-      "supportCommunity": "Yhteisötuki",
-      "supportPriority": "Etusijatuki",
-      "supportDedicated": "Oma tukihenkilö",
+      "commissionLabel": "provisio verkossa maksetuista aurinkosänky- ja vuokravarauksista",
+      "noMonthlyFee": "Ei kuukausimaksua",
+      "sites": "{count, plural, one {# kohde} other {Enintään # kohdetta}}",
+      "hamacas": "Enintään {count} aurinkosänkyä kohdetta kohti",
+      "perAgreement": "Kohteet ja aurinkosängyt sopimuksen mukaan",
+      "onlinePayments": "Korttimaksu verkossa sekä ruoka- ja juomatilaukset",
+      "cap": "Provisio enintään {cap} € kohdetta kohti kuukaudessa",
+      "foodAndDrink": "{pct} % provisio ruoasta ja juomasta",
+      "processing": "Korttimaksujen käsittely maksupalvelun omakustannushintaan, omana rivinään",
+      "payOnSite": "Vieraat maksavat vain paikan päällä: ei korttimaksua verkossa eikä ruoka- ja juomatilauksia",
+      "includedAll": "Aurinkosänkyjen varaus, satelliittikartta, QR-varaus ilman vieraan tiliä, henkilökunnan linkki ja välinevuokraus",
+      "quote": "Pyydä tarjous",
+      "quoteHeadline": "Räätälöity",
+      "quoteNote": "Provisio ja rajat sovitaan kanssasi",
+      "quoteSubject": "Grupo-tilauksen tarjouspyyntö",
       "cta": "Aloita"
     },
     "start": {
@@ -2180,5 +2182,35 @@
       "waitReply": "Odota, että avustaja vastaa loppuun.",
       "canned": "Olen kohdistanut kuvan — ehdota asettelua."
     }
+  },
+  "PlanFees": {
+    "commission": "Sunbnbin provisio: {pct} % verkossa maksetuista aurinkosänky- ja vuokravarauksista",
+    "commissionCapped": "Sunbnbin provisio: {pct} % verkossa maksetuista aurinkosänky- ja vuokravarauksista, enintään {cap} € kohdetta kohti kuukaudessa",
+    "commissionAgreed": "Sunbnbin provisio: tilauksesi sopimuksen mukaan",
+    "foodAndDrink": "Ruoka ja juoma: {pct} % provisio",
+    "processing": "Korttimaksujen käsittely: laskutetaan maksupalvelun omakustannushintaan omana rivinään, erillään Sunbnbin provisiosta",
+    "noGuestFee": "Vieraat maksavat listahintasi. Heille ei lisätä mitään.",
+    "gratisUpgrade": "Tilauksellasi vieraat maksavat vain paikan päällä. Siirry {plan}-tilaukseen ottaaksesi vastaan korttimaksuja verkossa sekä ruoka- ja juomatilauksia.",
+    "seePlans": "Katso tilaukset",
+    "notInPlan": "Ei sisälly tilaukseesi",
+    "commissionTitle": "Sunbnbin provisio"
+  },
+  "Subscription": {
+    "title": "Tilaus",
+    "subtitle": "Hallitse tilaustasi ja kohteiden rajaa",
+    "currentPlan": "Nykyinen tilaus",
+    "sitesUsed": "Kohteita käytössä",
+    "custom": "(räätälöity)",
+    "pastDue": "Maksusi on myöhässä. Päivitä laskutustietosi.",
+    "current": "Nykyinen",
+    "currentButton": "Nykyinen tilaus",
+    "freePlan": "Ilmainen tilaus",
+    "badgeGratis": "Ilmainen",
+    "badgeGrupo": "Räätälöity",
+    "enableOnline": "Yhdistä maksupalvelu",
+    "manageBilling": "Hallitse laskutusta",
+    "opening": "Avataan…",
+    "infoTitle": "Miten tilaukset laskutetaan",
+    "infoBody": "Missään tilauksessa ei ole kuukausimaksua. Korttimaksujen käsittely laskutetaan maksupalvelun omakustannushintaan omana rivinään, erillään Sunbnbin provisiosta. Vieraat eivät koskaan maksa lisämaksua."
   }
 }

@@ -67,7 +67,7 @@ describe('saveGeneral', () => {
     // the OFF_PLATFORM_BILLING entitlement (PRO/BUSINESS plan). Grant it via a real
     // DB subscription so saveGeneral's entitlement check passes legitimately.
     const account = await createTestPartnerAccount(user.id)
-    await createTestSubscription(account.userId, 'PRO')
+    await createTestSubscription(account.userId, 'TEMPORADA')
 
     const result = await saveGeneral({
       id: site.id,
@@ -92,6 +92,7 @@ describe('saveGeneral', () => {
 
   it('derives and persists Site.timeZone from coords (track 017 P7)', async () => {
     const user = await createTestUser()
+    await createTestPartnerAccount(user.id) // CR-002: a null-type site saved as paid needs ONLINE_PAYMENTS
     const site = await createTestSite(user.id)
     mockUserId = user.id
 
@@ -159,6 +160,7 @@ describe('saveGeneral', () => {
 
   it('sets price to null for zero value', async () => {
     const user = await createTestUser()
+    await createTestPartnerAccount(user.id) // CR-002: a null-type site saved as paid needs ONLINE_PAYMENTS
     const site = await createTestSite(user.id, { price: 50 })
     mockUserId = user.id
 
@@ -203,6 +205,7 @@ describe('saveGeneral', () => {
 
   it('trims whitespace from the site name', async () => {
     const user = await createTestUser()
+    await createTestPartnerAccount(user.id) // CR-002: a null-type site saved as paid needs ONLINE_PAYMENTS
     const site = await createTestSite(user.id)
     mockUserId = user.id
 

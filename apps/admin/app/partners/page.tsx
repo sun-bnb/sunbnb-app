@@ -74,15 +74,15 @@ export default async function PartnersPage() {
             </thead>
             <tbody>
               {partners.map((p) => {
-                const tier = p.subscription?.plan?.tier ?? 'STARTER'
+                const tier = p.subscription?.plan?.tier ?? 'GRATIS'
                 const siteCount = siteCountMap.get(p.userId) ?? 0
                 const hasCustom =
                   p.customSubscription != null ||
                   p.serviceFees.some((f) => f.accountId === p.userId)
                 const tierColor =
-                  tier === 'BUSINESS'
+                  tier === 'GRUPO'
                     ? 'bg-purple-400/20 text-purple-300'
-                    : tier === 'PRO'
+                    : tier === 'TEMPORADA'
                       ? 'bg-blue-400/20 text-blue-300'
                       : 'bg-gray-700 text-gray-300'
 

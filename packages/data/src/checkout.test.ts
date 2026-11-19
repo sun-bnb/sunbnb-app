@@ -18,8 +18,10 @@ const m = vi.hoisted(() => ({
   markRentalStarted: vi.fn(),
   markRentalFailed: vi.fn(),
   createCheckout: vi.fn(),
+  planGate: vi.fn(),
 }))
 
+vi.mock('./plan-gate', () => ({ checkCheckoutAllowed: m.planGate }))
 vi.mock('../index', () => ({
   default: {
     reservation: { findUnique: m.reservationFind },
@@ -80,7 +82,7 @@ function feeCtx(serviceCode: string) {
       vivaMerchantId: 'merchant-1',
       vivaSourceCode: 'src-1',
       vivaVerificationStatus: 'verified',
-      subscription: { plan: { tier: 'STARTER' } },
+      subscription: { plan: { tier: 'GRATIS' } },
     },
     settings: { serviceFees: settingsFees },
   }
@@ -90,7 +92,7 @@ function feeCtx(serviceCode: string) {
 function expectedFee(serviceCode: string, amount: number) {
   const c = feeCtx(serviceCode)
   const fee = chargeableServiceFee(
-    resolveServiceFee(c.site.serviceFees as any, c.partnerAccount.serviceFees as any, c.settings.serviceFees as any, serviceCode, 'STARTER' as any),
+    resolveServiceFee(c.site.serviceFees as any, c.partnerAccount.serviceFees as any, c.settings.serviceFees as any, serviceCode, 'GRATIS' as any),
     c.partnerAccount as any,
     CREATED,
   )
@@ -102,6 +104,7 @@ const reservationInput: CheckoutInput = { ...base, kind: 'reservation', reservat
 
 beforeEach(() => {
   vi.clearAllMocks()
+  m.planGate.mockResolvedValue({ allowed: true })
   m.loadFeeContext.mockImplementation(async (_s: string, code: string) => feeCtx(code))
 })
 
@@ -200,7 +203,7 @@ describe('resolveCheckoutIntent — tab', () => {
   const input: CheckoutInput = { ...base, kind: 'tab', tabId: 't1' }
   beforeEach(() => {
     const c = feeCtx('food-and-beverage')
-    m.loadTabFeeContext.mockResolvedValue({ siteFees: [], partnerAccount: c.partnerAccount, settings: c.settings, tier: 'STARTER' })
+    m.loadTabFeeContext.mockResolvedValue({ siteFees: [], partnerAccount: c.partnerAccount, settings: c.settings, tier: 'GRATIS' })
   })
 
   it('charges payableTotal (menu prices only) with the Mollie fee', async () => {
@@ -366,7 +369,7 @@ describe('createOnlineCheckout', () => {
     expect(m.orderUpdate).toHaveBeenCalledWith({ where: { id: 'o1' }, data: { paymentRef: 'vso_z', status: 'processing' } })
 
     const c = feeCtx('food-and-beverage')
-    m.loadTabFeeContext.mockResolvedValue({ siteFees: [], partnerAccount: c.partnerAccount, settings: c.settings, tier: 'STARTER' })
+    m.loadTabFeeContext.mockResolvedValue({ siteFees: [], partnerAccount: c.partnerAccount, settings: c.settings, tier: 'GRATIS' })
     m.tabFind.mockResolvedValue({ id: 't1', siteId: null, restaurantId: 'r', status: 'pending_payment', paymentRef: null, createdAt: CREATED })
     m.calculateTabTotal.mockResolvedValue({ payableTotal: 10 })
     await createOnlineCheckout({ ...base, kind: 'tab', tabId: 't1' })
@@ -381,7 +384,7 @@ describe('createOnlineCheckout', () => {
   })
   it('tab provider failure releases the claim', async () => {
     const c = feeCtx('food-and-beverage')
-    m.loadTabFeeContext.mockResolvedValue({ siteFees: [], partnerAccount: c.partnerAccount, settings: c.settings, tier: 'STARTER' })
+    m.loadTabFeeContext.mockResolvedValue({ siteFees: [], partnerAccount: c.partnerAccount, settings: c.settings, tier: 'GRATIS' })
     m.tabFind.mockResolvedValue({ id: 't1', siteId: null, restaurantId: 'r', status: 'pending_payment', paymentRef: null, createdAt: CREATED })
     m.calculateTabTotal.mockResolvedValue({ payableTotal: 10 })
     m.createCheckout.mockRejectedValue(new Error('x'))
@@ -419,5 +422,24 @@ describe('tab claim', () => {
       where: { id: 't1', status: 'pending_payment' },
       data: { status: 'open', paymentRef: null },
     })
+  })
+})
+
+describe('createOnlineCheckout — CR-002 plan gate', () => {
+  it('a Gratis venue (gate refused) gets plan_gated and no provider checkout or state change', async () => {
+    m.planGate.mockResolvedValue({ allowed: false, feature: 'ONLINE_PAYMENTS', message: 'This venue takes payment on site only' })
+    const { createOnlineCheckout } = await import('./checkout')
+    for (const input of [
+      { kind: 'reservation' as const, reservationId: 'r1' },
+      { kind: 'tab' as const, tabId: 't1' },
+      { kind: 'table-deposit' as const, tableReservationId: 'tr1' },
+    ]) {
+      const res = await createOnlineCheckout({ ...input, provider: 'stripe', redirectUrl: 'https://x/r', webhookUrl: 'https://x/w' })
+      expect(res).toMatchObject({ status: 'error', reason: 'plan_gated' })
+    }
+    expect(m.createCheckout).not.toHaveBeenCalled()
+    expect(m.reservationFind).not.toHaveBeenCalled()
+    expect(m.loadFeeContext).not.toHaveBeenCalled()
+    expect(m.markResStarted).not.toHaveBeenCalled()
   })
 })
