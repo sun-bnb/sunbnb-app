@@ -9,7 +9,7 @@ import { getEffectiveSubscriptionForUser } from '@repo/data/subscription'
 import { deriveTimeZoneFromCoords } from '@repo/data/site-day'
 import { resolveBrandRender } from '@repo/data/brand-manifest'
 import { createSiteWithCode } from '@/lib/site-create'
-import { planGateError } from '@/lib/plan-features'
+import { planGateError, sitePlanGateError } from '@/lib/plan-features'
 
 // ─── Save Schematic Canvas Dimensions ───────────────────────────────────────
 
@@ -157,7 +157,9 @@ export async function saveGeneral(input: {
       select: { type: true },
     })
     if (current?.type !== 'paid') {
-      const gate = await planGateError(session.user.id, ['ONLINE_PAYMENTS'])
+      const gate = input.id
+        ? await sitePlanGateError(input.id, ['ONLINE_PAYMENTS'])
+        : await planGateError(session.user.id, ['ONLINE_PAYMENTS'])
       if (gate) return { status: 'error', errors: [gate] }
     }
   }
@@ -262,7 +264,9 @@ export async function submitForm(
       ? await prisma.site.findUnique({ where: { id: siteId }, select: { type: true } })
       : null
     if (current?.type !== 'paid') {
-      const gate = await planGateError(session.user.id, ['ONLINE_PAYMENTS'])
+      const gate = siteId
+        ? await sitePlanGateError(siteId, ['ONLINE_PAYMENTS'])
+        : await planGateError(session.user.id, ['ONLINE_PAYMENTS'])
       if (gate) return { status: 'error', errors: [gate] }
     }
   }

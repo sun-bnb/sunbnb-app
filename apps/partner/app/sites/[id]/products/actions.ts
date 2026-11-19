@@ -7,7 +7,7 @@ import { validateImageFile, isValidOrderPaymentType, isValidProductCategory } fr
 import prisma from '@repo/data/PrismaCient'
 import { isOwnerOrSudo } from '@/lib/owner-or-sudo'
 import { computeVatAndBaseAmounts } from '@repo/data/payment'
-import { planGateError } from '@/lib/plan-features'
+import { sitePlanGateError } from '@/lib/plan-features'
 import { put } from '@vercel/blob'
 import sharp from 'sharp'
 import { setProductImage } from '@/lib/site-images'
@@ -19,7 +19,7 @@ export async function toggleAppSales(siteId: string, enabled: boolean) {
 
   // CR-002: food and drink ordering is a plan feature; turning it OFF is never blocked.
   if (enabled && session) {
-    const gate = await planGateError(session.user.id, ['FOOD_AND_BEVERAGE'])
+    const gate = await sitePlanGateError(siteId, ['FOOD_AND_BEVERAGE'])
     if (gate) return { status: 'error', errors: [gate] }
   }
 
@@ -42,7 +42,7 @@ export async function setOrderPaymentType(siteId: string, orderPaymentType: stri
 
   // CR-002: online ('paid') order payment needs online payments + F&B; 'unpaid' is never gated.
   if (orderPaymentType === 'paid' && session) {
-    const gate = await planGateError(session.user.id, ['ONLINE_PAYMENTS', 'FOOD_AND_BEVERAGE'])
+    const gate = await sitePlanGateError(siteId, ['ONLINE_PAYMENTS', 'FOOD_AND_BEVERAGE'])
     if (gate) return { status: 'error', errors: [gate] }
   }
 

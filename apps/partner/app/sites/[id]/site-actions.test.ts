@@ -662,7 +662,7 @@ describe('saveGeneral — off-platform billing entitlement', () => {
     mockGetEffective.mockResolvedValue({
       features: { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: false, FOOD_AND_BEVERAGE: false },
     } as any)
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({ type: 'unpaid' } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ type: 'unpaid', userId: 'owner-1' } as any)
 
     const res = await saveGeneral({ ...baseInput, type: 'paid', price: '20', vat: '21' })
 

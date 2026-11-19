@@ -446,6 +446,7 @@ describe('plan gating (CR-002)', () => {
 
   it('Gratis cannot enable food and drink ordering', async () => {
     authorizeOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: 'owner-1' } as any)
     vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValueOnce(gratis)
     const res = await toggleAppSales(SITE_ID, true)
     expect(res.status).toBe('error')
@@ -455,6 +456,7 @@ describe('plan gating (CR-002)', () => {
 
   it('Gratis can still switch food and drink ordering off', async () => {
     authorizeOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: 'owner-1' } as any)
     vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValueOnce(gratis)
     vi.mocked(prisma.site.update).mockResolvedValue({} as any)
     const res = await toggleAppSales(SITE_ID, false)
@@ -463,6 +465,7 @@ describe('plan gating (CR-002)', () => {
 
   it('Gratis cannot set online order payment, but can set unpaid', async () => {
     authorizeOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: 'owner-1' } as any)
     vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValueOnce(gratis)
     const refused = await setOrderPaymentType(SITE_ID, 'paid')
     expect(refused.status).toBe('error')

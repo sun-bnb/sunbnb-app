@@ -22,13 +22,31 @@ export async function createTestUser(overrides: Record<string, any> = {}) {
 /**
  * Creates a PartnerAccount for the given user.
  * Required before createTestSubscription — Subscription references PartnerAccount by userId.
+ *
+ * CR-002: a partner with no subscription is on Gratis (no online payments, no F&B,
+ * 100 hamacas per site). Tests written before the catalogue assume an entitled
+ * partner, so the fixture grants a CustomSubscription override (online payments, F&B,
+ * a large hamaca limit). Plan-gating tests pass `{ planGated: true }` to get a bare
+ * Gratis partner; @repo/data's plan-gate integration tests pin the gate itself.
  */
 export async function createTestPartnerAccount(
   userId: string,
   overrides: Record<string, any> = {}
 ) {
+  const { planGated, ...rest } = overrides
+  overrides = rest
   return prisma.partnerAccount.create({
     data: {
+      ...(planGated
+        ? {}
+        : {
+            customSubscription: {
+              create: {
+                featureOverrides: { ONLINE_PAYMENTS: true, FOOD_AND_BEVERAGE: true },
+                maxHamacasPerSite: 100000,
+              },
+            },
+          }),
       userId,
       firstName: 'Test',
       lastName: 'Partner',
