@@ -35,15 +35,14 @@ export default async function LandingPage({
     checkin: t('Hero.slides.checkin.tag'),
     invoice: t('Hero.slides.invoice.tag'),
   }
-  // TODO(CR-002 run 5): Faq.costA still describes the old ladder; the params now carry
-  // Gratis / Temporada / Grupo sunbed rates until the copy is rewritten.
-  const sunbedRate = (tier: keyof typeof PRICING_TIERS) => PRICING_TIERS[tier].commissionPercent['sunbed-rental']
+  // Faq.costA reads the Temporada rate and cap from the catalogue billing uses (CR-002).
+  const temporada = PRICING_TIERS.TEMPORADA
   const faq = [
     ['noPhone', {}],
     ['hardware', {}],
     ['assistant', {}],
     ['paid', {}],
-    ['cost', { pct: sunbedRate('GRATIS'), pro: sunbedRate('TEMPORADA'), business: sunbedRate('GRUPO') }],
+    ['cost', { pct: temporada.commissionPercent['sunbed-rental'], cap: temporada.monthlyCommissionCapPerSite ?? 0 }],
     ['languages', {}],
   ] as const
 

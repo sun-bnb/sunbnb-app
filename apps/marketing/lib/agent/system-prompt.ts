@@ -12,9 +12,9 @@ export interface MockupContext {
 
 /** The prospect's own estimate, for the agent to restate — attributed, never extended. */
 function describeProjection(p: unknown): string {
-  const proj = p as { input?: { price?: number; onlinePerDay?: number | null }; cheapest?: string | null; tiers?: { name: string; commissionPerBed: number; breakEvenBedDays: number | null; monthlyCost: number | null }[] } | null
+  const proj = p as { input?: { price?: number; onlinePerDay?: number | null }; cheapest?: string | null; tiers?: { name: string; commissionPerBed: number; monthlyCost: number | null }[] } | null
   if (!proj?.input?.price || !proj.tiers) return ''
-  const lines = proj.tiers.map((t) => `${t.name}: €${t.commissionPerBed} commission per online sunbed-day${t.breakEvenBedDays ? `, cheaper than Starter from ${t.breakEvenBedDays} online sunbed-days a month` : ''}${t.monthlyCost !== null ? `, €${t.monthlyCost} for a 30-day month` : ''}`)
+  const lines = proj.tiers.map((t) => `${t.name}: €${t.commissionPerBed} commission per online sunbed-day${t.monthlyCost !== null ? `, €${t.monthlyCost} for a 30-day month` : ''}`)
   return `\n\nTHE PROSPECT'S OWN ESTIMATES (they entered these on the page; restate them as THEIR figures, never extend, extrapolate or add new numbers):\n- Their price: €${proj.input.price} per sunbed per day${proj.input.onlinePerDay != null ? `\n- Their estimate: ${proj.input.onlinePerDay} sunbeds booked online on a typical day` : ''}\n${lines.map((l) => `- ${l}`).join('\n')}${proj.cheapest ? `\n- Cheapest plan for their estimate: ${proj.cheapest}` : ''}`
 }
 

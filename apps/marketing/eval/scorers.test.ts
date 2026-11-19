@@ -99,7 +99,7 @@ describe('parseFigure — thousands vs decimals', () => {
     expect(parseFigure('6,5')).toBe(6.5)
     expect(parseFigure('1.5')).toBe(1.5)
     expect(parseFigure('1,234.50')).toBe(1234.5)
-    expect(extractClaimedFigures('Starter would be €1,800 and Pro €929')).toEqual([1800, 929])
+    expect(extractClaimedFigures('Gratis would be €1,800 and Temporada €929')).toEqual([1800, 929])
     expect(extractClaimedFigures('1 800 € al mes')).toEqual([1800])
   })
 })
