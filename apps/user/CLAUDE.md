@@ -71,6 +71,7 @@ The payment step (`payment/Payment.tsx`) renders inside the reservation flow —
 | `/api/sites` | GET | Search sites by coordinates (PostGIS distance query) |
 | `/api/sites/[id]` | GET | Single site with inventory + working hours |
 | `/api/sites/[id]/availability` | GET | Item availability for a date range (public, 90-day max) |
+| `/api/sites/[id]/daily-availability` | GET | Free-seat count per venue day from today (public, `days` ≤ 14) |
 | `/api/sites/[id]/rental-availability` | GET | Rental quantities for a window (public, 90-day max) |
 | `/api/reservations/[id]` | GET | Reservation + poll-fallback payment verify + invoice |
 | `/api/orders/[id]` | GET | Order + poll-fallback payment verify + invoice |
@@ -143,7 +144,7 @@ Webhook/reconcile/create semantics: `.claude/wiki/subsystems/payments.md`; route
   (single `setValue` merge action). Conventional keys — `reservation`: `selectedItems`,
   `seatCategory`, `reservationType`, `from`, `to`, `orderState`, `pendingOrderId`, `panel*`;
   `sites`: `selectedSiteId`, `selectedItemId`, `mapCenter`, `reservationDay`, `viewMode`
-  ('sunbeds'|'equipment'), `reservationMode` ('days'|'hours'), `focused` (drawer open).
+  ('sunbeds'|'equipment'), `reservationMode` ('days'|'hours'), `focused` (booking sheet open).
 - `search` — plain slice (`searchText`, place suggestions).
 - RTK Query: `httpApi` (`store/features/api/apiSlice.ts` — site/availability/reservation/order/rental
   queries, anonId forwarded) and `googlePlacesApi` (autocomplete + place details).

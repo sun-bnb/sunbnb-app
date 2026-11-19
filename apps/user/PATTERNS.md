@@ -58,21 +58,37 @@ Pulled on demand; **not** auto-loaded. Narratives behind the one-line pointers i
 
 ## The booking funnel is ONE component (track 023 P2)
 
-- `components/booking/BookingSurface.tsx` owns the funnel: sticky sidebar at `lg`, fixed
-  peek-and-expand drawer below it, scrim, minimise pill, on-mount bootstrap (`focused: true` + today
-  as `reservationDay`, track 014), and the `ReservationView` mount. `SiteView` is the page AROUND it
-  and mounts it once; branded `/s/[slug]` gets it through the same `SiteView`.
-- **Custom brand pages mount this instead of copying the drawer** — a copy stops matching the day
-  the payment step, seat-selection policy or drawer mechanics change.
-- Contract `{ site, apiKey, theme?, openOnMount? }`. `openOnMount` (default true) is the track-014
-  reserve-first auto-open; a brand whose hero IS the landing moment opts out (Alcúdia). Later openers
-  (peeked date field `onOpen`, a CTA dispatching `focused: true`, tab switches) still work;
-  `reservationDay` is committed on mount regardless. `theme` is deliberately NOT `SiteViewBrand` —
-  the funnel only cares about the two colours.
-- Coordinates via the `sites` slice (`focused`, `reservationDay`, `reservationMode`, `viewMode`),
-  not callbacks. Peek arithmetic: pure `app/sites/[id]/peek-height.ts`.
-- Mobile drawer: peek (minimized) and expanded states; peek height varies by tab — sunbeds shows the
-  date range only, equipment shows the hours/days toggle + time picker; tab switch opens the drawer.
+- `components/booking/BookingSurface.tsx` owns the funnel: sticky sidebar at `lg`; on a phone a
+  **mini bar** (collapsed, the default) and a **booking sheet** (expanded), scrim, Escape-to-close,
+  body scroll lock, today committed as `reservationDay` on mount (track 014), and the
+  `ReservationView` mount. `SiteView` is the page AROUND it and mounts it once; branded `/s/[slug]`
+  gets it through the same `SiteView`.
+- **Custom brand pages mount this instead of copying it** — a copy stops matching the day the payment
+  step, seat-selection policy or sheet mechanics change.
+- Contract `{ site, apiKey, theme?, openOnMount? }`. `openOnMount` defaults to **false** (the page
+  opens on the venue; Book is in the mini bar). Openers: the mini bar, a CTA dispatching
+  `focused: true`. `theme` is deliberately NOT `SiteViewBrand` — the funnel only needs two colours.
+  A page whose header is not ~80px can set `--booking-sheet-top`.
+- Coordinates via the `sites` slice (`focused` = sheet open, `dateRange`, `reservationDay`,
+  `reservationMode`, `viewMode`), not callbacks.
+- **The sheet never scrolls as a whole.** It spans from below the header to the bottom; its content
+  is ONE flex column — fixed-height controls (tabs, day strip, caption), the body that flexes
+  (`min-h-0 flex-1`: the seat map, or the equipment list which scrolls internally), and the footer
+  with Reserve pinned below. Reserve is on screen on every phone by construction; never give the map
+  a fixed height on mobile (desktop keeps `h-[300px]`). Only an open calendar on a very short screen
+  falls back to the sheet's own scroll.
+- **Guest email is a confirm step, not a footer field** (`GuestConfirm` in `Reservation.tsx`, shared
+  by sunbeds and equipment): Reserve → summary + email, or "Sign in to book". A signed-in guest
+  books in one tap. The closed sheet stays mounted (map state, seat preselection) and is `inert`.
+- Mobile date control: `DayStrip` — tiles for the next days (as many as FIT: `visibleDayCount`, no
+  horizontal scroll) with free-seat counts from `/api/sites/[id]/daily-availability`, plus a
+  calendar tile for ranges/far dates; the calendar disables past days.
+- Equipment uses the SAME strip (no counts → shorter tiles). Hours mode: one day (the calendar is
+  `single`) + Start/Duration steppers (`TimeStepper`, whole hours inside opening hours, today not in
+  the past — `equipment-time.ts`); the clamped slot is written back to `timeRange` so what is shown is
+  what is priced and booked. A mode exists only if some item is priced for it (`unitPrice`); "Rent by
+  Hours | Days" shows only when both do, the list shows only items priced for the mode, and a mode
+  switch drops cart lines the new mode cannot price.
 
 ## Bespoke brand pages (track 023)
 
@@ -81,7 +97,7 @@ Pulled on demand; **not** auto-loaded. Narratives behind the one-line pointers i
   `BRAND_KEYS`, and `Site.customBrandEnabled`. Anything else renders the standard branded page — a
   missing/misconfigured bespoke page costs the customer their design, never their bookings.
 - `brands/` sits outside `app/` so the router never walks it; a brand has full app access on purpose
-  (reuse drawer, availability read, translations) and must mount `BookingSurface`.
+  (reuse the booking sheet, availability read, translations) and must mount `BookingSurface`.
 - **Code splitting is measured, not assumed:** an awaited `() => import(…)` in a server component
   does NOT split, nor does `next/dynamic` from server code — only `dynamic()` behind the
   `brands/BrandMount.tsx` CLIENT boundary emits one chunk per brand. `brands/registry.test.ts`

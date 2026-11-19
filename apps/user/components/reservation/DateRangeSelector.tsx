@@ -3,6 +3,9 @@
 import React, { useState, useEffect } from 'react'
 import { DayPicker, type DateRange } from 'react-day-picker'
 import dayjs from 'dayjs'
+import { useLocale } from 'next-intl'
+
+import { formatStay } from '@/app/sites/[id]/day-strip'
 
 interface DateRangeSelectorProps {
   value: [string | null, string | null]
@@ -12,6 +15,8 @@ interface DateRangeSelectorProps {
   alwaysOpen?: boolean
   onOpen?: () => void
   onOpenChange?: (isOpen: boolean) => void
+  /** Pick ONE day (hourly rental): the first tap commits [day, day]. */
+  single?: boolean
 }
 
 export default function DateRangeSelector({
@@ -21,8 +26,10 @@ export default function DateRangeSelector({
   label = 'From – To',
   alwaysOpen = false,
   onOpen,
-  onOpenChange
+  onOpenChange,
+  single = false,
 }: DateRangeSelectorProps) {
+  const locale = useLocale()
   const [open, setOpen] = useState(alwaysOpen)
   // Local draft range — starts empty when picker opens so first click picks a fresh "from"
   const [draft, setDraft] = useState<DateRange | undefined>(undefined)
@@ -47,13 +54,22 @@ export default function DateRangeSelector({
     if (!alwaysOpen) onOpenChange?.(open)
   }, [open, alwaysOpen, onOpenChange])
 
-  const displayText = from && to
-    ? `${dayjs(from).format('YYYY-MM-DD')}  –  ${dayjs(to).format('YYYY-MM-DD')}`
-    : from
-      ? `${dayjs(from).format('YYYY-MM-DD')}  –  …`
-      : label
+  // Human, localized dates ("Thu, 19 Nov – Sat, 21 Nov"; one day for a
+  // same-day range). The ISO `YYYY-MM-DD – YYYY-MM-DD` this replaced read as
+  // data rather than as a control guests could tap.
+  const displayText = from
+    ? to
+      ? formatStay(locale, from, to)
+      : `${formatStay(locale, from)} – …`
+    : label
 
   const handleDayClick = (day: Date) => {
+    if (single) {
+      setDraft({ from: day, to: day })
+      onChange([dayjs(day).startOf('day').toISOString(), dayjs(day).endOf('day').toISOString()])
+      if (!alwaysOpen) setTimeout(() => setOpen(false), 250)
+      return
+    }
     const step = clicks + 1
     setClicks(step)
 
@@ -102,7 +118,11 @@ export default function DateRangeSelector({
         inRange: 'rdp-range_middle',
         selected: 'rdp-selected',
       }}
-      onDayClick={handleDayClick}
+      // Bookings start today at the earliest — past days are not choosable.
+      disabled={{ before: dayjs().startOf('day').toDate() }}
+      onDayClick={(day, modifiers) => {
+        if (!modifiers.disabled) handleDayClick(day)
+      }}
       numberOfMonths={1}
       defaultMonth={from || new Date()}
       showOutsideDays
@@ -116,6 +136,7 @@ export default function DateRangeSelector({
 
     return (
       <div className="w-full">
+        {!single && (
         <div className="flex items-stretch gap-2 mb-3">
           <div className={`flex-1 rounded-lg border px-3 py-2 transition-colors ${picking ? 'border-gray-900 bg-white' : 'border-gray-200 bg-white'}`}>
             <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-0.5">{(label.split('–')[0] ?? '').trim()}</div>
@@ -141,6 +162,7 @@ export default function DateRangeSelector({
             )}
           </div>
         </div>
+        )}
         <div className="bg-white rounded-lg border border-gray-200 py-2 px-2">
           {pickerContent}
         </div>
@@ -151,12 +173,11 @@ export default function DateRangeSelector({
   return (
     <div className="w-full">
       <div className="relative mt-2">
-        <span className="absolute top-1.5 left-1.5 bg-white px-1.5 text-xs text-gray-400 border border-gray-300 rounded-sm z-10">
-          {label}
-        </span>
         <button
           type="button"
           disabled={disabled}
+          aria-label={from ? `${label}: ${displayText}` : label}
+          aria-expanded={open}
           onClick={() => {
             if (!disabled) {
               const next = !open
@@ -170,7 +191,8 @@ export default function DateRangeSelector({
             }
           }}
           className={`
-            w-full px-3 py-[15.5px] text-center text-base rounded
+            w-full px-3 py-[15.5px] text-base rounded
+            flex items-center justify-center gap-2
             border transition-colors
             ${disabled
               ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
@@ -178,9 +200,16 @@ export default function DateRangeSelector({
             focus:outline-hidden
           `}
         >
-          <span className={`pointer-events-none ${from ? 'text-gray-900' : 'text-gray-500'}`}>
+          <svg className="pointer-events-none h-5 w-5 shrink-0 text-gray-500" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+            <rect x="3" y="4.5" width="14" height="12.5" rx="2" />
+            <path d="M3 8.5h14M7 2.5v4M13 2.5v4" strokeLinecap="round" />
+          </svg>
+          <span className={`pointer-events-none truncate ${from ? 'text-gray-900' : 'text-gray-500'}`}>
             {displayText}
           </span>
+          <svg className={`pointer-events-none h-4 w-4 shrink-0 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+          </svg>
         </button>
       </div>
 

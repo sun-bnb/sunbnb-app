@@ -29,9 +29,14 @@ Consumer-facing + **mobile-first**, so it diverges from partner:
   hoisted libraries (`@react-three/*`) would otherwise type against it. Next skips `.d.ts` path
   candidates at bundle time, so it is type-checker only.
   Copy rule: the page states only what is shippable or written down in `/cancellation-policy`.
-- **Signature surface — the mobile reservation drawer:** fixed bottom panel with peek/expanded
-  states whose peek height adapts per tab (`viewMode` in Redux); the booking flow is RTK-state-driven.
-  Keep it cohesive — it's the user app's defining UI.
+- **Signature surface — the mobile booking sheet** (`BookingSurface`): a one-line mini bar when
+  collapsed (stay + seats + Book), a full-height sheet below the header when open. The sheet is a
+  fixed flex column — controls on top, the map/list flexes, footer + Reserve pinned — never a
+  stack of fixed heights. Tone is `brand-ink` (selected tiles, primary buttons); building blocks
+  (`BTN_PRIMARY`, `INPUT`, `Spinner`…) live in `components/booking/ui.tsx`. Inputs use 16px text
+  (smaller makes iOS zoom on focus). Day tiles carry numerals only; words go in the caption line.
+  Steppers (‹ value ›) for small bounded numbers (rental start/duration), not dropdowns. Keep ONE
+  filled dark control per screen state (Reserve) — secondary actions are outlined until engaged.
 - **Seat map art (geo map + schematic):** sunbeds and parasols are vector, drawn by
   `@repo/schematic` `BedGlyphSvg` / `ParasolGlyph`; the rules (size per zoom, level of detail, state
   encoding, parasol offset) are the pure `packages/schematic/src/bed-glyph.ts`. The art is authored in
