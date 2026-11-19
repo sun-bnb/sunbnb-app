@@ -25,6 +25,7 @@ import { requireSiteOwner } from '@/lib/auth-helpers'
 import prisma from '@repo/data/PrismaCient'
 import { pruneEmptyUnits } from '@repo/data/unit'
 import { recomputeSeatLabels } from '@repo/data/seat-label-db'
+import { checkHamacaLimit } from '@repo/data/plan-gate'
 
 const mockAuth = vi.mocked(auth)
 const mockRequireSiteOwner = vi.mocked(requireSiteOwner)
@@ -399,5 +400,49 @@ describe('deleteItemsByGroup', () => {
 
     const res = await deleteItemsByGroup(SITE_ID, 3)
     expect(res.status).toBe('ok')
+  })
+})
+
+// ─── CR-002 hamaca limit ────────────────────────────────────────────────────
+
+describe('createInventoryItem — plan hamaca limit', () => {
+  it('Gratis site at 100 hamacas cannot add a 101st: refused, nothing written', async () => {
+    authorizeOwner()
+    vi.mocked(checkHamacaLimit).mockResolvedValueOnce({ allowed: false, current: 100, limit: 100, adding: 2, tier: 'GRATIS' })
+
+    const res = await createInventoryItem({ siteId: SITE_ID })
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/100 hamacas/)
+    expect(res.errors?.[0]).toMatch(/upgrade/i)
+    expect(vi.mocked(checkHamacaLimit)).toHaveBeenCalledWith(SITE_ID, 2)
+    expect(vi.mocked(prisma.inventoryItem.createMany)).not.toHaveBeenCalled()
+    expect(vi.mocked(prisma.sunbedGroup.create)).not.toHaveBeenCalled()
+  })
+
+  it('Temporada site at 300 hamacas is refused too', async () => {
+    authorizeOwner()
+    vi.mocked(checkHamacaLimit).mockResolvedValueOnce({ allowed: false, current: 300, limit: 300, adding: 2, tier: 'TEMPORADA' })
+
+    const res = await createInventoryItem({ siteId: SITE_ID })
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/300 hamacas/)
+    expect(vi.mocked(prisma.inventoryItem.createMany)).not.toHaveBeenCalled()
+  })
+
+  it('an over-limit (150 on Gratis) site can still save properties and location without adding', async () => {
+    authorizeOwner()
+    vi.mocked(checkHamacaLimit).mockResolvedValue({ allowed: false, current: 150, limit: 100, adding: 1, tier: 'GRATIS' })
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({ siteId: SITE_ID, site: { userId: OWNER_ID } } as any)
+    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
+
+    const a = await saveInventoryItemProperties('item-1', { price: 12 })
+    const b = await saveInventoryItemLocation('item-1', { locationLat: '1', locationLng: '2' })
+
+    expect(a.status).toBe('ok')
+    expect(b.status).toBe('ok')
+    expect(vi.mocked(checkHamacaLimit)).not.toHaveBeenCalled()
+    vi.mocked(checkHamacaLimit).mockResolvedValue({ allowed: true, current: 0, limit: 100, adding: 0, tier: 'GRATIS' })
   })
 })

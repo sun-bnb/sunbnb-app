@@ -6,6 +6,7 @@ import { requireSiteOwner } from '@/lib/auth-helpers'
 import { isValidItemStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 import { recomputeSeatLabels } from '@repo/data/seat-label-db'
+import { checkHamacaLimit, hamacaLimitMessage } from '@repo/data/plan-gate'
 import { pruneEmptyUnits, devicesBlockingSeatRemoval, deviceRemovalError } from '@repo/data/unit'
 import { generateChairs } from './inventory/chair-util'
 
@@ -37,6 +38,11 @@ export async function createInventoryItem(inventoryItem: {
 }) {
   const { session, error } = await requireSiteOwner(inventoryItem.siteId)
   if (error) return { status: 'error', errors: [error] }
+
+  // CR-002: plan hamaca limit — each seat row is one hamaca; refuse before writing.
+  const adding = Math.max(1, inventoryItem.members ?? DEFAULT_UNIT_MEMBERS)
+  const limit = await checkHamacaLimit(inventoryItem.siteId, adding)
+  if (!limit.allowed) return { status: 'error', errors: [hamacaLimitMessage(limit)] }
 
   // Track 020 P4: max(number)+1 was a read-then-write race — two concurrent
   // creates could mint the same seat number (no unique constraint exists to

@@ -9,6 +9,7 @@ import { getEffectiveSubscriptionForUser } from '@repo/data/subscription'
 import { deriveTimeZoneFromCoords } from '@repo/data/site-day'
 import { resolveBrandRender } from '@repo/data/brand-manifest'
 import { createSiteWithCode } from '@/lib/site-create'
+import { planGateError } from '@/lib/plan-features'
 
 // ─── Save Schematic Canvas Dimensions ───────────────────────────────────────
 
@@ -141,9 +142,23 @@ export async function saveGeneral(input: {
       if (!effective.features.OFF_PLATFORM_BILLING) {
         return {
           status: 'error',
-          errors: ['Off-platform billing requires a Pro/Business plan or an admin override'],
+          errors: ['Pay-on-site mode is turned off for this account; contact Sunbnb support'],
         }
       }
+    }
+  }
+
+  // CR-002: switching INTO a paid (online-payment) site needs ONLINE_PAYMENTS. Only the
+  // transition is gated (autosave re-sends the current type on every field change, and a
+  // downgraded partner keeps editing an existing paid site).
+  if ((input.type || 'paid') === 'paid' && session) {
+    const current = await prisma.site.findUnique({
+      where: { id: input.id },
+      select: { type: true },
+    })
+    if (current?.type !== 'paid') {
+      const gate = await planGateError(session.user.id, ['ONLINE_PAYMENTS'])
+      if (gate) return { status: 'error', errors: [gate] }
     }
   }
 
@@ -234,9 +249,21 @@ export async function submitForm(
       if (!effective.features.OFF_PLATFORM_BILLING) {
         return {
           status: 'error',
-          errors: ['Off-platform billing requires a Pro/Business plan or an admin override'],
+          errors: ['Pay-on-site mode is turned off for this account; contact Sunbnb support'],
         }
       }
+    }
+  }
+
+  // CR-002: paid (online-payment) sites need ONLINE_PAYMENTS; gate only the transition
+  // (new site, or an existing site not already paid).
+  if (typeVal === 'paid') {
+    const current = siteId
+      ? await prisma.site.findUnique({ where: { id: siteId }, select: { type: true } })
+      : null
+    if (current?.type !== 'paid') {
+      const gate = await planGateError(session.user.id, ['ONLINE_PAYMENTS'])
+      if (gate) return { status: 'error', errors: [gate] }
     }
   }
 

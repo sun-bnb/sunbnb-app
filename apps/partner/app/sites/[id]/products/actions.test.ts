@@ -34,6 +34,7 @@ import {
 import { auth } from '@/app/auth'
 import { requireSiteOwner } from '@/lib/auth-helpers'
 import prisma from '@repo/data/PrismaCient'
+import { getEffectiveSubscriptionForUser } from '@repo/data/subscription'
 
 const mockAuth = vi.mocked(auth)
 const mockRequireSiteOwner = vi.mocked(requireSiteOwner)
@@ -437,5 +438,39 @@ describe('sudo bypass on product-scoped actions', () => {
     vi.mocked(prisma.user.findUnique).mockClear()
     await deleteProduct('prod-1')
     expect(prisma.user.findUnique).not.toHaveBeenCalled()
+  })
+})
+
+describe('plan gating (CR-002)', () => {
+  const gratis = { features: { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: false, FOOD_AND_BEVERAGE: false } } as any
+
+  it('Gratis cannot enable food and drink ordering', async () => {
+    authorizeOwner()
+    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValueOnce(gratis)
+    const res = await toggleAppSales(SITE_ID, true)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/upgrade/i)
+    expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
+  })
+
+  it('Gratis can still switch food and drink ordering off', async () => {
+    authorizeOwner()
+    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValueOnce(gratis)
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+    const res = await toggleAppSales(SITE_ID, false)
+    expect(res.status).toBe('ok')
+  })
+
+  it('Gratis cannot set online order payment, but can set unpaid', async () => {
+    authorizeOwner()
+    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValueOnce(gratis)
+    const refused = await setOrderPaymentType(SITE_ID, 'paid')
+    expect(refused.status).toBe('error')
+    expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
+
+    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValueOnce(gratis)
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+    const ok = await setOrderPaymentType(SITE_ID, 'unpaid')
+    expect(ok.status).toBe('ok')
   })
 })

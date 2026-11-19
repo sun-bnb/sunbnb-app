@@ -21,7 +21,7 @@ export const getEffectiveSubscriptionForUser = vi.fn().mockResolvedValue({
   monthlyPrice: 0,
   maxSites: 1,
   isCustom: false,
-  features: { OFF_PLATFORM_BILLING: false },
+  features: { OFF_PLATFORM_BILLING: false, ONLINE_PAYMENTS: true, FOOD_AND_BEVERAGE: true },
 })
 export const resolveEffectiveFeatures = vi.fn().mockReturnValue({ OFF_PLATFORM_BILLING: false })
 

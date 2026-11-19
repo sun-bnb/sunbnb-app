@@ -4,15 +4,22 @@ import { revalidatePath } from 'next/cache'
 import { requireSiteOwner } from '@/lib/auth-helpers'
 import { isValidRentalPaymentType } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
+import { planGateError } from '@/lib/plan-features'
 
 // ─── Set Rental Payment Type ────────────────────────────────────────────────
 
 export async function setRentalPaymentType(siteId: string, rentalPaymentType: string) {
-  const { error } = await requireSiteOwner(siteId)
+  const { session, error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error', errors: [error] }
 
   if (!isValidRentalPaymentType(rentalPaymentType)) {
     return { status: 'error', errors: ['Invalid rental payment type'] }
+  }
+
+  // CR-002: online ('paid') rental payment needs the ONLINE_PAYMENTS feature.
+  if (rentalPaymentType === 'paid' && session) {
+    const gate = await planGateError(session.user.id, ['ONLINE_PAYMENTS'])
+    if (gate) return { status: 'error', errors: [gate] }
   }
 
   await prisma.site.update({
