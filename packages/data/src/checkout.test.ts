@@ -18,8 +18,10 @@ const m = vi.hoisted(() => ({
   markRentalStarted: vi.fn(),
   markRentalFailed: vi.fn(),
   createCheckout: vi.fn(),
+  planGate: vi.fn(),
 }))
 
+vi.mock('./plan-gate', () => ({ checkCheckoutAllowed: m.planGate }))
 vi.mock('../index', () => ({
   default: {
     reservation: { findUnique: m.reservationFind },
@@ -102,6 +104,7 @@ const reservationInput: CheckoutInput = { ...base, kind: 'reservation', reservat
 
 beforeEach(() => {
   vi.clearAllMocks()
+  m.planGate.mockResolvedValue({ allowed: true })
   m.loadFeeContext.mockImplementation(async (_s: string, code: string) => feeCtx(code))
 })
 
@@ -419,5 +422,24 @@ describe('tab claim', () => {
       where: { id: 't1', status: 'pending_payment' },
       data: { status: 'open', paymentRef: null },
     })
+  })
+})
+
+describe('createOnlineCheckout — CR-002 plan gate', () => {
+  it('a Gratis venue (gate refused) gets plan_gated and no provider checkout or state change', async () => {
+    m.planGate.mockResolvedValue({ allowed: false, feature: 'ONLINE_PAYMENTS', message: 'This venue takes payment on site only' })
+    const { createOnlineCheckout } = await import('./checkout')
+    for (const input of [
+      { kind: 'reservation' as const, reservationId: 'r1' },
+      { kind: 'tab' as const, tabId: 't1' },
+      { kind: 'table-deposit' as const, tableReservationId: 'tr1' },
+    ]) {
+      const res = await createOnlineCheckout({ ...input, provider: 'stripe', redirectUrl: 'https://x/r', webhookUrl: 'https://x/w' })
+      expect(res).toMatchObject({ status: 'error', reason: 'plan_gated' })
+    }
+    expect(m.createCheckout).not.toHaveBeenCalled()
+    expect(m.reservationFind).not.toHaveBeenCalled()
+    expect(m.loadFeeContext).not.toHaveBeenCalled()
+    expect(m.markResStarted).not.toHaveBeenCalled()
   })
 })

@@ -28,6 +28,7 @@
  */
 
 import prisma from '@repo/data/PrismaCient'
+import { checkChargeAllowed } from '@repo/data/plan-gate'
 import {
   loadTabFeeContext,
   chargeableServiceFee, resolveServiceFee,
@@ -128,6 +129,13 @@ export async function POST(request: NextRequest) {
   if (!tab) {
     await revertClaim()
     return Response.json({ error: 'Tab not found' }, { status: 404 })
+  }
+
+  // CR-002 plan gate: Gratis partners take no online card payment.
+  const gate = await checkChargeAllowed('tab', { siteId: tab.siteId, restaurantId: tab.restaurantId })
+  if (!gate.allowed) {
+    await revertClaim()
+    return Response.json({ error: gate.message }, { status: 403 })
   }
 
   // ── Load partner's Mollie credentials ────────────────────────────────────

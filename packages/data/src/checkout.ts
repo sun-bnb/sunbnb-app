@@ -34,6 +34,7 @@ import {
 } from './reservation-payment'
 import { markRentalCheckoutStarted, markRentalCheckoutFailed } from './rental-payment'
 import { getOnlineAdapter } from './payment-providers'
+import { checkCheckoutAllowed } from './plan-gate'
 import {
   ProviderNotReadyError,
   ProviderNotWiredError,
@@ -79,6 +80,7 @@ export type CheckoutFailure = {
     | 'provider_unavailable'
     | 'provider_error'
     | 'no_checkout'
+    | 'plan_gated'
 }
 
 type ResolveResult =
@@ -468,6 +470,11 @@ async function recordFailed(input: CheckoutInput, intent: CheckoutIntent) {
 export async function createOnlineCheckout(
   input: CheckoutInput,
 ): Promise<{ status: 'ok'; checkoutUrl: string; paymentRef: string } | CheckoutFailure> {
+  // CR-002 plan gate, BEFORE resolve (resolve reserves commission-cap headroom).
+  const gate = await checkCheckoutAllowed(input)
+  if (gate === 'not_found') return fail('not_found', 'Not found')
+  if (!gate.allowed) return fail('plan_gated', gate.message)
+
   const resolved = await resolveCheckoutIntent(input)
   if (resolved.status === 'error') return resolved
   const { intent, account } = resolved

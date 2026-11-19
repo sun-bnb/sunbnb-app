@@ -222,6 +222,8 @@ export async function POST(request: NextRequest) {
         return err('This item cannot be paid in its current state', 409)
       case 'provider_not_ready':
         return err('This venue has not finished setting up payments', 400)
+      case 'plan_gated':
+        return err(result.error, 403)
       case 'provider_unavailable':
         return err('Online payments are not available for this venue yet', 503)
       default:

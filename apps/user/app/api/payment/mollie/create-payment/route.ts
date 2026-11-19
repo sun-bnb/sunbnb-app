@@ -16,6 +16,7 @@
  */
 
 import prisma from '@repo/data/PrismaCient'
+import { checkChargeAllowed } from '@repo/data/plan-gate'
 import { createReservationMolliePayment } from '@repo/data/reservation-payment'
 import { RESERVATION_PENDING } from '@repo/data/reservation-status'
 import { NextRequest } from 'next/server'
@@ -76,6 +77,12 @@ export async function POST(request: NextRequest) {
 
   if (reservation.status !== RESERVATION_PENDING) {
     return Response.json({ error: 'Reservation is not in pending state' }, { status: 400 })
+  }
+
+  // CR-002 plan gate: Gratis partners take no online card payment.
+  const gate = await checkChargeAllowed('reservation', { siteId: reservation.siteId })
+  if (!gate.allowed) {
+    return Response.json({ error: gate.message }, { status: 403 })
   }
 
   // Build webhook URL using WHATWG URL API (avoids DEP0169 url.parse warning)

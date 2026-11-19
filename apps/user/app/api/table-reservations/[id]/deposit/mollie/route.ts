@@ -17,6 +17,7 @@
  */
 
 import prisma from '@repo/data/PrismaCient'
+import { checkChargeAllowed } from '@repo/data/plan-gate'
 import { isTestMode } from '@repo/data/env'
 import { NextRequest } from 'next/server'
 import { getRequestIdentity } from '@/app/api/_lib/auth'
@@ -116,6 +117,12 @@ export async function POST(
 
   if (!isOwner) {
     return Response.json({ error: 'Not authorized' }, { status: 403 })
+  }
+
+  // CR-002 plan gate: Gratis partners take no online card payment.
+  const gate = await checkChargeAllowed('table-deposit', { restaurantId: tableReservation.restaurantId })
+  if (!gate.allowed) {
+    return Response.json({ error: gate.message }, { status: 403 })
   }
 
   // Must be in PENDING_PAYMENT state awaiting a deposit

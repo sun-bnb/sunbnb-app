@@ -12,6 +12,7 @@
  */
 
 import prisma from '@repo/data/PrismaCient'
+import { checkChargeAllowed } from '@repo/data/plan-gate'
 import {
   loadFeeContext,
   chargeableServiceFee, resolveServiceFee,
@@ -97,6 +98,12 @@ export async function POST(request: NextRequest) {
 
   if (bookings.some(b => b.status !== RENTAL_PENDING)) {
     return Response.json({ error: 'Some bookings are not in pending state' }, { status: 400 })
+  }
+
+  // CR-002 plan gate: Gratis partners take no online card payment.
+  const gate = await checkChargeAllowed('rental', { siteId: bookings[0]!.siteId })
+  if (!gate.allowed) {
+    return Response.json({ error: gate.message }, { status: 403 })
   }
 
   // Calculate total amount from DB (don't trust client)
