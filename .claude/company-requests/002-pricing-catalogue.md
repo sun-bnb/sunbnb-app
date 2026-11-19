@@ -3,10 +3,10 @@ id: CR-002
 title: Replace the Starter / Pro / Business plans with Gratis, Temporada and Grupo
 status: done
 priority: 2
-company_ref: A-22 (approved prompt), A-23 / A-28 (build approvals), T-130, F-9 (pricing decision)
+company_ref: A-22 (approved prompt), A-23 / A-28 (build approvals), T-130, T-156, F-9 (pricing decision), M-68 (card-present answer)
 created: 2026-11-19
 track: .claude/tracks/034-pricing-catalogue.md
-outcome: Done on co/CR-002-pricing-catalogue (runs 1-5, b9dad77e..HEAD, committed only). Gratis / Temporada / Grupo replace Starter / Pro / Business; the EUR 199 monthly cap is decided once at charge time and invoiced as collected; plan gating is enforced server-side on every guest charge path (incl. tabs and table deposits) and in partner settings; hamaca limits (100 / 300 / custom) block adding, never existing sunbeds; cards and fee breakdown in es/en/fi with no guest fee. Open questions for the founder are listed under Run 5. Run 6 (T-149): refunds that return the commission (Stripe, Viva) now lower the original month's cap total via reversal rows (Mollie keeps its application fee, so its refunds do not); marketing copy renamed to Gratis/Temporada/Grupo in en/es/fi (8f0cd37a, 172bc782).
+outcome: Done on co/CR-002-pricing-catalogue (runs 1-5, b9dad77e..HEAD, committed only). Gratis / Temporada / Grupo replace Starter / Pro / Business; the EUR 199 monthly cap is decided once at charge time and invoiced as collected; plan gating is enforced server-side on every guest charge path (incl. tabs and table deposits) and in partner settings; hamaca limits (100 / 300 / custom) block adding, never existing sunbeds; cards and fee breakdown in es/en/fi with no guest fee. Open questions for the founder are listed under Run 5. Run 6 (T-149): refunds that return the commission (Stripe, Viva) now lower the original month's cap total via reversal rows (Mollie keeps its application fee, so its refunds do not); marketing copy renamed to Gratis/Temporada/Grupo in en/es/fi (8f0cd37a, 172bc782). Run 7 (T-156): M-68 answered, card at the venue (Viva terminal and Tap to Pay) carries no Sunbnb commission and never counts toward the cap; the Viva terminal sends an ISV fee of 0 and the cap refusal is gone. Open vendor question: Viva has not confirmed it accepts a zero ISV fee (see Run 7).
 ---
 
 # CR-002: Gratis / Temporada / Grupo pricing catalogue
@@ -180,7 +180,7 @@ right expression for a site. But the gate has to be **plan-derived and server-en
   releases its entry immediately.
 - **Not wired yet:** a refund that returns the application fee does not call `reverseCappedCommission`. A refunded
   booking therefore keeps counting against the month. This is conservative: the venue pays less, never more. It goes in run 5.
-- **Card-present (M-68).** The founder had not answered M-68 when the task started (task notes were empty), so
+- **Card-present (M-68).** *Superseded by the founder's answer, see Run 7.* The founder had not answered M-68 when the task started (task notes were empty), so
   **default (c)** applies, source: T-147 mandate. **Tap to Pay** carries no Sunbnb commission. Its application fee
   is the Stripe processing pass-through only, and `processConfirmedReservation` invoices 0 commission for `stripe_pi_`
   refs. **Viva terminal** keeps the plan commission, capped. Viva refuses a zero ISV fee (`assertValidIsvFee`), so
@@ -236,8 +236,8 @@ right expression for a site. But the gate has to be **plan-derived and server-en
    Block the setting on Gratis, or allow deposits?
 3. **Refunds.** A refund that returns the application fee does not yet call `reverseCappedCommission`. This is
    conservative (the venue pays less, never more).
-4. **M-68 card-present.** A Viva venue at its monthly cap cannot take Viva card payments, because Viva refuses a
-   zero ISV fee (run 4).
+4. **M-68 card-present.** ~~A Viva venue at its monthly cap cannot take Viva card payments, because Viva refuses a
+   zero ISV fee (run 4).~~ Answered by the founder 2026-11-19 and built in run 7 (T-156).
 5. **Live Stripe subscriptions** still need cancel-at-period-end in Stripe (outside the app).
 6. **Old names outside apps/partner:**
    - `apps/marketing` `messages/{en,es,fi}.json` (FAQ `costA` and the plan lines), `lib/agent/knowledge.ts` and
@@ -278,6 +278,52 @@ right expression for a site. But the gate has to be **plan-derived and server-en
   `@repo/data/promotion`. It was not changed: it is not plan-name copy, and removing it means changing the copy
   and the billing together (the file says so). It conflicts with "no launch offer" for marketing copy.
   Decide: keep it, or retire it in both places.
+
+## Run 7 (T-156, 2026-11-19): no commission on card at the venue (M-68 answered)
+
+- **Decision (founder answer to M-68, 2026-11-19, source: T-156 mandate).** Card payments taken at the venue carry
+  **no Sunbnb commission on every terminal**, Stripe Tap to Pay and the Viva Cloud Terminal alike, and they do not
+  count toward the monthly cap. Only sunbed and rental bookings the guest pays online carry the 2% Temporada
+  commission (capped at EUR 199 per site per month). This replaces default (c) from run 4.
+- **Built.**
+  - `payment-refs.ts` `isCardPresentRef(ref)`: `viva_` (Viva terminal) or `stripe_pi_` (Tap to Pay).
+  - `processConfirmedReservation` books 0 commission for any card-present ref and never calls `cappedCommission`,
+    so nothing enters the cap ledger. A Viva terminal sale gets a PARTNER invoice only; a Tap to Pay sale gets a
+    PLATFORM invoice that carries only the Stripe processing pass-through (unchanged, out of scope).
+  - `reservation-machine-apply.ts` `runCollectStartCard` sends `isvDetails.amount: 0` (still naming the venue's
+    `terminalMerchantId`, which routes the sale), reserves nothing against the cap, and no longer refuses a sale
+    when the launch promotion waives commission or when the site is at its cap. Both refusal paths are removed.
+  - `viva/types.ts` `assertValidIsvFee` now allows a fee of 0 (still refuses a negative fee or one at or above the
+    sale amount). The online Viva adapter keeps its own "positive ISV fee" refusal: online Viva is out of scope and
+    keeps the capped commission.
+- **Open vendor question (blocker to confirm before Viva goes live).** Nothing in the repo shows whether Viva's
+  ISV Cloud Terminal API (`POST /ecr/isv/v1/transactions:sale`) accepts `isvDetails.amount: 0`. The old `> 0` rule
+  in `assertValidIsvFee` was our own conservative guard, not a documented Viva rule: track 024 records only that a
+  fee **at or above** the sale amount declines the payment, and its Q2/Q3 (own-venue / no-fee) are still unanswered
+  by Viva's ISV team. The Viva rail is still stub-only (no ISV demo credentials, KYC pending), so this could not be
+  tested against Viva, and the run had no access to Viva's public docs. If Viva refuses a zero ISV fee, the terminal
+  sale fails with Viva's error and the reservation reverts to the unsettled cash walk-in; **no commission is ever
+  charged to work around it**. Options if Viva says no:
+  (a) use the merchant (non-ISV) Cloud Terminal endpoints for card-present sales (track 024, 2026-10-06 note).
+      It carries no ISV fee, but needs per-venue merchant credentials (a merchant-credentials mode in
+      `viva/http-client.ts`, which today only calls `/ecr/isv/v1/*`) or Viva enabling ISV sales without a fee;
+  (b) ask Viva to set a 0 ISV fee per merchant on their side (track 024 notes the fee can be set per merchant and per
+      transaction), so the request can omit or zero it;
+  (c) keep Viva terminal sales off (venues take card through Tap to Pay or cash) until (a) or (b) lands.
+  Recommendation: ask Viva's ISV team together with Q2/Q3; (a) is the fallback the code can absorb without a schema
+  change.
+- **Evidence.**
+  - `payment.commission-cap-parity.integration.test.ts` › "CR-002 (M-68): card at the venue…": on Temporada a
+    EUR 100 `viva_` sale gets a gross PARTNER invoice and no PLATFORM invoice; a `stripe_pi_` sale gets a PLATFORM
+    invoice whose total equals its processing fee; neither writes a cap entry; with EUR 198 used, two EUR 500
+    card-present sales leave the headroom intact and the next online booking takes {viva 1, stripe 1, mollie 1,
+    invoice 1}; a negotiated 5% account fee is not charged on card at the venue either. The existing cap tests in
+    the same file (online Viva / Stripe / Mollie, reservations and rentals) still pass unchanged.
+  - `viva-collect.integration.test.ts`: the sale is sent with `isvDetails.amount` 0 (also under a 150% site fee),
+    a site at its cap can still take a card, no cap entry is written, and an approved sale yields one PARTNER
+    invoice and no PLATFORM invoice.
+  - `stripe-collect.integration.test.ts` (Tap to Pay pass-through only) unchanged and passing.
+  - `viva/http-client.test.ts`, `viva/stub-client.test.ts`: a zero ISV fee is sent / accepted, a negative one refused.
 
 ## Build plan (later runs)
 - Run 2: catalogue + `LEGACY_TIER_MAP`, migration A (expand), seed, `CommissionCapUsage` + stored `commissionAmount`,

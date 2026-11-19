@@ -22,6 +22,9 @@ offer and its admin grant are OUT (M-65 / F-19). Branch `co/CR-002-pricing-catal
 - Follow-ups need a new CR or founder decision; see the CR's "Remaining open questions": the upgrade path from
   Gratis to Temporada, the deposit policy on Gratis restaurants, wiring the refund to
   `reverseCappedCommission`, M-68 Viva at the cap, the marketing copy.
+- **Run 7 (T-156):** M-68 answered: card at the venue (Viva terminal, Tap to Pay) takes no commission and
+  never touches the cap (`isCardPresentRef`). Viva terminal sends ISV fee 0; whether Viva accepts 0 is the
+  open vendor question (CR-002 › Run 7 lists the options).
 
 ## Roadmap
 
@@ -34,8 +37,13 @@ offer and its admin grant are OUT (M-65 / F-19). Branch `co/CR-002-pricing-catal
 - ✅ Run 3 (2026-11-19, T-146): enum `@map`, catalogue, subscription, seed, data-move migration, consumers.
 - ✅ Run 4 (2026-11-19, T-147): cap wired into Mollie, Stripe, Viva and the invoices; Tap to Pay 0 commission.
 - ✅ Run 5 (2026-11-19, T-148): plan gate on every charge path, hamaca limits, settings gates, cards and copy, CR done.
+- ✅ Run 7 (2026-11-19, T-156): no commission on card at the venue; Viva ISV fee 0; cap and promo refusals removed.
 
 ## Log
+
+- 2026-11-19 run 7: the Viva `assertValidIsvFee` `> 0` rule was our own guard, not a documented Viva rule
+  (track 024 records only that a fee >= the sale declines). It now allows 0; the online Viva adapter keeps its own
+  positive-fee refusal because online Viva still takes the capped commission.
 
 - 2026-11-19 run 5: a partner with no subscription resolves to Gratis, so every pre-CR-002 partner integration
   test that saves a paid site or a 200-seat parcel broke. `createTestPartnerAccount` (apps/partner fixtures) now
