@@ -79,11 +79,18 @@ describe('createStubVivaClient — decline/abort markers', () => {
 })
 
 describe('createStubVivaClient — fee guard', () => {
-  it('rejects isvDetails.amount <= 0', async () => {
+  it('rejects a negative isvDetails.amount', async () => {
+    const client = createStubVivaClient()
+    await expect(
+      client.createSale(saleReq({ amount: 1000, isvDetails: { amount: -1, terminalMerchantId: 'm' } })),
+    ).rejects.toThrow(VivaFeeGuardError)
+  })
+
+  it('accepts isvDetails.amount 0 (no Sunbnb commission on card at the venue, CR-002 M-68)', async () => {
     const client = createStubVivaClient()
     await expect(
       client.createSale(saleReq({ amount: 1000, isvDetails: { amount: 0, terminalMerchantId: 'm' } })),
-    ).rejects.toThrow(VivaFeeGuardError)
+    ).resolves.toBeTruthy()
   })
 
   it('rejects isvDetails.amount >= amount (fee at or above the sale amount)', async () => {

@@ -80,7 +80,7 @@ import {
 // so existing `@repo/data/payment` imports keep working.
 
 import { round, computeVatAndBaseAmounts } from './payment-math'
-import { isStripeRef, isStripeTerminalRef } from './payment-refs'
+import { isCardPresentRef, isStripeRef } from './payment-refs'
 import { stripePassThrough } from './payment-providers/fee-policy'
 export { round, computeVatAndBaseAmounts }
 
@@ -767,11 +767,12 @@ export async function processConfirmedReservation(
   })
   // CR-002: the monthly cap was decided at charge time (`cappedCommission('reserve', …)` with the
   // same `reservation:<id>` key); `take` reads it back so the invoice equals what was collected.
-  // Tap to Pay (`stripe_pi_`) is card-at-the-venue and carries no Sunbnb commission (CR-002
-  // card-present default (c)): its application fee is the processing pass-through only.
+  // Card at the venue (Viva terminal `viva_`, Tap to Pay `stripe_pi_`) carries no Sunbnb
+  // commission and never touches the cap (CR-002, founder answer to M-68): the Viva ISV fee is 0
+  // and the Tap to Pay application fee is the processing pass-through only.
   const totalServiceFee = skipCommission
     ? uncappedServiceFee
-    : isStripeTerminalRef(reservation.paymentRef)
+    : isCardPresentRef(reservation.paymentRef)
       ? 0
       : await cappedCommission('take', {
           siteId: reservation.siteId,

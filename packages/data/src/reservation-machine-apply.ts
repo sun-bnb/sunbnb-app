@@ -48,7 +48,7 @@ import { recordSettlement } from './till'
 import { isDemoPayment, isStripeTerminalRef, stripeTerminalRef, stripeIdFromRef } from './payment-refs'
 import {
   processConfirmedReservation, issueCashCreditNote,
-  loadFeeContext, chargeableServiceFee, resolveServiceFee, serviceFeeForUnits, cappedCommission,
+  loadFeeContext,
 } from './payment'
 import {
   createReservationMolliePayment,
@@ -65,7 +65,6 @@ import {
 } from './viva'
 import { ensureTerminalLocation, createTerminalPaymentIntent, cancelTerminalPaymentIntent, fetchPaymentIntentState } from './stripe'
 import { stripeApplicationFee } from './payment-providers/fee-policy'
-import { capSourceKey, releaseCappedCommission } from './commission-cap'
 import { stripeAccountForSite } from './payment-providers/stripe-account'
 
 /** sunbed-rental service code, shared with the QR/Mollie card-collect cascade lookup. */
@@ -629,11 +628,10 @@ async function runCollectStart(
 
 /**
  * Card-present collect.start (Viva Cloud Terminal). Requires a paired
- * `VivaTerminal` on this site and a connected `vivaMerchantId`; the ISV
- * markup is the `sunbed-rental` cascade fee (same lookup as the online path,
- * `processConfirmedReservation` ~L611), guarded 0 < fee < amount by the
- * client's shared `assertValidIsvFee` (VivaFeeGuardError) — a guard failure
- * is a clear effect-failed, never a silently-dropped fee. On any failure the
+ * `VivaTerminal` on this site and a connected `vivaMerchantId`. Card at the
+ * venue carries no Sunbnb commission (CR-002, M-68), so the ISV fee is 0 and
+ * nothing touches the monthly cap; the client's shared `assertValidIsvFee`
+ * (VivaFeeGuardError) still guards 0 <= fee < amount. On any failure the
  * reservation REVERTS to the unsettled cash walk-in, mirroring the Mollie branch.
  */
 async function runCollectStartCard(
@@ -652,62 +650,20 @@ async function runCollectStartCard(
     return { outcome: 'effect-failed', effect: 'vivaSale', event: row.event, error: 'Viva terminal not found for this site' }
   }
 
-  const { site, partnerAccount, settings } = await loadFeeContext(r.siteId, VIVA_SERVICE_CODE)
-  // Deliberate v1 assumption (documented, revisit once Viva answers the
-  // own-venue/no-fee question — see .claude/tracks/024-card-present-payments.md
-  // Q2/Q3): every connected venue pays the ISV markup, no own-merchant carve-out.
+  const { site, partnerAccount } = await loadFeeContext(r.siteId, VIVA_SERVICE_CODE)
   if (!partnerAccount?.vivaMerchantId) {
     return { outcome: 'effect-failed', effect: 'vivaSale', event: row.event, error: 'venue has not connected Viva' }
   }
 
-  const tier = partnerAccount.subscription?.plan?.tier ?? null
-  const resolvedFee = resolveServiceFee(
-    site.serviceFees,
-    partnerAccount.serviceFees,
-    settings?.serviceFees ?? [],
-    VIVA_SERVICE_CODE,
-    tier,
-  )
-  // Launch offer (track 027 D9) waives commission, but a Viva sale cannot simply drop its ISV fee:
-  // `isvDetails` also names the merchant to pay, and whether Viva accepts a zero ISV fee is the
-  // SAME open question as the own-venue/no-fee case (track 024 Q2/Q3). Until Viva answers,
-  // refuse clearly rather than charge a fee the offer promised to waive (the confirmation path
-  // would then issue no PLATFORM invoice for money we did take). The venue can still take cash.
-  const matchedFee = chargeableServiceFee(resolvedFee, partnerAccount, r.createdAt)
-  if (resolvedFee && !matchedFee) {
-    return {
-      outcome: 'effect-failed',
-      effect: 'vivaSale',
-      event: row.event,
-      error: 'card-present (Viva) payments are not available while the launch promotion waives commission (track 024 Q2/Q3)',
-    }
-  }
-  // Commission rule: serviceFeeForUnits (fixed per bed, percentage once on the total), then the
-  // CR-002 monthly cap, reserved under `reservation:<id>` and read back by the PLATFORM invoice.
-  // Card-present choice (CR-002 default (c), founder had not answered M-68): Viva keeps the plan
-  // commission, capped, until Viva confirms a zero ISV fee. A site already AT its cap therefore
-  // gets a 0 fee, which `assertValidIsvFee` refuses: refuse clearly here instead (cash still works).
-  const capKey = capSourceKey('reservation', r.id)
-  const uncappedFee = serviceFeeForUnits(matchedFee, { total: amount, units: r.items.length })
-  const feeAmount = await cappedCommission('reserve', {
-    siteId: r.siteId,
-    serviceCode: VIVA_SERVICE_CODE,
-    fee: matchedFee,
-    partnerAccount,
-    uncapped: uncappedFee,
-    sourceKey: capKey,
-  })
-  if (uncappedFee > 0 && feeAmount <= 0) {
-    await releaseCappedCommission(capKey)
-    return {
-      outcome: 'effect-failed',
-      effect: 'vivaSale',
-      event: row.event,
-      error: 'card-present (Viva) payments are not available once the site has reached its monthly commission cap (Viva zero-ISV-fee question, track 024 Q2/Q3)',
-    }
-  }
+  // CR-002 (founder answer to M-68, 2026-11-19): a card payment taken at the venue carries NO
+  // Sunbnb commission, on every terminal. The Viva ISV fee is therefore 0, nothing is reserved
+  // against the monthly cap, and `processConfirmedReservation` invoices 0 commission for `viva_`
+  // refs (`isCardPresentRef`), so collected === invoiced. `isvDetails` still names the venue's
+  // merchant (it routes the sale). OPEN vendor question (track 024 Q2/Q3, CR-002 open questions):
+  // Viva has not confirmed it accepts `isvDetails.amount: 0`; if it refuses, the sale fails below
+  // and reverts to the unsettled cash walk-in. A commission is never charged to work around it.
   const amountCents = toCents(amount)
-  const feeCents = toCents(feeAmount)
+  const feeCents = 0
 
   const sessionId = randomUUID()
   const seatCount = r.items.length
@@ -725,7 +681,6 @@ async function runCollectStartCard(
       isvDetails: { amount: feeCents, terminalMerchantId: partnerAccount.vivaMerchantId },
     })
   } catch (e) {
-    await releaseCappedCommission(capKey)
     await prisma.reservation.update({
       where: { id: r.id },
       data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
@@ -747,7 +702,7 @@ async function runCollectStartCard(
 /**
  * Tap to Pay collect.start (Stripe Terminal, direct charge on the connected account).
  * Fee = Stripe processing pass-through only (`stripeApplicationFee(0, …)`): card at the venue
- * carries no Sunbnb commission (CR-002 card-present default (c)). No launch-promotion refusal: Stripe tolerates a zero fee
+ * carries no Sunbnb commission (CR-002, founder answer to M-68). No launch-promotion refusal: Stripe tolerates a zero fee
  * and the pass-through still applies. Any failure REVERTS to the unsettled cash walk-in.
  */
 async function runCollectStartTapToPay(
@@ -771,10 +726,9 @@ async function runCollectStartTapToPay(
   const stripeAccount = partnerAccount.stripeConnectAccountId
 
   try {
-    // Card-present choice (CR-002 default (c), founder had not answered M-68): Tap to Pay is
-    // "card at the venue" and carries NO Sunbnb commission; the application fee is the Stripe
-    // processing pass-through only. processConfirmedReservation invoices 0 commission for
-    // `stripe_pi_` refs to match.
+    // CR-002 (founder answer to M-68): card at the venue carries NO Sunbnb commission; the
+    // application fee is the Stripe processing pass-through only. processConfirmedReservation
+    // invoices 0 commission for card-present refs (`isCardPresentRef`) to match.
     const applicationFee = stripeApplicationFee(0, amount)
 
     const country = partnerAccount.country && partnerAccount.country.length === 2

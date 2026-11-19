@@ -75,6 +75,15 @@ export function isStripeTerminalRef(ref: string | null | undefined): ref is stri
   return hasPrefix(ref, REF_PREFIX.stripeTerminal)
 }
 
+/**
+ * A card payment taken AT THE VENUE (Viva Cloud Terminal `viva_` or Stripe Tap to Pay
+ * `stripe_pi_`). Carries no Sunbnb commission and never counts toward the CR-002 monthly cap
+ * (founder answer to M-68, 2026-11-19).
+ */
+export function isCardPresentRef(ref: string | null | undefined): ref is string {
+  return hasPrefix(ref, REF_PREFIX.vivaTerminal) || isStripeTerminalRef(ref)
+}
+
 export function isStripeRef(ref: string | null | undefined): boolean {
   return isStripeCheckoutRef(ref) || isStripeTerminalRef(ref)
 }

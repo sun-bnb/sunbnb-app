@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isCardPresentRef,
   REF_PREFIX,
   isDemoPayment,
   isLiveProviderRef,
@@ -73,6 +74,16 @@ describe('predicates', () => {
   it.each(['pi_demo_1', null, undefined, '', 'offplatform_x'])('%s is not live/refundable', ref => {
     expect(isLiveProviderRef(ref)).toBe(false)
     expect(isRefundableOnlineRef(ref)).toBe(false)
+  })
+})
+
+describe('isCardPresentRef (CR-002 M-68: no commission on card at the venue)', () => {
+  it('is true for the Viva terminal and Tap to Pay, false for every online rail and non-refs', () => {
+    expect(isCardPresentRef('viva_abc')).toBe(true)
+    expect(isCardPresentRef('stripe_pi_abc')).toBe(true)
+    for (const ref of ['vso_123', 'stripe_cs_abc', 'tr_abc', 'pi_demo_1', 'viva_', 'stripe_pi_', '', null, undefined]) {
+      expect(isCardPresentRef(ref)).toBe(false)
+    }
   })
 })
 

@@ -212,6 +212,52 @@ describe('CR-002 cap: collected === invoiced on Temporada', () => {
   })
 })
 
+describe('CR-002 (M-68): card at the venue takes 0 commission and never touches the cap', () => {
+  /** A completed card-present reservation of EUR `total`, invoiced through processConfirmedReservation. */
+  async function cardPresent(userId: string, siteId: string, total: number, ref: string) {
+    const a = await createTestInventoryItem(userId, siteId, { number: Math.floor(Math.random() * 1e6) })
+    const res = await createTestReservation(userId, siteId, [a.id], { paymentAmount: total, paymentRef: ref, status: 'processing' })
+    await processConfirmedReservation(res.id)
+    const platform = await prisma.invoice.findFirst({ where: { reservationId: res.id, issuerType: 'PLATFORM' } })
+    const partner = await prisma.invoice.findFirstOrThrow({ where: { reservationId: res.id, issuerType: 'PARTNER' } })
+    return { res, platform, partner }
+  }
+
+  it('Viva terminal (viva_): PARTNER invoice gross, NO PLATFORM invoice, no cap entry', async () => {
+    const { user, site } = await temporadaSite()
+    const { res, platform, partner } = await cardPresent(user.id, site.id, 100, 'viva_sess-cardpresent-1')
+    expect(partner.totalAmount).toBe(100)
+    expect(platform).toBeNull() // collected (ISV fee 0) === invoiced (0)
+    expect(await prisma.commissionCapEntry.count({ where: { sourceKey: `reservation:${res.id}` } })).toBe(0)
+    expect(await prisma.commissionCapEntry.count({ where: { siteId: site.id } })).toBe(0)
+  })
+
+  it('Tap to Pay (stripe_pi_): PLATFORM invoice carries the processing pass-through only, no commission, no cap entry', async () => {
+    const { user, site } = await temporadaSite()
+    const { platform } = await cardPresent(user.id, site.id, 100, 'stripe_pi_cardpresent_1')
+    // A Stripe ref still gets a processing-only PLATFORM invoice; its whole total is the pass-through.
+    expect(platform).not.toBeNull()
+    expect(platform!.processingFee).toBeGreaterThan(0)
+    expect(platform!.totalAmount).toBe(platform!.processingFee)
+    expect(await prisma.commissionCapEntry.count({ where: { siteId: site.id } })).toBe(0)
+  })
+
+  it('card-present sales leave the month\'s headroom intact: EUR 198 used + a EUR 500 card sale → the next online booking still takes the EUR 1.00 headroom', async () => {
+    const { user, site } = await temporadaSite()
+    await usedBefore(site.id, 198)
+    await cardPresent(user.id, site.id, 500, 'viva_sess-cardpresent-2')
+    await cardPresent(user.id, site.id, 500, 'stripe_pi_cardpresent_2')
+    const r = await reservationAllPaths(user.id, site.id, 100, 'tr_cap9')
+    expect(r).toEqual({ viva: 1, stripe: 1, mollie: 1, invoice: 1 })
+  })
+
+  it('even a negotiated account fee is not charged on card at the venue', async () => {
+    const { user, site } = await temporadaSite({ serviceCode: 'sunbed-rental', chargeType: 'percentage', percentage: 5, feeAmount: null })
+    const { platform } = await cardPresent(user.id, site.id, 100, 'viva_sess-cardpresent-3')
+    expect(platform).toBeNull()
+  })
+})
+
 describe('CR-002: F&B takes 0 commission on every plan; negotiated fees still win', () => {
   const platformRows = PRICING_TIER_ORDER.flatMap((tier) =>
     COMMISSIONED_SERVICE_CODES.map((code) => ({
