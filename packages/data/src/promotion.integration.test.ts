@@ -165,25 +165,13 @@ describe('orders follow the same rule', () => {
   })
 })
 
-describe('grantLaunchPromotionIfEligible', () => {
-  it('grants new accounts, idempotently', async () => {
+describe('grantLaunchPromotionIfEligible (retired by CR-003)', () => {
+  it('grants nothing at signup any more, even to an account created before the cut-off', async () => {
     const user = await createTestUser()
     await createTestPartnerAccount(user.id)
-    expect(await grantLaunchPromotionIfEligible(user.id)).toBe(true)
-    expect(await grantLaunchPromotionIfEligible(user.id)).toBe(true)
-    expect(await prisma.partnerPromotion.count({ where: { partnerAccountId: user.id } })).toBe(1)
-  })
-
-  it('never grants test accounts or accounts created after the cut-off', async () => {
-    const test = await createTestUser()
-    await createTestPartnerAccount(test.id)
-    await prisma.partnerAccount.update({ where: { userId: test.id }, data: { isTestAccount: true } })
-    const late = await createTestUser()
-    await createTestPartnerAccount(late.id)
-    await prisma.partnerAccount.update({ where: { userId: late.id }, data: { createdAt: LAUNCH_PROMOTION.joinCutoff } })
-
-    expect(await grantLaunchPromotionIfEligible(test.id)).toBe(false)
-    expect(await grantLaunchPromotionIfEligible(late.id)).toBe(false)
+    expect(await grantLaunchPromotionIfEligible(user.id)).toBe(false)
     expect(await prisma.partnerPromotion.count()).toBe(0)
+    // the window itself did not move: the retirement is "no new automatic grants"
+    expect(LAUNCH_PROMOTION.joinCutoff.toISOString()).toBe('2027-05-31T22:00:00.000Z')
   })
 })
