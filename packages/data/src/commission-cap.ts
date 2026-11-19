@@ -18,6 +18,7 @@
 import type { ServiceFee } from '@prisma/client'
 import prisma from '../index'
 import { round } from './payment-math'
+import { providerFromRef, type PaymentProviderId } from './payment-refs'
 
 export const COMMISSION_CAP_TIMEZONE = 'Europe/Madrid'
 
@@ -25,6 +26,8 @@ export const CAP_ENTRY_STATUS = {
   RESERVED: 'reserved',
   TAKEN: 'taken',
   RELEASED: 'released',
+  /** A refund that gave commission back: its own row, NEGATIVE amount, in the original entry's month. */
+  REVERSAL: 'reversal',
 } as const
 
 /** 'YYYY-MM' of `date` in Europe/Madrid. PURE. */
@@ -57,6 +60,11 @@ export function capSourceKey(kind: 'reservation' | 'rental', id: string): string
   return `${kind}:${id}`
 }
 
+/** Ledger key for a rental payment group: the lowest booking id, identical at charge, invoice and refund. PURE. */
+export function rentalCapSourceKey(bookingIds: string[]): string {
+  return capSourceKey('rental', [...bookingIds].sort()[0] ?? '')
+}
+
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
 async function lockSiteMonth(tx: Tx, siteId: string, month: string) {
@@ -69,7 +77,7 @@ async function usedInMonth(tx: Tx, siteId: string, month: string, excludeKey?: s
     where: {
       siteId,
       month,
-      status: { in: [CAP_ENTRY_STATUS.RESERVED, CAP_ENTRY_STATUS.TAKEN] },
+      status: { in: [CAP_ENTRY_STATUS.RESERVED, CAP_ENTRY_STATUS.TAKEN, CAP_ENTRY_STATUS.REVERSAL] },
       ...(excludeKey ? { sourceKey: { not: excludeKey } } : {}),
     },
   })
@@ -147,20 +155,99 @@ export async function releaseCappedCommission(sourceKey: string): Promise<void> 
 }
 
 /**
- * A refund that reverses commission lowers the month's usage by the reversed amount (never below
- * zero), so later bookings that month can take commission again up to the cap.
+ * Does a refund on this rail give Sunbnb's commission back? PURE.
+ * - Stripe (online + terminal): `refundPaymentIntent` passes `refund_application_fee: true`, and
+ *   Stripe returns the application fee pro rata to the refunded amount.
+ * - Viva (online + terminal): Viva reverses the ISV fee itself on a refund (`VivaRefundRequest`).
+ * - Mollie: NO. Mollie application fees are non-refundable; the full refund comes out of the
+ *   venue's balance and the fee stays with the platform (docs.mollie.com, "Application fees").
+ *   The commission was collected and stays collected, so it keeps counting toward the cap.
+ * - Demo: no money moved and no fee was reversed.
  */
-export async function reverseCappedCommission(sourceKey: string, reversed: number): Promise<void> {
-  if (!(reversed > 0)) return
-  await prisma.$transaction(async (tx) => {
-    const entry = await tx.commissionCapEntry.findUnique({ where: { sourceKey } })
-    if (!entry) return
+export function refundReversesCommission(provider: PaymentProviderId | null | undefined): boolean {
+  return provider === 'stripe' || provider === 'stripe-terminal' || provider === 'viva' || provider === 'viva-terminal'
+}
+
+export interface CapReversalInput {
+  /** The payable's ledger key (`reservation:<id>` / `rental:<lowest booking id>`). */
+  sourceKey: string
+  /** One reversal per refund: a retry with the same key is a no-op. Full refunds use `'full'`. */
+  refundKey: string
+  /** Refunded share of the payment, (0, 1]. The provider reverses the fee pro rata. */
+  fraction: number
+}
+
+/**
+ * A refund that reverses commission lowers the month's counted total by the commission actually
+ * reversed: `fraction` x the amount decided for the payable, never more than what is left of it
+ * after earlier reversals, so the month never drops below zero. Returns the amount reversed.
+ *
+ * The reversal is its own ledger row (negative amount, status `reversal`) in the ORIGINAL entry's
+ * month, so a refund in July lowers June only. The payable's own entry keeps the amount that was
+ * collected and invoiced; the PLATFORM invoice is never rewritten here. Idempotent per
+ * `(sourceKey, refundKey)` through the unique `sourceKey` of the reversal row.
+ */
+export async function reverseCappedCommission(input: CapReversalInput): Promise<number> {
+  const fraction = Math.min(1, input.fraction)
+  if (!(fraction > 0)) return 0
+  const reversalKey = `reversal:${input.sourceKey}:${input.refundKey}`
+  return prisma.$transaction(async (tx) => {
+    const entry = await tx.commissionCapEntry.findUnique({ where: { sourceKey: input.sourceKey } })
+    if (!entry || entry.status === CAP_ENTRY_STATUS.RELEASED || entry.status === CAP_ENTRY_STATUS.REVERSAL) return 0
     await lockSiteMonth(tx, entry.siteId, entry.month)
-    await tx.commissionCapEntry.update({
-      where: { id: entry.id },
-      data: { amount: round(Math.max(0, entry.amount - reversed)) },
+    const done = await tx.commissionCapEntry.findUnique({ where: { sourceKey: reversalKey } })
+    if (done) return round(-done.amount)
+    const prior = await tx.commissionCapEntry.aggregate({
+      _sum: { amount: true },
+      where: { sourceKey: { startsWith: `reversal:${input.sourceKey}:` }, status: CAP_ENTRY_STATUS.REVERSAL },
     })
+    const remaining = round(entry.amount + (prior._sum.amount ?? 0))
+    const reversed = round(Math.max(0, Math.min(remaining, entry.amount * fraction)))
+    if (reversed <= 0) return 0
+    await tx.commissionCapEntry.create({
+      data: {
+        siteId: entry.siteId,
+        month: entry.month,
+        sourceKey: reversalKey,
+        uncappedAmount: 0,
+        amount: -reversed,
+        status: CAP_ENTRY_STATUS.REVERSAL,
+      },
+    })
+    return reversed
   })
+}
+
+/**
+ * Refund hook for the refund dispatchers (`refund.ts` `issueReservationRefund`, user app
+ * `issueRefund`): after the provider accepted a refund of `paymentRef`, give the reversed commission
+ * back to the month. Resolves the payable from the ref (a sunbed reservation, else a rental group);
+ * any other payable (order, tab, deposit) has no capped commission and is a no-op. Never throws: the
+ * money already moved, so a ledger failure is logged and leaves the month over-counted (the venue
+ * pays less, never more). Returns the amount reversed.
+ */
+export async function reverseCapForRefundedPayment(
+  paymentRef: string | null | undefined,
+  opts: { refundKey?: string; fraction?: number } = {},
+): Promise<number> {
+  if (!paymentRef || !refundReversesCommission(providerFromRef(paymentRef))) return 0
+  try {
+    const reservation = await prisma.reservation.findFirst({ where: { paymentRef }, select: { id: true } })
+    let sourceKey: string | null = reservation ? capSourceKey('reservation', reservation.id) : null
+    if (!sourceKey) {
+      const bookings = await prisma.rentalBooking.findMany({ where: { paymentRef }, select: { id: true } })
+      if (bookings.length) sourceKey = rentalCapSourceKey(bookings.map((b) => b.id))
+    }
+    if (!sourceKey) return 0
+    return await reverseCappedCommission({
+      sourceKey,
+      refundKey: opts.refundKey ?? 'full',
+      fraction: opts.fraction ?? 1,
+    })
+  } catch (err) {
+    console.error('[commission-cap] refund reversal failed', paymentRef, err)
+    return 0
+  }
 }
 
 const DEAD_PAYABLE_STATUSES = ['payment_failed', 'canceled'] // RESERVATION_/RENTAL_ PAYMENT_FAILED, CANCELED

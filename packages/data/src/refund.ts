@@ -12,7 +12,8 @@
  * `findPartnerAccountForPayment` lookup that lives in the user app's payment path.
  *
  * Idempotency is the caller's responsibility (e.g. the partner action guards on
- * `Reservation.refundedAt`). This function performs no DB writes.
+ * `Reservation.refundedAt`). Its only DB write is the commission-cap reversal
+ * (`reverseCapForRefundedPayment`, idempotent per payable) after a successful refund.
  */
 
 import { getValidMollieToken } from './mollie-tokens'
@@ -22,6 +23,7 @@ import { refundReservationVivaPayment } from './reservation-payment'
 import { stripeAdapter } from './payment-providers/stripe-adapter'
 import { vivaAdapter } from './payment-providers/viva-adapter'
 import { stripeAccountForPartner } from './payment-providers/stripe-account'
+import { reverseCapForRefundedPayment } from './commission-cap'
 
 const MOLLIE_API_BASE = 'https://api.mollie.com/v2'
 
@@ -50,6 +52,18 @@ export async function issueReservationRefund(
   ctx?: { reservationId?: string },
 ): Promise<RefundOutcome> {
   if (!paymentRef) return { status: 'error', error: 'No payment to refund' }
+  const outcome = await dispatchRefund(paymentRef, partnerAccountId, ctx)
+  // CR-002: a refund that returned Sunbnb's commission (Stripe, Viva) gives it back to the
+  // site's monthly cap. Mollie keeps its application fee, so a Mollie refund changes nothing.
+  if (outcome.status === 'ok') await reverseCapForRefundedPayment(paymentRef)
+  return outcome
+}
+
+async function dispatchRefund(
+  paymentRef: string,
+  partnerAccountId: string | null | undefined,
+  ctx?: { reservationId?: string },
+): Promise<RefundOutcome> {
   const provider = providerFromRef(paymentRef)
   switch (provider) {
     case 'demo':

@@ -199,4 +199,8 @@ export async function issueRefund(
     default:
       throw new Error(`Unknown payment provider for ref: ${paymentRef}`)
   }
+  // CR-002: give the reversed commission (Stripe, Viva) back to the site's monthly cap. Mollie
+  // keeps its application fee, so its refunds count unchanged. Never throws (the money moved).
+  const { reverseCapForRefundedPayment } = await import('@repo/data/commission-cap')
+  await reverseCapForRefundedPayment(paymentRef)
 }

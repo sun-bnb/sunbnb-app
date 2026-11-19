@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyMonthlyCap, capMonthKey, isPlanRateFee, capSourceKey } from './commission-cap'
+import { applyMonthlyCap, capMonthKey, isPlanRateFee, capSourceKey, rentalCapSourceKey, refundReversesCommission } from './commission-cap'
 
 describe('applyMonthlyCap (CR-002: 2% capped at EUR 199 per site per month)', () => {
   it('EUR 100 booking on Temporada takes EUR 2.00 below the cap', () => {
@@ -38,5 +38,20 @@ describe('isPlanRateFee', () => {
   })
   it('source keys are namespaced per payable kind', () => {
     expect(capSourceKey('reservation', 'r1')).toBe('reservation:r1')
+  })
+})
+
+describe('refundReversesCommission (T-149)', () => {
+  it('Stripe and Viva return the fee; Mollie and demo do not', () => {
+    expect(refundReversesCommission('stripe')).toBe(true)
+    expect(refundReversesCommission('stripe-terminal')).toBe(true)
+    expect(refundReversesCommission('viva')).toBe(true)
+    expect(refundReversesCommission('viva-terminal')).toBe(true)
+    expect(refundReversesCommission('mollie')).toBe(false)
+    expect(refundReversesCommission('demo')).toBe(false)
+    expect(refundReversesCommission(null)).toBe(false)
+  })
+  it('rental groups key on the lowest booking id', () => {
+    expect(rentalCapSourceKey(['b2', 'a9', 'c1'])).toBe('rental:a9')
   })
 })

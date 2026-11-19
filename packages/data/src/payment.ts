@@ -59,6 +59,7 @@ import { recordInvoiceForTax } from './tax/es-verifactu/record'
 import {
   capSourceKey,
   isPlanRateFee,
+  rentalCapSourceKey,
   reserveCappedCommission,
   takeCappedCommission,
 } from './commission-cap'
@@ -174,10 +175,7 @@ export function monthlyCapFor(
   return plan.monthlyCommissionCapPerSite ?? PRICING_TIERS[plan.tier]?.monthlyCommissionCapPerSite ?? null
 }
 
-/** Ledger key for a rental payment group: the lowest booking id, identical at charge and at invoice. */
-export function rentalCapSourceKey(bookingIds: string[]): string {
-  return capSourceKey('rental', [...bookingIds].sort()[0] ?? '')
-}
+export { rentalCapSourceKey }
 
 /**
  * THE capped commission for a charge (`reserve`, at payment creation) or a PLATFORM invoice
