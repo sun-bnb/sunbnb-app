@@ -5,7 +5,9 @@ import { SubscriptionPlan, Subscription } from '@prisma/client'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { PRICING_TIERS, FEATURED_TIER } from '@repo/data/pricing-tiers'
-import { planCardLines } from '@/lib/plan-card-lines'
+import { planCard } from '@/lib/plan-card-lines'
+import { switchPlan } from './actions'
+import type { PlanFitIssues } from '@repo/data/subscription'
 
 interface SubscriptionWithPlan extends Subscription {
   plan: SubscriptionPlan
@@ -36,6 +38,30 @@ export default function SubscriptionView({ data }: { data: SubscriptionData }) {
   const tp = useTranslations('Landing.plans')
   const currentTier = subscription?.plan?.tier ?? 'GRATIS'
   const [loading, setLoading] = useState<string | null>(null)
+  // Plan switching (Free ⇄ Pro). Business is set up by us, never switched to here.
+  const currentIsCustom = !PRICING_TIERS[currentTier]?.selfServe
+  const [confirming, setConfirming] = useState<string | null>(null)
+  const [switching, setSwitching] = useState(false)
+  const [switchError, setSwitchError] = useState<{ errors: string[]; issues?: PlanFitIssues } | null>(null)
+  const [switchedTo, setSwitchedTo] = useState<string | null>(null)
+
+  async function handleSwitch(tier: string) {
+    setSwitching(true)
+    setSwitchError(null)
+    try {
+      const res = await switchPlan(tier)
+      if (res.status === 'ok') {
+        setSwitchedTo(tier)
+        setConfirming(null)
+      } else {
+        setSwitchError({ errors: res.errors ?? [t('switchFailed')], issues: res.issues })
+      }
+    } catch {
+      setSwitchError({ errors: [t('switchFailed')] })
+    } finally {
+      setSwitching(false)
+    }
+  }
 
   const hasStripeSubscription = !!subscription?.stripeSubscriptionId
 
@@ -72,7 +98,7 @@ export default function SubscriptionView({ data }: { data: SubscriptionData }) {
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('currentPlan')}</p>
-            <p className="text-xl font-bold text-gray-900 mt-1">{subscription?.plan?.name ?? PRICING_TIERS.GRATIS.name}</p>
+            <p className="text-xl font-bold text-gray-900 mt-1">{PRICING_TIERS[currentTier]?.name ?? PRICING_TIERS.GRATIS.name}</p>
           </div>
           <div className="text-right shrink-0">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('sitesUsed')}</p>
@@ -94,13 +120,49 @@ export default function SubscriptionView({ data }: { data: SubscriptionData }) {
         )}
       </div>
 
+      {currentIsCustom && (
+        <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700" role="status">
+          {t('customPlanNote', { plan: PRICING_TIERS[currentTier].name })}
+        </div>
+      )}
+      {switchedTo && (
+        <div className="mb-6 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700" role="status">
+          {t('switched', { plan: PRICING_TIERS[switchedTo as keyof typeof PRICING_TIERS].name })}
+          {PRICING_TIERS[switchedTo as keyof typeof PRICING_TIERS].onlinePayments && (
+            <>
+              {' '}
+              <Link href="/account/payments" className="font-medium underline underline-offset-2">
+                {t('enableOnline')}
+              </Link>
+            </>
+          )}
+        </div>
+      )}
+      {switchError && (
+        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
+          {switchError.errors.map((e) => (
+            <p key={e}>{e}</p>
+          ))}
+          {switchError.issues && (
+            <ul className="mt-2 list-disc space-y-0.5 pl-5">
+              {switchError.issues.sites && (
+                <li>{t('overSites', { current: switchError.issues.sites.current, limit: switchError.issues.sites.limit })}</li>
+              )}
+              {switchError.issues.hamacas.map((h) => (
+                <li key={h.siteId}>{t('overHamacas', { site: h.siteName, current: h.current, limit: h.limit })}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {/* Plan cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
         {plans.map((plan) => {
           const isCurrent = plan.tier === currentTier
           const colors = TIER_COLORS[plan.tier] ?? DEFAULT_COLORS
           const spec = PRICING_TIERS[plan.tier]
-          const features = planCardLines(plan.tier, tp)
+          const card = planCard(plan.tier, tp)
           return (
             <div
               key={plan.id}
@@ -120,29 +182,39 @@ export default function SubscriptionView({ data }: { data: SubscriptionData }) {
 
               {/* Plan name & price */}
               <h3 className="text-base font-bold text-gray-900">{spec.name}</h3>
-              <div className="mt-2 mb-4">
-                <span className="text-2xl font-bold text-gray-900">
-                  {spec.quoteOnly ? tp('quoteHeadline') : `${spec.commissionPercent['sunbed-rental']}%`}
+              <div className="mt-2 md:min-h-[4.5rem]">
+                <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className={`font-bold text-gray-900 ${card.headlineIsFigure ? 'text-2xl' : 'text-lg'}`}>{card.headline}</span>
+                  {card.headlineCap && <span className="text-sm font-semibold text-gray-900">{card.headlineCap}</span>}
                 </span>
-                <span className="block text-xs text-gray-500 mt-0.5">
-                  {spec.quoteOnly ? tp('quoteNote') : tp('commissionLabel')}
-                </span>
-                {!spec.quoteOnly && <span className="block text-xs font-medium text-gray-700 mt-1">{tp('noMonthlyFee')}</span>}
+                <span className="block text-xs text-gray-500 mt-0.5">{card.headlineNote}</span>
               </div>
 
-              {/* Features */}
-              <ul className="space-y-2 mb-6 flex-1">
-                {features.map((feature) => (
-                  <li key={feature} className="flex items-start gap-2 text-sm text-gray-600">
-                    <svg className="w-4 h-4 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                    </svg>
-                    {feature}
-                  </li>
-                ))}
-              </ul>
+              {/* Features: each plan lists only what it adds over the one before */}
+              <div className="mt-4 flex-1 border-t border-gray-100 pt-4">
+                {card.inherits && <p className="mb-2 text-sm font-semibold text-gray-900">{card.inherits}</p>}
+                <ul className="space-y-2">
+                  {card.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2 text-sm text-gray-600">
+                      <svg className="w-4 h-4 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                      </svg>
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              {card.terms.length > 0 && (
+                <ul className="mt-4 space-y-0.5 border-t border-gray-100 pt-3 text-xs text-gray-500">
+                  {card.terms.map((term) => (
+                    <li key={term}>{term}</li>
+                  ))}
+                </ul>
+              )}
+              <div className="mb-6" />
 
-              {/* CTA: no checkout on any plan (nothing bills monthly). Grupo is a quote request. */}
+              {/* CTA: no checkout on any plan (nothing bills monthly). Free ⇄ Pro is a
+                  self-serve switch behind a confirm; Business is a conversation with us. */}
               {isCurrent ? (
                 <div className="text-center py-2 text-sm font-medium text-gray-400 bg-gray-50 rounded-lg">
                   {t('currentButton')}
@@ -154,17 +226,50 @@ export default function SubscriptionView({ data }: { data: SubscriptionData }) {
                 >
                   {tp('quote')}
                 </a>
-              ) : spec.onlinePayments ? (
-                <Link
-                  href="/account/payments"
-                  className="block w-full py-2.5 sm:py-2 text-center text-sm font-medium rounded-lg bg-accent text-white hover:bg-accent-hover transition-colors"
-                >
-                  {t('enableOnline')}
-                </Link>
-              ) : (
-                <div className="text-center py-2 text-sm font-medium text-gray-400 bg-gray-50 rounded-lg">
-                  {t('freePlan')}
+              ) : currentIsCustom ? null : confirming === plan.tier ? (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <p className="text-xs text-gray-600">
+                    {spec.onlinePayments
+                      ? t('confirmPro', {
+                          pct: spec.commissionPercent['sunbed-rental'],
+                          cap: spec.monthlyCommissionCapPerSite ?? 0,
+                        })
+                      : t('confirmFree')}
+                  </p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSwitch(plan.tier)}
+                      disabled={switching}
+                      className="flex-1 py-2.5 sm:py-2 text-sm font-medium rounded-lg bg-accent text-white hover:bg-accent-hover disabled:opacity-40 transition-colors"
+                    >
+                      {switching ? t('switching') : t('confirmSwitch', { plan: spec.name })}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirming(null)}
+                      disabled={switching}
+                      className="py-2.5 sm:py-2 px-3 text-sm font-medium rounded-lg border border-gray-300 text-gray-700 hover:bg-white disabled:opacity-40 transition-colors"
+                    >
+                      {t('cancel')}
+                    </button>
+                  </div>
                 </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirming(plan.tier)
+                    setSwitchError(null)
+                  }}
+                  className={`block w-full py-2.5 sm:py-2 text-center text-sm font-medium rounded-lg transition-colors ${
+                    spec.onlinePayments
+                      ? 'bg-accent text-white hover:bg-accent-hover'
+                      : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {t('switchTo', { plan: spec.name })}
+                </button>
               )}
             </div>
           )

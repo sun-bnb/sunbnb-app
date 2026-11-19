@@ -288,7 +288,7 @@
     "dc_sunbed": "Aurinkotuoli {label}",
     "nextNumbers": "Näytä lukuni",
     "meNumbers": "Näytä minun lukuni",
-    "numbersAsk": "Tämän verran Sunbnb maksaisi sinulle Temporada-paketissa omalla hinnallasi. Ei kuukausimaksua: ansaitsemme vain, kun myymme puolestasi.",
+    "numbersAsk": "Tämän verran Sunbnb maksaisi sinulle Pro-tilauksessa omalla hinnallasi. Ei kuukausimaksua: ansaitsemme vain, kun myymme puolestasi.",
     "pj_price": "Hintasi tuolilta päivässä",
     "pj_priceAsk": "Onko {price} päivähintasi?",
     "pj_cheapest": "Edullisin sinulle",
@@ -361,7 +361,7 @@
     "paidQ": "Miten saan rahani?",
     "paidA": "Oman Mollie-tilisi kautta. Mollie maksaa sinulle aikataulunsa mukaan Sunbnb:n provisio vähennettynä; Sunbnb ei koskaan pidä rahojasi.",
     "costQ": "Mitä se maksaa?",
-    "costA": "Gratis on maksuton eikä siitä peritä provisiota. Temporadassa ei ole kuukausimaksua: Sunbnb ottaa {pct} % verkossa maksetuista aurinkotuoli- ja vuokravarauksista, enintään {cap} € kuukaudessa rantaa kohden (alv 0 %), ja 0 % ruoasta ja juomasta. Korttimaksujen käsittely veloitetaan omakustannehintaan omalla rivillään. Asiakkaat eivät koskaan maksa palvelumaksua. Grupo, usealle rannalle: pyydä tarjous.",
+    "costA": "Free on maksuton eikä siitä peritä provisiota. Pro-tilauksessa ei ole kuukausimaksua: Sunbnb ottaa {pct} % verkossa maksetuista aurinkotuoli- ja vuokravarauksista, enintään {cap} € kuukaudessa rantaa kohden (alv 0 %), ja 0 % ruoasta ja juomasta. Korttimaksujen käsittely veloitetaan omakustannehintaan omalla rivillään. Asiakkaat eivät koskaan maksa palvelumaksua. Business, usealle rannalle tai oman brändin varaussivulle: hinnoittelu sovitaan kanssasi tapauskohtaisesti.",
     "languagesQ": "Millä kielillä se toimii?",
     "languagesA": "Englanniksi, espanjaksi ja suomeksi – sinulle, henkilökunnallesi ja asiakkaillesi."
   },

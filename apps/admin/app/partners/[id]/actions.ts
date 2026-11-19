@@ -3,7 +3,9 @@
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { revalidatePath } from 'next/cache'
-import { SUBSCRIPTION_FEATURES } from '@repo/data/subscription'
+import { SUBSCRIPTION_FEATURES, setPartnerPlan } from '@repo/data/subscription'
+import { PRICING_TIERS } from '@repo/data/pricing-tiers'
+import type { SubscriptionTier } from '@prisma/client'
 import {
   saveServiceFee,
   getFeesByAccount,
@@ -24,34 +26,62 @@ async function requireSudo() {
   return session
 }
 
+// ─── Set the partner's plan ─────────────────────────────────────────────────
+
+/**
+ * Admin moves a partner between plans, including onto and off Business (a custom
+ * agreement only we set up). Goes through `setPartnerPlan` as 'admin': no
+ * self-serve or limit checks (existing sites and sunbeds are kept), and leaving
+ * Business deletes the agreement (CustomSubscription + partner-level ServiceFee rows).
+ */
+export async function setPartnerTier(
+  accountId: string,
+  tier: string,
+): Promise<{ status: string; errors?: string[] }> {
+  await requireSudo()
+  if (!(tier in PRICING_TIERS)) return { status: 'error', errors: [`Unknown plan: ${tier}`] }
+
+  const result = await setPartnerPlan(accountId, tier as SubscriptionTier, 'admin')
+  if (result.status === 'error') return { status: 'error', errors: result.errors }
+
+  revalidatePath(`/partners/${accountId}`, 'page')
+  revalidatePath('/partners', 'page')
+  return { status: 'ok' }
+}
+
 // ─── Upsert custom subscription ─────────────────────────────────────────────
 
 export async function upsertCustomSubscription(
   accountId: string,
-  input: { maxSites: number | null; notes?: string },
+  input: { maxSites: number | null; maxHamacasPerSite?: number | null; notes?: string },
 ): Promise<{ status: string; errors?: string[] }> {
   await requireSudo()
 
   const { maxSites, notes } = input
 
-  if (maxSites !== null) {
-    if (!Number.isInteger(maxSites) || maxSites < 0) {
+  for (const [label, v] of [['maxSites', maxSites], ['maxHamacasPerSite', input.maxHamacasPerSite ?? null]] as const) {
+    if (v !== null && (!Number.isInteger(v) || v < 0)) {
       return {
         status: 'error',
-        errors: ['maxSites must be null or a non-negative integer'],
+        errors: [`${label} must be null or a non-negative integer`],
       }
     }
   }
 
+  // maxHamacasPerSite is written only when the caller passes it, so an older
+  // caller saving just the site limit cannot wipe a sunbed limit.
+  const hamacas = 'maxHamacasPerSite' in input ? { maxHamacasPerSite: input.maxHamacasPerSite ?? null } : {}
   await prisma.customSubscription.upsert({
     where: { partnerAccountId: accountId },
     create: {
       partnerAccountId: accountId,
       maxSites: maxSites ?? null,
+      ...hamacas,
       notes: notes?.trim() || null,
     },
     update: {
       maxSites: maxSites ?? null,
+      ...hamacas,
       notes: notes?.trim() || null,
     },
   })

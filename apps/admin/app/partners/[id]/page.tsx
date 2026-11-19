@@ -98,6 +98,8 @@ export default async function PartnerDetailPage({
         basePlanMaxSites={plan?.maxSites ?? null}
         currentSiteCount={siteCount}
         customMaxSites={customSubscription?.maxSites ?? null}
+        customMaxHamacas={customSubscription?.maxHamacasPerSite ?? null}
+        effectiveMaxHamacas={effective.maxHamacasPerSite ?? null}
         hasCustomSubscription={customSubscription != null}
         effectiveMaxSites={effective.maxSites}
         isCustomMaxSites={effective.isCustom}

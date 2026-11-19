@@ -27,7 +27,9 @@ import {
   getPartnerDetail,
   setFeatureOverride,
   setPartnerTaxIdentity,
+  setPartnerTier,
 } from "./actions"
+import { PRICING_TIERS, PRICING_TIER_ORDER, UNLIMITED_SITES } from "@repo/data/pricing-tiers"
 import { ES_PROVINCES, resolveTaxRegime, type TaxRegime } from "@repo/data/tax/regime"
 import {
   saveServiceFee,
@@ -92,6 +94,10 @@ export interface PartnerDetailViewProps {
   basePlanMaxSites: number | null
   currentSiteCount: number
   customMaxSites: number | null
+  /** Agreement sunbed limit per site; null = inherit the plan. */
+  customMaxHamacas: number | null
+  /** Resolved sunbed limit per site; null = no limit. */
+  effectiveMaxHamacas: number | null
   hasCustomSubscription: boolean
   effectiveMaxSites: number
   isCustomMaxSites: boolean
@@ -359,6 +365,8 @@ export default function PartnerDetailView({
   basePlanMaxSites,
   currentSiteCount,
   customMaxSites,
+  customMaxHamacas,
+  effectiveMaxHamacas,
   hasCustomSubscription,
   effectiveMaxSites,
   isCustomMaxSites,
@@ -396,9 +404,30 @@ export default function PartnerDetailView({
     }
   }
 
+  // ── Plan ───────────────────────────────────────────────────────────────────
+  const [tierInput, setTierInput] = useState(baseTier)
+  const [tierSaving, setTierSaving] = useState(false)
+  const [tierErrors, setTierErrors] = useState<string[]>([])
+  const isBusiness = !PRICING_TIERS[baseTier as keyof typeof PRICING_TIERS]?.selfServe
+  const leavingBusiness = isBusiness && tierInput !== baseTier
+
+  async function handleSaveTier() {
+    setTierSaving(true)
+    setTierErrors([])
+    const res = await setPartnerTier(accountId, tierInput)
+    setTierSaving(false)
+    if (res.status === "ok") window.location.reload()
+    else setTierErrors(res.errors ?? ["Could not change the plan"])
+  }
+
+  const limitLabel = (n: number | null) => (n == null || n >= UNLIMITED_SITES ? "\u221e" : String(n))
+
   // ── Custom subscription state ──────────────────────────────────────────────
   const [maxSitesInput, setMaxSitesInput] = useState<string>(
     customMaxSites != null ? String(customMaxSites) : "",
+  )
+  const [maxHamacasInput, setMaxHamacasInput] = useState<string>(
+    customMaxHamacas != null ? String(customMaxHamacas) : "",
   )
   const [maxSitesSaving, setMaxSitesSaving] = useState(false)
   const [maxSitesErrors, setMaxSitesErrors] = useState<string[]>([])
@@ -439,9 +468,11 @@ export default function PartnerDetailView({
   const handleSaveMaxSites = async () => {
     setMaxSitesSaving(true)
     setMaxSitesErrors([])
-    const trimmed = maxSitesInput.trim()
-    const parsed = trimmed === "" ? null : parseInt(trimmed, 10)
-    const result = await upsertCustomSubscription(accountId, { maxSites: parsed })
+    const parse = (v: string) => (v.trim() === "" ? null : parseInt(v.trim(), 10))
+    const result = await upsertCustomSubscription(accountId, {
+      maxSites: parse(maxSitesInput),
+      maxHamacasPerSite: parse(maxHamacasInput),
+    })
     setMaxSitesSaving(false)
     if (result.status !== "ok") {
       setMaxSitesErrors(result.errors ?? ["Unknown error"])
@@ -453,6 +484,7 @@ export default function PartnerDetailView({
     setMaxSitesErrors([])
     await clearCustomSubscription(accountId)
     setMaxSitesInput("")
+    setMaxHamacasInput("")
     setMaxSitesClearing(false)
   }
 
@@ -572,13 +604,68 @@ export default function PartnerDetailView({
             ? `€${baseMonthlyPrice.toFixed(2)}`
             : "— (free)"}
           <span className="mx-2">&middot;</span>
-          Sites: {currentSiteCount} / {basePlanMaxSites ?? "∞"}
+          Sites: {currentSiteCount} / {limitLabel(effectiveMaxSites)}
         </div>
       </div>
 
       <div className="border-t border-gray-800 mb-6" />
 
       <LaunchOfferCard accountId={accountId} initial={launchOffer} />
+
+      {/* ── Plan ────────────────────────────────────────────────── */}
+      <div className="mb-6">
+        <h3 className="text-sm font-semibold text-gray-200 mb-1">Plan</h3>
+        <p className="text-xs text-gray-500 mb-4">
+          Free and Pro are fixed plans the partner can also switch between themselves.
+          Business is a custom agreement set up only here: its limits, features and commission
+          are the agreement fields below (blank = unlimited / every feature / Pro&rsquo;s rates).
+          Moving a partner off Business deletes the agreement and its partner commission rows.
+        </p>
+        {tierErrors.length > 0 && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 mb-3">
+            {tierErrors.map((e, i) => (
+              <p key={i} className="text-xs text-red-400">{e}</p>
+            ))}
+          </div>
+        )}
+        <div className="flex items-center gap-3">
+          <TextField
+            select
+            label="Plan"
+            size="small"
+            value={tierInput}
+            onChange={(e) => setTierInput(e.target.value)}
+            sx={{ width: 180 }}
+          >
+            {PRICING_TIER_ORDER.map((tier) => (
+              <MenuItem key={tier} value={tier}>
+                {PRICING_TIERS[tier].name}
+              </MenuItem>
+            ))}
+          </TextField>
+          <Button
+            variant="contained"
+            size="small"
+            onClick={handleSaveTier}
+            disabled={tierSaving || tierInput === baseTier}
+            sx={{ textTransform: "none" }}
+          >
+            {tierSaving ? (
+              <><CircularProgress size={14} color="inherit" sx={{ mr: 0.5 }} /> Saving&hellip;</>
+            ) : (
+              "Change plan"
+            )}
+          </Button>
+        </div>
+        {leavingBusiness && (
+          <p className="mt-2 text-xs text-amber-400">
+            This deletes the Business agreement (limits, feature overrides) and every partner-level
+            commission row for this partner.
+          </p>
+        )}
+      </div>
+
+      <div className="border-t border-gray-800 mb-6" />
 
       {/* ── Effective subscription summary ─────────────────────── */}
       <div className="mb-6">
@@ -588,11 +675,15 @@ export default function PartnerDetailView({
             <div>
               <div className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Max sites</div>
               <div className="text-2xl font-bold text-gray-100">
-                {effectiveMaxSites}
+                {limitLabel(effectiveMaxSites)}
                 {isCustomMaxSites && (
                   <span className="ml-2 text-xs font-normal text-amber-400">(custom)</span>
                 )}
               </div>
+            </div>
+            <div className="ml-8">
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Max sunbeds per site</div>
+              <div className="text-2xl font-bold text-gray-100">{limitLabel(effectiveMaxHamacas)}</div>
             </div>
           </div>
         </div>
@@ -602,10 +693,12 @@ export default function PartnerDetailView({
 
       {/* ── Custom subscription panel ───────────────────────────── */}
       <div className="mb-8">
-        <h3 className="text-sm font-semibold text-gray-200 mb-1">Custom Subscription Override</h3>
+        <h3 className="text-sm font-semibold text-gray-200 mb-1">
+          {isBusiness ? "Business agreement: limits" : "Custom Subscription Override"}
+        </h3>
         <p className="text-xs text-gray-500 mb-4">
-          Override the base plan&rsquo;s site limit for this partner. Leave blank to inherit from
-          the base plan.
+          Override the plan&rsquo;s site and sunbed limits for this partner. Leave blank to inherit
+          from the plan (on Business: unlimited).
         </p>
 
         {maxSitesErrors.length > 0 && (
@@ -624,6 +717,18 @@ export default function PartnerDetailView({
             value={maxSitesInput}
             onChange={(e) => setMaxSitesInput(e.target.value)}
             placeholder={basePlanMaxSites != null ? String(basePlanMaxSites) : "base plan value"}
+            sx={{ width: 180 }}
+            slotProps={{
+              htmlInput: { min: 0, step: 1 }
+            }}
+          />
+          <TextField
+            label="Max sunbeds / site"
+            size="small"
+            type="number"
+            value={maxHamacasInput}
+            onChange={(e) => setMaxHamacasInput(e.target.value)}
+            placeholder={limitLabel(effectiveMaxHamacas)}
             sx={{ width: 180 }}
             slotProps={{
               htmlInput: { min: 0, step: 1 }

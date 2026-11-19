@@ -48,7 +48,7 @@ export default function BrandView() {
   // upgrade for "a branded booking page" they already have would be absurd —
   // and it would take the slug control with it, which D2 says stays theirs
   // whatever the plan.
-  if (!isCustomBrand && site.subscriptionTier !== 'GRUPO') {
+  if (!isCustomBrand && !PRICING_TIERS[site.subscriptionTier as keyof typeof PRICING_TIERS]?.brandedBookingPage) {
     return (
       <div className="container mx-auto p-4">
         <div className="mt-8 flex flex-col items-center text-center max-w-md mx-auto">

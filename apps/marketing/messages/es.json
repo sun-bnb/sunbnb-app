@@ -288,7 +288,7 @@
     "dc_sunbed": "Hamaca {label}",
     "nextNumbers": "Ver mis números",
     "meNumbers": "Enséñame mis números",
-    "numbersAsk": "Esto es lo que te costaría Sunbnb en Temporada, con tu propio precio. Sin cuota mensual: solo ganamos cuando vendemos por ti.",
+    "numbersAsk": "Esto es lo que te costaría Sunbnb en Pro, con tu propio precio. Sin cuota mensual: solo ganamos cuando vendemos por ti.",
     "pj_price": "Tu precio por hamaca y día",
     "pj_priceAsk": "¿Es {price} tu precio por día?",
     "pj_cheapest": "El más barato para ti",
@@ -361,7 +361,7 @@
     "paidQ": "¿Cómo cobro?",
     "paidA": "A través de tu propia cuenta de Mollie. Mollie te paga según su calendario con la comisión de Sunbnb descontada; Sunbnb nunca toca tu dinero.",
     "costQ": "¿Cuánto cuesta?",
-    "costA": "Gratis no cuesta nada y no lleva comisión. Temporada no tiene cuota mensual: Sunbnb se queda un {pct} % de las reservas de hamacas y alquileres pagadas online, como máximo {cap} € al mes por playa (sin IVA), y un 0 % de comida y bebida. El procesamiento de tarjetas se cobra a coste y aparece en su propia línea. Los clientes nunca pagan comisión. Grupo, para varias playas: pide presupuesto.",
+    "costA": "Free no cuesta nada y no lleva comisión. Pro no tiene cuota mensual: Sunbnb se queda un {pct} % de las reservas de hamacas y alquileres pagadas online, como máximo {cap} € al mes por playa (sin IVA), y un 0 % de comida y bebida. El procesamiento de tarjetas se cobra a coste y aparece en su propia línea. Los clientes nunca pagan comisión. Business, para varias playas o una página de reservas con tu marca, tiene un precio acordado contigo caso por caso.",
     "languagesQ": "¿En qué idiomas funciona?",
     "languagesA": "Inglés, español y finés, para ti, tu personal y tus clientes."
   },

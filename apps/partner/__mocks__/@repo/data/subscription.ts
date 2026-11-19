@@ -23,6 +23,8 @@ export const getEffectiveSubscriptionForUser = vi.fn().mockResolvedValue({
   isCustom: false,
   features: { OFF_PLATFORM_BILLING: false, ONLINE_PAYMENTS: true, FOOD_AND_BEVERAGE: true },
 })
+export const setPartnerPlan = vi.fn().mockResolvedValue({ status: 'ok', tier: 'TEMPORADA', changed: true })
+export const planFitIssues = vi.fn().mockReturnValue(null)
 export const resolveEffectiveFeatures = vi.fn().mockReturnValue({ OFF_PLATFORM_BILLING: false })
 
 // Constants mirrored from the real module (read by the assistant `inspect` features aspect).

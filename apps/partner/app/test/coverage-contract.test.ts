@@ -487,6 +487,11 @@ const UNGATED_ALLOWLIST: AllowlistEntry[] = [
     file: 'app/account/subscription/actions.ts',
     reason: 'Session-gated read: all queries scoped to session.user.id!; returns null for unauthenticated',
   },
+  {
+    export: 'switchPlan',
+    file: 'app/account/subscription/actions.ts',
+    reason: 'Session-gated: setPartnerPlan(session.user.id, tier, \'partner\') changes only the caller\'s own plan; Business and over-limit downgrades refused in @repo/data',
+  },
 
   // ── Server actions: security (session-scoped token management) ────────────
   {

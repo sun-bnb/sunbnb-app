@@ -2,8 +2,9 @@
  * Subscription Service
  *
  * Provides helpers to query a partner's subscription and enforce plan limits
- * (sites per account, hamacas per site) and plan features (CR-002: Gratis /
- * Temporada / Grupo).
+ * (sites per account, hamacas per site) and plan features (CR-002: Free / Pro /
+ * Business, code keys GRATIS / TEMPORADA / GRUPO), and changes a partner's plan
+ * (`setPartnerPlan`).
  *
  * SECURITY / TRUST BOUNDARY:
  *   `syncStripeSubscription` and `handleSubscriptionCanceled` mutate
@@ -27,12 +28,13 @@ export {
   FEATURED_TIER,
   DEFAULT_TIER,
   GRUPO_DEFAULT_MAX_SITES,
+  UNLIMITED_SITES,
   COMMISSIONED_SERVICE_CODES,
   CAPPED_SERVICE_CODES,
   planRowMaxSites,
 } from './pricing-tiers'
 export type { PricingTierSpec, CommissionedServiceCode } from './pricing-tiers'
-import { DEFAULT_TIER, PRICING_TIERS } from './pricing-tiers'
+import { DEFAULT_TIER, PRICING_TIERS, UNLIMITED_SITES } from './pricing-tiers'
 
 // ─── Feature Catalog ────────────────────────────────────────────────────────
 
@@ -127,9 +129,15 @@ export function resolveEffectiveSubscription(
     : fallback.maxHamacasPerSite
   return {
     tier,
-    name:              plan?.name         ?? fallback.name,
+    // The catalogue name, not the row's: plans were renamed Free / Pro / Business
+    // after the rows were seeded as Gratis / Temporada / Grupo.
+    name:              PRICING_TIERS[tier].name,
     monthlyPrice:      plan?.monthlyPrice ?? 0,
-    maxSites:          custom?.maxSites   ?? plan?.maxSites ?? fallback.maxSites ?? 1,
+    // A plan without a catalogue limit (Business) is unlimited until its agreement
+    // sets one; the stored row value is not consulted for it.
+    maxSites:
+      custom?.maxSites ??
+      (PRICING_TIERS[tier].maxSites === null ? UNLIMITED_SITES : (plan?.maxSites ?? fallback.maxSites ?? 1)),
     /** null = no limit. Custom (Grupo agreement) wins over the plan. */
     maxHamacasPerSite: custom?.maxHamacasPerSite ?? planHamacas,
     /** null = uncapped. Read by the commission-cap ledger for plan-rate fees only. */
@@ -170,6 +178,117 @@ export async function getEffectiveSubscriptionForUser(userId: string) {
     account?.subscription?.plan ?? null,
     (account?.customSubscription as any) ?? null,
   )
+}
+
+// ─── Plan changes ───────────────────────────────────────────────────────────
+
+/** Who is changing a partner's plan. A partner may only move between self-serve plans. */
+export type PlanChangeActor = 'partner' | 'admin'
+
+/** Where a partner is over a plan's limits: too many sites, or too many sunbeds on a site. */
+export type PlanFitIssues = {
+  sites: { current: number; limit: number } | null
+  hamacas: { siteId: string; siteName: string; current: number; limit: number }[]
+}
+
+/**
+ * Pure: does a partner with these sites fit `tier`'s catalogue limits?
+ * Returns null when it fits. Used to refuse a self-serve downgrade that would
+ * leave the partner over the lower plan's limits.
+ */
+export function planFitIssues(
+  tier: SubscriptionTier,
+  sites: { id: string; name: string; hamacas: number }[],
+): PlanFitIssues | null {
+  const spec = PRICING_TIERS[tier]
+  const siteIssue =
+    spec.maxSites !== null && sites.length > spec.maxSites ? { current: sites.length, limit: spec.maxSites } : null
+  const limit = spec.maxHamacasPerSite
+  const hamacas =
+    limit === null
+      ? []
+      : sites.filter((s) => s.hamacas > limit).map((s) => ({ siteId: s.id, siteName: s.name, current: s.hamacas, limit }))
+  return siteIssue || hamacas.length ? { sites: siteIssue, hamacas } : null
+}
+
+export type PlanChangeResult =
+  | { status: 'ok'; tier: SubscriptionTier; changed: boolean }
+  | {
+      status: 'error'
+      /** not_self_serve: Business picked by a partner · custom_agreement: a Business partner tried to leave by itself · over_limits: downgrade refused */
+      code: 'no_account' | 'no_plan_row' | 'not_self_serve' | 'custom_agreement' | 'over_limits'
+      errors: string[]
+      issues?: PlanFitIssues
+    }
+
+/**
+ * THE writer of a partner's plan (Subscription.planId), for the partner's
+ * subscription page and for admin.
+ *
+ * - A partner may move only between self-serve plans (Free ⇄ Pro). Business is a
+ *   custom agreement set up by us, so a partner can neither pick it nor leave it.
+ * - A partner's move to a plan whose limits it already exceeds is refused, with
+ *   the sites and sunbeds that are over (founder decision 2026-11-19: block for now).
+ *   Admin may move anyone anywhere: existing sites and sunbeds are kept, the
+ *   limits only stop adding more.
+ * - Leaving Business drops its agreement: the CustomSubscription row (limits,
+ *   feature overrides) and the partner-level ServiceFee rows (negotiated rates),
+ *   so the partner falls back to the plain catalogue terms of its new plan.
+ *
+ * No billing: no plan has a monthly price, and Business billing is out of scope.
+ */
+export async function setPartnerPlan(
+  partnerAccountId: string,
+  tier: SubscriptionTier,
+  actor: PlanChangeActor,
+): Promise<PlanChangeResult> {
+  const account = await prisma.partnerAccount.findUnique({
+    where: { userId: partnerAccountId },
+    select: { userId: true, subscription: { select: { plan: { select: { tier: true } } } } },
+  })
+  if (!account) return { status: 'error', code: 'no_account', errors: ['Partner account not found'] }
+  const currentTier = account.subscription?.plan.tier ?? DEFAULT_TIER
+
+  if (actor === 'partner') {
+    if (!PRICING_TIERS[tier].selfServe) {
+      return { status: 'error', code: 'not_self_serve', errors: [`${PRICING_TIERS[tier].name} is set up with us. Contact us to discuss it.`] }
+    }
+    if (!PRICING_TIERS[currentTier].selfServe) {
+      return { status: 'error', code: 'custom_agreement', errors: [`Your ${PRICING_TIERS[currentTier].name} plan is set up with us. Contact us to change it.`] }
+    }
+    if (tier !== currentTier) {
+      const sites = await prisma.site.findMany({
+        where: { userId: partnerAccountId },
+        select: { id: true, name: true, _count: { select: { inventoryItems: true } } },
+      })
+      const issues = planFitIssues(
+        tier,
+        sites.map((s) => ({ id: s.id, name: s.name, hamacas: s._count.inventoryItems })),
+      )
+      if (issues) {
+        return { status: 'error', code: 'over_limits', errors: [`Your venues are over the ${PRICING_TIERS[tier].name} plan limits.`], issues }
+      }
+    }
+  }
+
+  if (tier === currentTier && account.subscription) return { status: 'ok', tier, changed: false }
+
+  const plan = await prisma.subscriptionPlan.findUnique({ where: { tier }, select: { id: true } })
+  if (!plan) return { status: 'error', code: 'no_plan_row', errors: [`No ${PRICING_TIERS[tier].name} plan row`] }
+
+  const leavingAgreement = tier !== currentTier && !PRICING_TIERS[currentTier].selfServe
+  await prisma.$transaction(async (tx) => {
+    await tx.subscription.upsert({
+      where: { partnerAccountId },
+      update: { planId: plan.id, status: 'ACTIVE' },
+      create: { partnerAccountId, planId: plan.id, status: 'ACTIVE' },
+    })
+    if (leavingAgreement) {
+      await tx.customSubscription.deleteMany({ where: { partnerAccountId } })
+      await tx.serviceFee.deleteMany({ where: { accountId: partnerAccountId } })
+    }
+  })
+  return { status: 'ok', tier, changed: tier !== currentTier }
 }
 
 /**

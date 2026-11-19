@@ -7,7 +7,7 @@ import sunbnbLogo from '@/app/sunbnb-logo.svg'
 import { gaEvent } from '@repo/ui/google-analytics'
 import { marketingCtaUrl } from '@/lib/marketing-cta'
 import { PRICING_TIERS, PRICING_TIER_ORDER, FEATURED_TIER } from '@repo/data/pricing-tiers'
-import { planCardLines } from '@/lib/plan-card-lines'
+import { planCard } from '@/lib/plan-card-lines'
 
 interface BusinessEntity {
   companyName: string
@@ -142,11 +142,8 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
       tier,
       name: spec.name,
       quoteOnly: spec.quoteOnly,
-      headline: spec.quoteOnly ? t('plans.quote') : `${spec.commissionPercent['sunbed-rental']}%`,
-      headlineNote: spec.quoteOnly ? t('plans.quoteNote') : t('plans.commissionLabel'),
-      price: spec.quoteOnly ? null : t('plans.noMonthlyFee'),
       featured: tier === FEATURED_TIER,
-      features: planCardLines(tier, tp),
+      ...planCard(tier, tp),
     }
   })
 
@@ -252,25 +249,37 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
                   </span>
                 )}
               </div>
-              {/* Commission is the headline term of the deal, not a footnote —
-                  it is what a partner actually pays on every sale. */}
-              <p className="mt-5">
-                <span className={`${p.quoteOnly ? 'text-2xl' : 'text-4xl'} font-bold tracking-tight`}>{p.headline}</span>
-              </p>
-              <p className="text-sm text-gray-500">{p.headlineNote}</p>
-              {p.price && (
-                <p className="mt-4 border-t border-gray-100 pt-4 text-sm font-semibold">{p.price}</p>
+              {/* What the plan costs is the headline term of the deal, not a footnote:
+                  nothing on Free, the commission on Pro, a conversation on Business. */}
+              <div className="mt-5 md:min-h-[6.5rem]">
+                <p className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                  <span className={`${p.headlineIsFigure ? 'text-4xl' : 'text-2xl'} font-bold tracking-tight`}>{p.headline}</span>
+                  {p.headlineCap && <span className="text-base font-semibold text-gray-900">{p.headlineCap}</span>}
+                </p>
+                <p className="mt-1 text-sm text-gray-500">{p.headlineNote}</p>
+              </div>
+              {/* Each card lists only what it adds over the one before, so the three compare at a glance. */}
+              <div className="mt-4 flex-1 border-t border-gray-100 pt-4">
+                {p.inherits && <p className="mb-2 text-sm font-semibold">{p.inherits}</p>}
+                <ul className="space-y-2">
+                  {p.features.map((f) => (
+                    <li key={f} className="flex gap-2 text-sm text-gray-600">
+                      <span className="text-gray-900" aria-hidden>
+                        —
+                      </span>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              {/* The fine print of the commission, under the features so the three lists start level. */}
+              {p.terms.length > 0 && (
+                <ul className="mt-5 space-y-1 border-t border-gray-100 pt-4 text-xs text-gray-500">
+                  {p.terms.map((term) => (
+                    <li key={term}>{term}</li>
+                  ))}
+                </ul>
               )}
-              <ul className="mt-4 flex-1 space-y-2">
-                {p.features.map((f) => (
-                  <li key={f} className="flex gap-2 text-sm text-gray-600">
-                    <span className="text-gray-900" aria-hidden>
-                      —
-                    </span>
-                    {f}
-                  </li>
-                ))}
-              </ul>
               {p.quoteOnly ? (
                 <a
                   href={`mailto:partners@sunbnb.app?subject=${encodeURIComponent(t('plans.quoteSubject'))}`}

@@ -3,11 +3,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/app/auth', () => ({
   auth: vi.fn().mockResolvedValue(null),
 }))
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
-import { getSubscriptionData } from './actions'
+import { getSubscriptionData, switchPlan } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
-import { getPartnerSubscription, resolveEffectiveSubscription } from '@repo/data/subscription'
+import { getPartnerSubscription, resolveEffectiveSubscription, setPartnerPlan } from '@repo/data/subscription'
 
 const mockAuth = vi.mocked(auth)
 const mockGetPartnerSubscription = vi.mocked(getPartnerSubscription)
@@ -161,5 +162,35 @@ describe('getSubscriptionData', () => {
     const result = await getSubscriptionData()
 
     expect(result!.siteCount).toBe(7)
+  })
+})
+
+// ─── switchPlan ───────────────────────────────────────────────────────────────
+
+describe('switchPlan', () => {
+  const mockSetPartnerPlan = vi.mocked(setPartnerPlan)
+
+  it('refuses an unauthenticated caller and changes nothing', async () => {
+    expect(await switchPlan('TEMPORADA')).toMatchObject({ status: 'error' })
+    expect(mockSetPartnerPlan).not.toHaveBeenCalled()
+  })
+
+  it('changes only the caller\'s own plan, as the partner (never admin)', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    expect(await switchPlan('TEMPORADA')).toEqual({ status: 'ok' })
+    expect(mockSetPartnerPlan).toHaveBeenCalledWith(OWNER_ID, 'TEMPORADA', 'partner')
+  })
+
+  it('refuses an unknown plan before touching the data layer', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    expect(await switchPlan('ENTERPRISE')).toMatchObject({ status: 'error' })
+    expect(mockSetPartnerPlan).not.toHaveBeenCalled()
+  })
+
+  it('passes a refused downgrade through with what is over the limits', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    const issues = { sites: { current: 2, limit: 1 }, hamacas: [] }
+    mockSetPartnerPlan.mockResolvedValueOnce({ status: 'error', code: 'over_limits', errors: ['over'], issues })
+    expect(await switchPlan('GRATIS')).toEqual({ status: 'error', errors: ['over'], issues })
   })
 })

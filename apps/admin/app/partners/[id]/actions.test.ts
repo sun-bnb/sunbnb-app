@@ -11,6 +11,11 @@ vi.mock('next/cache', () => ({
 // Mock saveServiceFee and getFeesByAccount from fees/actions so waiveAllServiceFees
 // can be tested without the full save logic. The real saveServiceFee is tested
 // separately in fees/actions.test.ts.
+vi.mock('@repo/data/subscription', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@repo/data/subscription')>()),
+  setPartnerPlan: vi.fn().mockResolvedValue({ status: 'ok', tier: 'GRUPO', changed: true }),
+}))
+
 vi.mock('../../fees/actions', () => ({
   saveServiceFee: vi.fn().mockResolvedValue({ status: 'ok' }),
   getFeesByAccount: vi.fn().mockResolvedValue([]),
@@ -25,7 +30,9 @@ import {
   setPartnerTaxIdentity,
   grantPartnerPromotion,
   revokePartnerPromotion,
+  setPartnerTier,
 } from './actions'
+import { setPartnerPlan } from '@repo/data/subscription'
 import { grantLaunchPromotion, revokeLaunchPromotion } from '@repo/data/promotion-db'
 import { saveServiceFee, getFeesByAccount } from '../../fees/actions'
 import { auth } from '@/app/auth'
@@ -527,5 +534,43 @@ describe('grantPartnerPromotion / revokePartnerPromotion', () => {
     authenticateAsSudo()
     expect(await revokePartnerPromotion('acc-1')).toEqual({ status: 'ok' })
     expect(vi.mocked(revokeLaunchPromotion)).toHaveBeenCalledWith('acc-1')
+  })
+})
+
+// ─── setPartnerTier (admin plan switch, incl. Business) ──────────────────────
+
+describe('setPartnerTier', () => {
+  it('rejects non-sudo callers and changes nothing', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'u-1' } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
+    await expect(setPartnerTier('acc-1', 'GRUPO')).rejects.toThrow()
+    expect(vi.mocked(setPartnerPlan)).not.toHaveBeenCalled()
+  })
+
+  it('moves the partner as admin, so Business is allowed', async () => {
+    authenticateAsSudo()
+    expect(await setPartnerTier('acc-1', 'GRUPO')).toEqual({ status: 'ok' })
+    expect(vi.mocked(setPartnerPlan)).toHaveBeenCalledWith('acc-1', 'GRUPO', 'admin')
+  })
+
+  it('refuses an unknown plan', async () => {
+    authenticateAsSudo()
+    expect(await setPartnerTier('acc-1', 'PLATINUM')).toMatchObject({ status: 'error' })
+    expect(vi.mocked(setPartnerPlan)).not.toHaveBeenCalled()
+  })
+})
+
+describe('upsertCustomSubscription sunbed limit', () => {
+  it('writes maxHamacasPerSite when passed, and leaves it alone when not', async () => {
+    authenticateAsSudo()
+    await upsertCustomSubscription('acc-1', { maxSites: null, maxHamacasPerSite: 450 })
+    expect(vi.mocked(prisma.customSubscription.upsert).mock.calls[0]![0].update).toMatchObject({ maxHamacasPerSite: 450 })
+    await upsertCustomSubscription('acc-1', { maxSites: 5 })
+    expect(vi.mocked(prisma.customSubscription.upsert).mock.calls[1]![0].update).not.toHaveProperty('maxHamacasPerSite')
+  })
+
+  it('refuses a negative sunbed limit', async () => {
+    authenticateAsSudo()
+    expect(await upsertCustomSubscription('acc-1', { maxSites: null, maxHamacasPerSite: -1 })).toMatchObject({ status: 'error' })
   })
 })

@@ -11,6 +11,8 @@ import {
   FEATURED_TIER,
   GRUPO_DEFAULT_MAX_SITES,
   planRowMaxSites,
+  planFitIssues,
+  UNLIMITED_SITES,
 } from './subscription'
 import type { SubscriptionTier } from '@prisma/client'
 
@@ -88,17 +90,17 @@ describe('resolveEffectiveSubscription', () => {
     expect(result.tier).toBe('TEMPORADA')
   })
 
-  it('name falls back to Starter when plan is null', () => {
+  it('name falls back to Free when plan is null', () => {
     const result = resolveEffectiveSubscription(null, null)
-    expect(result.name).toBe('Gratis')
+    expect(result.name).toBe('Free')
   })
 
-  it('name comes from the plan when plan is provided', () => {
+  it('name comes from the catalogue, not the stored row name', () => {
     const result = resolveEffectiveSubscription(
-      makePlan({ name: 'Temporada Plan' }),
+      makePlan({ tier: 'TEMPORADA', name: 'Temporada' }),
       null,
     )
-    expect(result.name).toBe('Temporada Plan')
+    expect(result.name).toBe('Pro')
   })
 
   it('monthlyPrice falls back to 0 when plan is null', () => {
@@ -215,9 +217,13 @@ describe('PRICING_TIERS', () => {
     expect(DEFAULT_TIER).toBe('GRATIS')
   })
 
-  it('names are Gratis, Temporada and Grupo; Temporada is featured', () => {
-    expect(PRICING_TIER_ORDER.map((t) => PRICING_TIERS[t].name)).toEqual(['Gratis', 'Temporada', 'Grupo'])
+  it('names are Free, Pro and Business; Pro is featured', () => {
+    expect(PRICING_TIER_ORDER.map((t) => PRICING_TIERS[t].name)).toEqual(['Free', 'Pro', 'Business'])
     expect(FEATURED_TIER).toBe('TEMPORADA')
+  })
+
+  it('only Business carries the branded booking page', () => {
+    expect(PRICING_TIER_ORDER.filter((t) => PRICING_TIERS[t].brandedBookingPage)).toEqual(['GRUPO'])
   })
 
   it('no plan bills a fixed monthly price', () => {
@@ -336,5 +342,45 @@ describe('resolveEffectiveSubscription — hamacas and cap', () => {
   it('a NULL limit on a Grupo row without agreement means no limit', () => {
     const r = resolveEffectiveSubscription(makePlan({ tier: 'GRUPO', maxHamacasPerSite: null }), null)
     expect(r.maxHamacasPerSite).toBeNull()
+  })
+})
+
+describe('Business is unlimited until its agreement sets a limit', () => {
+  it('ignores a legacy 10-site Business row', () => {
+    const r = resolveEffectiveSubscription(makePlan({ tier: 'GRUPO', maxSites: 10, maxHamacasPerSite: null }), null)
+    expect(r.maxSites).toBe(UNLIMITED_SITES)
+  })
+
+  it('an agreement limit wins', () => {
+    const r = resolveEffectiveSubscription(makePlan({ tier: 'GRUPO', maxSites: 10 }), { maxSites: 4 })
+    expect(r.maxSites).toBe(4)
+  })
+
+  it('only Free and Pro are self-serve', () => {
+    expect(PRICING_TIER_ORDER.filter((t) => PRICING_TIERS[t].selfServe)).toEqual(['GRATIS', 'TEMPORADA'])
+  })
+})
+
+describe('planFitIssues', () => {
+  const site = (id: string, hamacas: number) => ({ id, name: `Site ${id}`, hamacas })
+
+  it('fits Free with one site of 100 sunbeds', () => {
+    expect(planFitIssues('GRATIS', [site('a', 100)])).toBeNull()
+  })
+
+  it('names every limit Free would be over', () => {
+    expect(planFitIssues('GRATIS', [site('a', 150), site('b', 20)])).toEqual({
+      sites: { current: 2, limit: 1 },
+      hamacas: [{ siteId: 'a', siteName: 'Site a', current: 150, limit: 100 }],
+    })
+  })
+
+  it('Pro allows 3 sites of 300', () => {
+    expect(planFitIssues('TEMPORADA', [site('a', 300), site('b', 1), site('c', 1)])).toBeNull()
+    expect(planFitIssues('TEMPORADA', [site('a', 301)])?.hamacas).toHaveLength(1)
+  })
+
+  it('Business has no catalogue limits', () => {
+    expect(planFitIssues('GRUPO', Array.from({ length: 40 }, (_, i) => site(String(i), 900)))).toBeNull()
   })
 })

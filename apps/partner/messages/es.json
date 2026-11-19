@@ -1691,7 +1691,7 @@
       },
       "commission": {
         "title": "Comisión según plan",
-        "body": "{gratis}% en Gratis. {temporada}% en Temporada, con un tope de {cap} € por negocio al mes. {fnb}% en comida y bebida. El procesamiento de tarjeta se factura al coste del proveedor de pago, en una línea aparte."
+        "body": "Free no lleva comisión. Pro lleva un {temporada}%, con un tope de {cap} € por local al mes, y un {fnb}% en comida y bebida. El precio de Business se acuerda contigo. El procesamiento de tarjeta se factura al coste del proveedor de pago, en una línea aparte."
       },
       "cash": {
         "title": "Sin comisión en efectivo",
@@ -1700,24 +1700,33 @@
     },
     "plans": {
       "title": "Planes",
-      "subtitle": "Solo pagas comisión por lo que los clientes pagan online. Ningún plan tiene cuota mensual.",
+      "subtitle": "Empieza gratis. Pro añade los pagos online por una pequeña comisión y Business se adapta a ti.",
       "mostChosen": "El más elegido",
       "commissionLabel": "de comisión en reservas de hamacas y alquileres pagados online",
       "noMonthlyFee": "Sin cuota mensual",
-      "sites": "{count, plural, one {# negocio} other {Hasta # negocios}}",
-      "hamacas": "Hasta {count} hamacas por negocio",
-      "perAgreement": "Negocios y hamacas según acuerdo",
-      "onlinePayments": "Pago online con tarjeta y pedidos de comida y bebida",
-      "cap": "Comisión con tope de {cap} € por negocio al mes",
+      "sites": "{count, plural, one {# local} other {Hasta # locales}}",
+      "hamacas": "Hasta {count} hamacas por local",
+      "onlinePayments": "Pago online con tarjeta",
+      "cap": "Comisión con tope de {cap} € por local al mes",
       "foodAndDrink": "{pct}% de comisión en comida y bebida",
       "processing": "Procesamiento de tarjeta al coste del proveedor, en línea aparte",
-      "payOnSite": "Los clientes pagan solo en el sitio: sin pago online con tarjeta ni pedidos de comida y bebida",
-      "includedAll": "Reserva de hamacas, mapa satelital de hamacas, reserva por QR sin cuenta de cliente, enlace para el personal y alquiler de equipos",
+      "payOnSite": "Los clientes te pagan en el sitio",
       "quote": "Pide presupuesto",
       "quoteHeadline": "A medida",
-      "quoteNote": "Comisión y límites acordados contigo",
-      "quoteSubject": "Solicitud de presupuesto del plan Grupo",
-      "cta": "Empezar"
+      "quoteNote": "Precio acordado contigo, caso por caso",
+      "quoteSubject": "Solicitud de presupuesto del plan Business",
+      "cta": "Empezar",
+      "freeHeadline": "Totalmente gratis",
+      "freeNote": "Sin cuota mensual y sin comisión. Úsalo gratis todo el tiempo que quieras.",
+      "everythingIn": "Todo lo de {plan}, y además:",
+      "unlimited": "Locales y hamacas ilimitados",
+      "sunbedMap": "Reserva de hamacas sobre un mapa satelital de tu playa",
+      "qrBooking": "Reserva por QR sin cuenta de cliente",
+      "staffLink": "Enlace para el personal de playa",
+      "rentals": "Alquiler de equipos",
+      "foodAndDrinkOrdering": "Pedidos de comida y bebida desde la hamaca",
+      "brandedPage": "Página de reservas con tu marca: tu nombre, tus colores y tu propia dirección web",
+      "headlineCap": "máx. {cap} € / local / mes"
     },
     "start": {
       "title": "Cómo empezar",
@@ -2185,7 +2194,7 @@
   },
   "PlanFees": {
     "commission": "Comisión de Sunbnb: {pct}% en reservas de hamacas y alquileres pagados online",
-    "commissionCapped": "Comisión de Sunbnb: {pct}% en reservas de hamacas y alquileres pagados online, con un tope de {cap} € por negocio al mes",
+    "commissionCapped": "Comisión de Sunbnb: {pct}% en reservas de hamacas y alquileres pagados online, con un tope de {cap} € por local al mes",
     "commissionAgreed": "Comisión de Sunbnb: según lo acordado para tu plan",
     "foodAndDrink": "Comida y bebida: {pct}% de comisión",
     "processing": "Procesamiento de tarjeta: se factura al coste del proveedor de pago, en una línea aparte y separada de la comisión de Sunbnb",
@@ -2204,13 +2213,23 @@
     "pastDue": "Tu pago está vencido. Actualiza tus datos de facturación.",
     "current": "Actual",
     "currentButton": "Plan actual",
-    "freePlan": "Plan gratuito",
     "badgeGratis": "Gratis",
     "badgeGrupo": "A medida",
     "enableOnline": "Conectar un proveedor de pago",
     "manageBilling": "Gestionar facturación",
     "opening": "Abriendo…",
     "infoTitle": "Cómo se facturan los planes",
-    "infoBody": "Ningún plan tiene cuota mensual. El procesamiento de tarjeta se factura al coste del proveedor en una línea aparte, separada de la comisión de Sunbnb. Los clientes nunca pagan ningún cargo."
+    "infoBody": "Ningún plan tiene cuota mensual. El procesamiento de tarjeta se factura al coste del proveedor en una línea aparte, separada de la comisión de Sunbnb. Los clientes nunca pagan ningún cargo.",
+    "customPlanNote": "Tu plan {plan} está configurado con nosotros. Escríbenos a partners@sunbnb.app para cambiarlo.",
+    "switchTo": "Cambiar a {plan}",
+    "confirmSwitch": "Cambiar a {plan}",
+    "cancel": "Cancelar",
+    "switching": "Cambiando…",
+    "confirmPro": "Pro no tiene cuota mensual. Sunbnb se queda un {pct}% de las reservas de hamacas y alquileres pagadas online, como máximo {cap} € por local al mes, y nada de comida y bebida. Puedes volver a Free cuando quieras.",
+    "confirmFree": "En Free los clientes pagan solo en el local: se desactivan el pago online con tarjeta y los pedidos de comida y bebida.",
+    "switched": "Ya estás en {plan}.",
+    "switchFailed": "No se pudo cambiar tu plan. Inténtalo de nuevo.",
+    "overSites": "Tienes {current} locales; este plan permite {limit}.",
+    "overHamacas": "{site} tiene {current} hamacas; este plan permite {limit} por local."
   }
 }

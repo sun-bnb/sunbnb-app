@@ -331,7 +331,7 @@ describe('space', () => {
 
 describe('features', () => {
   const sub = (tier: string, over: Record<string, unknown> = {}) => ({
-    tier, name: tier === 'GRATIS' ? 'Gratis' : 'Temporada', monthlyPrice: 0, maxSites: tier === 'GRATIS' ? 1 : 3, isCustom: false,
+    tier, name: tier === 'GRATIS' ? 'Free' : 'Pro', monthlyPrice: 0, maxSites: tier === 'GRATIS' ? 1 : 3, isCustom: false,
     features: { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: tier !== 'GRATIS', FOOD_AND_BEVERAGE: tier !== 'GRATIS' }, ...over,
   })
   beforeEach(() => {
@@ -340,14 +340,14 @@ describe('features', () => {
     vi.mocked(prisma.subscription.findUnique).mockResolvedValue({ status: 'ACTIVE', currentPeriodEnd: new Date('2026-11-01T00:00:00Z'), stripeSubscriptionId: 'sub_SECRET', stripeCustomerId: 'cus_SECRET' } as never)
   })
 
-  it('explains what a Gratis plan locks and which plan unlocks it', async () => {
+  it('explains what a Free plan locks and which plan unlocks it', async () => {
     vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValue(sub('GRATIS') as never)
     const r = await inspect('features')
     expect(r.plan).toMatchObject({ tier: 'GRATIS', maxSites: 1, sitesUsed: 1, canAddSite: false, commissionPercent: { 'sunbed-rental': 0, 'food-and-beverage': 0 }, subscriptionStatus: 'ACTIVE', currentPeriodEnd: '2026-11-01' })
     expect(r.entitlements[0]).toMatchObject({ key: 'OFF_PLATFORM_BILLING', enabled: true })
     const online = r.entitlements.find((e: any) => e.key === 'ONLINE_PAYMENTS')
-    expect(online).toMatchObject({ enabled: false, unlockedBy: ['Temporada', 'Grupo', 'or an admin override'] })
-    expect(online.whyLocked).toMatch(/Gratis/)
+    expect(online).toMatchObject({ enabled: false, unlockedBy: ['Pro', 'Business', 'or an admin override'] })
+    expect(online.whyLocked).toMatch(/Free/)
     expect(r.ladder.map((l: any) => l.tier)).toEqual(['GRATIS', 'TEMPORADA', 'GRUPO'])
     expect(JSON.stringify(r)).not.toMatch(/SECRET/)
   })

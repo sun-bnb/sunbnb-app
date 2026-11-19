@@ -1,5 +1,6 @@
 /**
- * Pricing Plan Catalog — Gratis / Temporada / Grupo (CR-002, decision F-9).
+ * Pricing Plan Catalog — Free / Pro / Business (CR-002, decision F-9; shown as
+ * Gratis / Temporada / Grupo until 2026-11-19, the code keys still carry those names).
  *
  * CLIENT-SAFE: pure data, no prisma import (the type import is erased at
  * compile time). The partner landing page and the in-app plan cards are client
@@ -36,6 +37,8 @@ export const CAPPED_SERVICE_CODES = ['sunbed-rental', 'equipment-rental'] as con
 export type PricingTierSpec = {
   /** Plan name shown to partners — identical in every language. */
   name: string
+  /** The site's guest booking pages can carry the partner's own brand (brand tab). */
+  brandedBookingPage: boolean
   /** Fixed monthly price (EUR, excl. IVA). Every plan is 0: Temporada is commission-only, Grupo is quote-only. */
   monthlyPrice: number
   /** Sites allowed; `null` = set per agreement (CustomSubscription). */
@@ -50,6 +53,11 @@ export type PricingTierSpec = {
   onlinePayments: boolean
   /** No public price: the card shows a quote request and there is no checkout. */
   quoteOnly: boolean
+  /**
+   * A partner may switch itself onto this plan from the subscription page.
+   * Business is not: it is a custom agreement set up by us in admin.
+   */
+  selfServe: boolean
 }
 
 /**
@@ -70,7 +78,8 @@ export type PricingTierSpec = {
  */
 export const PRICING_TIERS = {
   GRATIS: {
-    name: 'Gratis',
+    name: 'Free',
+    brandedBookingPage: false,
     monthlyPrice: 0,
     maxSites: 1,
     maxHamacasPerSite: 100,
@@ -78,9 +87,11 @@ export const PRICING_TIERS = {
     monthlyCommissionCapPerSite: null,
     onlinePayments: false,
     quoteOnly: false,
+    selfServe: true,
   },
   TEMPORADA: {
-    name: 'Temporada',
+    name: 'Pro',
+    brandedBookingPage: false,
     monthlyPrice: 0,
     maxSites: 3,
     maxHamacasPerSite: 300,
@@ -88,9 +99,11 @@ export const PRICING_TIERS = {
     monthlyCommissionCapPerSite: 199,
     onlinePayments: true,
     quoteOnly: false,
+    selfServe: true,
   },
   GRUPO: {
-    name: 'Grupo',
+    name: 'Business',
+    brandedBookingPage: true,
     monthlyPrice: 0,
     maxSites: null,
     maxHamacasPerSite: null,
@@ -98,15 +111,23 @@ export const PRICING_TIERS = {
     monthlyCommissionCapPerSite: 199,
     onlinePayments: true,
     quoteOnly: true,
+    selfServe: false,
   },
 } as const satisfies Record<SubscriptionTier, PricingTierSpec>
 
 /**
- * Sites a Grupo partner gets before its agreement is recorded in a
- * CustomSubscription — the legacy Business limit, so no partner moved to Grupo
- * loses a site. Written to the Grupo `SubscriptionPlan.maxSites` row.
+ * "No site limit". `SubscriptionPlan.maxSites` is NOT NULL, so a plan without a
+ * limit stores this sentinel; screens show any value at or above it as ∞.
  */
-export const GRUPO_DEFAULT_MAX_SITES = 10
+export const UNLIMITED_SITES = 999
+
+/**
+ * Sites a Business partner gets until its agreement records a limit in a
+ * CustomSubscription: unlimited. Written to the Business `SubscriptionPlan.maxSites`
+ * row; the resolver reads the catalogue rather than the row, so an old row value
+ * (10, before 2026-11-19) does not cap anyone.
+ */
+export const GRUPO_DEFAULT_MAX_SITES = UNLIMITED_SITES
 
 /** Display order of the plans — free first. Used by the seed, the cards and the tests. */
 export const PRICING_TIER_ORDER = ['GRATIS', 'TEMPORADA', 'GRUPO'] as const satisfies readonly SubscriptionTier[]
