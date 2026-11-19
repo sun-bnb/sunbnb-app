@@ -24,8 +24,10 @@ export const vivaAdapter: OnlineCheckoutAdapter = {
     let isvAmountCents = 0
     if (intent.serviceCode !== null) {
       if (fee <= 0) {
-        // Mirrors the card-present refusal in reservation-machine-apply.ts (launch promotion).
-        throw new ProviderNotReadyError('Viva online requires a positive ISV fee (launch promotion waives commission)')
+        // Mirrors the card-present refusal in reservation-machine-apply.ts: a waived (launch
+        // promotion) or capped-to-zero (CR-002 monthly cap reached) commission cannot ride a Viva
+        // ISV order until Viva confirms a zero ISV fee (track 024 Q2/Q3).
+        throw new ProviderNotReadyError('Viva online requires a positive ISV fee (commission waived or monthly cap reached)')
       }
       isvAmountCents = toCents(fee)
       assertValidIsvFee(amountCents, isvAmountCents)

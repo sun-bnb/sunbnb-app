@@ -48,7 +48,7 @@ import { recordSettlement } from './till'
 import { isDemoPayment, isStripeTerminalRef, stripeTerminalRef, stripeIdFromRef } from './payment-refs'
 import {
   processConfirmedReservation, issueCashCreditNote,
-  loadFeeContext, chargeableServiceFee, resolveServiceFee, serviceFeeForUnits,
+  loadFeeContext, chargeableServiceFee, resolveServiceFee, serviceFeeForUnits, cappedCommission,
 } from './payment'
 import {
   createReservationMolliePayment,
@@ -65,6 +65,7 @@ import {
 } from './viva'
 import { ensureTerminalLocation, createTerminalPaymentIntent, cancelTerminalPaymentIntent, fetchPaymentIntentState } from './stripe'
 import { stripeApplicationFee } from './payment-providers/fee-policy'
+import { capSourceKey, releaseCappedCommission } from './commission-cap'
 import { stripeAccountForSite } from './payment-providers/stripe-account'
 
 /** sunbed-rental service code, shared with the QR/Mollie card-collect cascade lookup. */
@@ -681,8 +682,30 @@ async function runCollectStartCard(
       error: 'card-present (Viva) payments are not available while the launch promotion waives commission (track 024 Q2/Q3)',
     }
   }
-  // Commission rule: serviceFeeForUnits (fixed per bed, percentage once on the total) — same as the PLATFORM invoice.
-  const feeAmount = serviceFeeForUnits(matchedFee, { total: amount, units: r.items.length })
+  // Commission rule: serviceFeeForUnits (fixed per bed, percentage once on the total), then the
+  // CR-002 monthly cap, reserved under `reservation:<id>` and read back by the PLATFORM invoice.
+  // Card-present choice (CR-002 default (c), founder had not answered M-68): Viva keeps the plan
+  // commission, capped, until Viva confirms a zero ISV fee. A site already AT its cap therefore
+  // gets a 0 fee, which `assertValidIsvFee` refuses: refuse clearly here instead (cash still works).
+  const capKey = capSourceKey('reservation', r.id)
+  const uncappedFee = serviceFeeForUnits(matchedFee, { total: amount, units: r.items.length })
+  const feeAmount = await cappedCommission('reserve', {
+    siteId: r.siteId,
+    serviceCode: VIVA_SERVICE_CODE,
+    fee: matchedFee,
+    partnerAccount,
+    uncapped: uncappedFee,
+    sourceKey: capKey,
+  })
+  if (uncappedFee > 0 && feeAmount <= 0) {
+    await releaseCappedCommission(capKey)
+    return {
+      outcome: 'effect-failed',
+      effect: 'vivaSale',
+      event: row.event,
+      error: 'card-present (Viva) payments are not available once the site has reached its monthly commission cap (Viva zero-ISV-fee question, track 024 Q2/Q3)',
+    }
+  }
   const amountCents = toCents(amount)
   const feeCents = toCents(feeAmount)
 
@@ -702,6 +725,7 @@ async function runCollectStartCard(
       isvDetails: { amount: feeCents, terminalMerchantId: partnerAccount.vivaMerchantId },
     })
   } catch (e) {
+    await releaseCappedCommission(capKey)
     await prisma.reservation.update({
       where: { id: r.id },
       data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
@@ -722,8 +746,8 @@ async function runCollectStartCard(
 
 /**
  * Tap to Pay collect.start (Stripe Terminal, direct charge on the connected account).
- * Fee = the `sunbed-rental` cascade commission + Stripe processing pass-through
- * (`stripeApplicationFee`). No launch-promotion refusal: Stripe tolerates a zero fee
+ * Fee = Stripe processing pass-through only (`stripeApplicationFee(0, …)`): card at the venue
+ * carries no Sunbnb commission (CR-002 card-present default (c)). No launch-promotion refusal: Stripe tolerates a zero fee
  * and the pass-through still applies. Any failure REVERTS to the unsettled cash walk-in.
  */
 async function runCollectStartTapToPay(
@@ -747,16 +771,11 @@ async function runCollectStartTapToPay(
   const stripeAccount = partnerAccount.stripeConnectAccountId
 
   try {
-    const tier = partnerAccount.subscription?.plan?.tier ?? null
-    const resolvedFee = resolveServiceFee(
-      site.serviceFees, partnerAccount.serviceFees, settings?.serviceFees ?? [], VIVA_SERVICE_CODE, tier,
-    )
-    // Commission rule: serviceFeeForUnits (fixed per bed, percentage once on the total).
-    const commission = serviceFeeForUnits(
-      chargeableServiceFee(resolvedFee, partnerAccount, r.createdAt),
-      { total: amount, units: r.items.length },
-    )
-    const applicationFee = stripeApplicationFee(commission, amount)
+    // Card-present choice (CR-002 default (c), founder had not answered M-68): Tap to Pay is
+    // "card at the venue" and carries NO Sunbnb commission; the application fee is the Stripe
+    // processing pass-through only. processConfirmedReservation invoices 0 commission for
+    // `stripe_pi_` refs to match.
+    const applicationFee = stripeApplicationFee(0, amount)
 
     const country = partnerAccount.country && partnerAccount.country.length === 2
       ? partnerAccount.country.toUpperCase()

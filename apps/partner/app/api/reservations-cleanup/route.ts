@@ -12,6 +12,7 @@ import {
   OP_WALKED_IN,
   OP_CHECKED_IN,
 } from '@repo/data/reservation-status'
+import { releaseAbandonedCapEntries } from '@repo/data/commission-cap'
 
 const CRON_SECRET = process.env.CRON_SECRET
 
@@ -74,6 +75,15 @@ export async function GET(request: Request) {
     }
   })
 
-  return Response.json({ deleted: result.count })
+  // CR-002: give monthly-cap headroom back for charges that never completed (rows just deleted,
+  // payment_failed, canceled). Never blocks the sweep above.
+  let capReleased = 0
+  try {
+    capReleased = await releaseAbandonedCapEntries()
+  } catch (err) {
+    console.error('[reservations-cleanup] commission-cap release failed:', err)
+  }
+
+  return Response.json({ deleted: result.count, capReleased })
 
 }

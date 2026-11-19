@@ -6,7 +6,7 @@ priority: 2
 company_ref: A-22 (approved prompt), A-23 / A-28 (build approvals), T-130, F-9 (pricing decision)
 created: 2026-11-19
 track: .claude/tracks/034-pricing-catalogue.md
-outcome: In progress. Run 1 filed the CR and answered the open questions. Run 2 committed the expand migration and the commission-cap ledger. Run 3 (T-146) committed the enum @map, the Gratis/Temporada/Grupo catalogue, plan features, the seed and the data-move migration; every workspace typechecks. Runs 4-5 follow track 034.
+outcome: In progress. Run 1 filed the CR and answered the open questions. Run 2 committed the expand migration and the commission-cap ledger. Run 3 (T-146) committed the enum @map, the Gratis/Temporada/Grupo catalogue, plan features, the seed and the data-move migration; every workspace typechecks. Run 4 (T-147) wired the EUR 199 cap into the Mollie, Stripe and Viva charge paths and the PLATFORM invoices (collected = invoiced, pinned by payment.commission-cap-parity) and set the card-present rule (default (c)). Run 5 follows track 034.
 ---
 
 # CR-002: Gratis / Temporada / Grupo pricing catalogue
@@ -161,6 +161,37 @@ right expression for a site. But the gate has to be **plan-derived and server-en
   period end. That is a Stripe action outside this sandbox.
 - Interim card lines in partner `landing.tsx` / `account/subscription/view.tsx` and admin; real copy in run 5. Marketing projection
   now uses Temporada 2% capped; its FAQ copy (`Faq.costA`) still names Starter/Pro/Business (run 5 copy pass).
+
+## Run 4 (T-147, 2026-11-19): the cap is wired
+
+- **One helper, both ends.** `cappedCommission('reserve' | 'take', …)` in `payment.ts` decides the plan-rate
+  commission through `@repo/data/commission-cap`. Charge side (`reserve`): `reservation-payment.ts` and
+  `rental-payment.ts` (Mollie `applicationFee`), the user app's Mollie `create-rental-payment` route,
+  `checkout.ts` (`resolveCheckoutIntent`: Stripe `application_fee_amount` and Viva online `isvAmount`) and the Viva
+  terminal sale in `reservation-machine-apply.ts`. Invoice side (`take`): `processConfirmedReservation` and
+  `processConfirmedRentalBooking`. Ledger keys: `reservation:<id>` and `rental:<lowest booking id of the group>`.
+- **What is capped:** only a plan-rate fee (`isPlanRateFee`: a platform row) on `sunbed-rental` or
+  `equipment-rental` (`monthlyCapFor`). The cap comes from the plan row's `monthlyCommissionCapPerSite`, with the
+  catalogue value as fallback. Negotiated site and account fees win the cascade and are not capped. F&B is 0% on every
+  plan and never capped. No negotiated record has a "capped" flag today, so "unless their record says so" has no
+  case yet. Adding one would need a new column.
+- **Release:** `/api/reservations-cleanup` calls `releaseAbandonedCapEntries()`. It releases RESERVED entries
+  older than 30 minutes whose payable was deleted or is `payment_failed` / `canceled`. A failed Viva terminal sale
+  releases its entry immediately.
+- **Not wired yet:** a refund that returns the application fee does not call `reverseCappedCommission`. A refunded
+  booking therefore keeps counting against the month. This is conservative: the venue pays less, never more. It goes in run 5.
+- **Card-present (M-68).** The founder had not answered M-68 when the task started (task notes were empty), so
+  **default (c)** applies, source: T-147 mandate. **Tap to Pay** carries no Sunbnb commission. Its application fee
+  is the Stripe processing pass-through only, and `processConfirmedReservation` invoices 0 commission for `stripe_pi_`
+  refs. **Viva terminal** keeps the plan commission, capped. Viva refuses a zero ISV fee (`assertValidIsvFee`), so
+  once a site has reached its cap for the month, Viva card-present sales and Viva online sunbed or rental checkouts
+  are refused with a clear message. Cash still works. This lasts until Viva confirms a zero ISV fee (track 024 Q2/Q3).
+  **Founder:** decide whether that is acceptable for Viva venues, or whether the cap should not apply to Viva.
+- **Evidence:** `packages/data/src/payment.commission-cap-parity.integration.test.ts`. On Temporada a EUR 100
+  booking takes {viva 2, stripe 2, mollie 2, invoice 2}. At EUR 199 it takes 0 on every path and no PLATFORM invoice
+  is written. Crossing the cap (EUR 198.50 already used) takes 0.50. The next month restarts at 2. The cap is per
+  site. Rentals share the site's cap. A negotiated account fee of 5% at the cap takes 5. F&B takes 0 on
+  Gratis/Temporada/Grupo. The site → account → plan cascade still holds.
 
 ## Build plan (later runs)
 - Run 2: catalogue + `LEGACY_TIER_MAP`, migration A (expand), seed, `CommissionCapUsage` + stored `commissionAmount`,

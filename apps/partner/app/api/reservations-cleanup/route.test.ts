@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+vi.mock('@repo/data/commission-cap', () => ({ releaseAbandonedCapEntries: vi.fn().mockResolvedValue(0) }))
 vi.mock('@/app/auth', () => ({
   auth: vi.fn().mockResolvedValue(null),
 }))

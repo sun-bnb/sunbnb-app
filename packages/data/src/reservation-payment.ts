@@ -21,9 +21,11 @@ import {
   loadFeeContext,
   chargeableServiceFee, resolveServiceFee,
   serviceFeeForUnits,
+  cappedCommission,
   processConfirmedReservation,
 } from './payment'
 import { getValidMollieToken } from './mollie-tokens'
+import { capSourceKey } from './commission-cap'
 import { isOwnAccountApplicationFeeError } from './mollie-app-fee'
 import { isTestMode } from './env'
 import { providerFromRef } from './payment-refs'
@@ -144,9 +146,15 @@ export async function createReservationMolliePayment(
     reservation.createdAt
   )
   // Commission rule: serviceFeeForUnits (fixed per bed, percentage once on the total) — same {total, units} as the PLATFORM invoice.
-  const applicationFeeAmount = serviceFeeForUnits(matchedFee, {
-    total: paymentAmount,
-    units: reservation._count.items,
+  // CR-002: plan-rate commission is capped per site per month; decided once here and read back
+  // by processConfirmedReservation under the same key, so applicationFee === PLATFORM invoice.
+  const applicationFeeAmount = await cappedCommission('reserve', {
+    siteId: reservation.siteId,
+    serviceCode: SERVICE_CODE,
+    fee: matchedFee,
+    partnerAccount,
+    uncapped: serviceFeeForUnits(matchedFee, { total: paymentAmount, units: reservation._count.items }),
+    sourceKey: capSourceKey('reservation', reservation.id),
   })
 
   const testmode = isTestMode()

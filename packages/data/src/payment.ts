@@ -56,6 +56,13 @@ const TAB_ORDER_VOID_STATUSES = [
 ]
 import { resolveEffectiveFeatures, type SubscriptionFeatureKey } from './subscription'
 import { recordInvoiceForTax } from './tax/es-verifactu/record'
+import {
+  capSourceKey,
+  isPlanRateFee,
+  reserveCappedCommission,
+  takeCappedCommission,
+} from './commission-cap'
+import { CAPPED_SERVICE_CODES, PRICING_TIERS } from './pricing-tiers'
 import { sistemaInformatico } from './tax/es-verifactu/sistema-informatico'
 import {
   allocateInvoiceIdentity,
@@ -72,7 +79,7 @@ import {
 // so existing `@repo/data/payment` imports keep working.
 
 import { round, computeVatAndBaseAmounts } from './payment-math'
-import { isStripeRef } from './payment-refs'
+import { isStripeRef, isStripeTerminalRef } from './payment-refs'
 import { stripePassThrough } from './payment-providers/fee-policy'
 export { round, computeVatAndBaseAmounts }
 
@@ -144,6 +151,56 @@ export function serviceFeeForUnits(
       ? (fee.feeAmount ?? 0) * Math.max(1, opts.units)
       : ((fee.percentage ?? 0) / 100) * opts.total
   )
+}
+
+// ─── Monthly commission cap (CR-002) ────────────────────────────────────────
+
+/**
+ * The monthly per-site cap that applies to `fee` for `serviceCode`, or null when uncapped.
+ * Only PLAN-RATE fees (platform rows, `isPlanRateFee`) on sunbed / rental codes are capped;
+ * negotiated site / account fees win the cascade and are never capped, and F&B is never capped
+ * (it is 0% on every plan anyway). The plan row's `monthlyCommissionCapPerSite` is the source;
+ * the catalogue value is the fallback for a row that predates the column.
+ */
+export function monthlyCapFor(
+  partnerAccount: { subscription?: { plan?: { tier: SubscriptionTier; monthlyCommissionCapPerSite?: number | null } | null } | null } | null | undefined,
+  serviceCode: string,
+  fee: ServiceFee | undefined,
+): number | null {
+  if (!fee || !isPlanRateFee(fee)) return null
+  if (!(CAPPED_SERVICE_CODES as readonly string[]).includes(serviceCode)) return null
+  const plan = partnerAccount?.subscription?.plan
+  if (!plan) return null
+  return plan.monthlyCommissionCapPerSite ?? PRICING_TIERS[plan.tier]?.monthlyCommissionCapPerSite ?? null
+}
+
+/** Ledger key for a rental payment group: the lowest booking id, identical at charge and at invoice. */
+export function rentalCapSourceKey(bookingIds: string[]): string {
+  return capSourceKey('rental', [...bookingIds].sort()[0] ?? '')
+}
+
+/**
+ * THE capped commission for a charge (`reserve`, at payment creation) or a PLATFORM invoice
+ * (`take`, in `processConfirmed*`). Both go through `@repo/data/commission-cap` with the same
+ * `sourceKey`, so the amount decided at charge time is the amount invoiced: Mollie
+ * `applicationFee`, Stripe `application_fee_amount` and Viva `isvAmount` all equal the
+ * invoice to the cent. Uncapped fees pass straight through without touching the ledger.
+ */
+export async function cappedCommission(
+  phase: 'reserve' | 'take',
+  input: {
+    siteId: string
+    serviceCode: string
+    fee: ServiceFee | undefined
+    partnerAccount: Parameters<typeof monthlyCapFor>[0]
+    uncapped: number
+    sourceKey: string
+  },
+): Promise<number> {
+  const cap = monthlyCapFor(input.partnerAccount, input.serviceCode, input.fee)
+  if (cap == null) return input.uncapped
+  const args = { siteId: input.siteId, sourceKey: input.sourceKey, uncapped: input.uncapped, cap }
+  return phase === 'reserve' ? reserveCappedCommission(args) : takeCappedCommission(args)
 }
 
 // ─── Credit-note VAT apportionment ──────────────────────────────────────────
@@ -322,7 +379,7 @@ export interface FeeContext {
   }
   partnerAccount: (Awaited<ReturnType<typeof prisma.partnerAccount.findUnique>> & {
     serviceFees: ServiceFee[]
-    subscription: { plan: { tier: SubscriptionTier } } | null
+    subscription: { plan: { tier: SubscriptionTier; monthlyCommissionCapPerSite?: number | null } } | null
     /** Launch offer etc. (track 027 D9) — read via `chargeableServiceFee`. */
     promotions?: PromotionState[]
   }) | null
@@ -397,7 +454,7 @@ export async function getSiteFeeContext(siteId: string): Promise<SiteFeeContext>
     where: { userId: site.userId },
     include: {
       serviceFees: true,
-      subscription: { include: { plan: { select: { tier: true } } } },
+      subscription: { include: { plan: { select: { tier: true, monthlyCommissionCapPerSite: true } } } },
       customSubscription: true,
       promotions: { select: { code: true, startedAt: true, endsAt: true, revokedAt: true } },
     },
@@ -426,7 +483,7 @@ export async function getPartnerFeeContext(userId: string): Promise<PartnerFeeCo
     where: { userId },
     include: {
       serviceFees: true,
-      subscription: { include: { plan: { select: { tier: true } } } },
+      subscription: { include: { plan: { select: { tier: true, monthlyCommissionCapPerSite: true } } } },
       customSubscription: true,
       promotions: { select: { code: true, startedAt: true, endsAt: true, revokedAt: true } },
     },
@@ -706,10 +763,26 @@ export async function processConfirmedReservation(
   // Commission via serviceFeeForUnits (fixed per bed, percentage once on the total) with the
   // same { total, units } the charge side uses (createReservationMolliePayment: paymentAmount,
   // items.length), so collected === invoiced. Computed regardless of skipCommission.
-  const totalServiceFee = serviceFeeForUnits(matchedFee, {
+  const uncappedServiceFee = serviceFeeForUnits(matchedFee, {
     total: totalPayment,
     units: reservation.items.length,
   })
+  // CR-002: the monthly cap was decided at charge time (`cappedCommission('reserve', …)` with the
+  // same `reservation:<id>` key); `take` reads it back so the invoice equals what was collected.
+  // Tap to Pay (`stripe_pi_`) is card-at-the-venue and carries no Sunbnb commission (CR-002
+  // card-present default (c)): its application fee is the processing pass-through only.
+  const totalServiceFee = skipCommission
+    ? uncappedServiceFee
+    : isStripeTerminalRef(reservation.paymentRef)
+      ? 0
+      : await cappedCommission('take', {
+          siteId: reservation.siteId,
+          serviceCode: 'sunbed-rental',
+          fee: matchedFee,
+          partnerAccount,
+          uncapped: uncappedServiceFee,
+          sourceKey: capSourceKey('reservation', reservation.id),
+        })
 
   // Agent model: the partner sells the full listed price to the consumer, so
   // the PARTNER (revenue) invoice is booked GROSS. The commission is billed
@@ -1155,9 +1228,18 @@ export async function processConfirmedRentalBooking(
 
   // Commission via serviceFeeForUnits (fixed per booking line, percentage once on the total) —
   // same { total, units } as the charge side (createRentalBookingMolliePayment), so collected === invoiced.
-  const totalServiceFee = serviceFeeForUnits(matchedFee, {
+  const uncappedServiceFee = serviceFeeForUnits(matchedFee, {
     total: totalPayment,
     units: bookings.length,
+  })
+  // CR-002: read back the capped amount decided at charge time (same `rental:<lowest id>` key).
+  const totalServiceFee = await cappedCommission('take', {
+    siteId,
+    serviceCode: 'equipment-rental',
+    fee: matchedFee,
+    partnerAccount,
+    uncapped: uncappedServiceFee,
+    sourceKey: rentalCapSourceKey(bookings.map((b) => b.id)),
   })
 
   // Agent model: PARTNER invoice booked GROSS; commission billed separately.

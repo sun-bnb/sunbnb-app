@@ -78,7 +78,7 @@ const startTap = async () => {
 }
 
 describe('collect.start tap-to-pay', () => {
-  it('writes stripe_pi_ ref + processing, returns the tapToPay tuple, fee = commission + pass-through', async () => {
+  it('writes stripe_pi_ ref + processing, returns the tapToPay tuple, fee = pass-through only (CR-002: no commission on card at the venue)', async () => {
     const { r, res } = await startTap()
     expect(res.outcome).toBe('applied')
     if (res.outcome === 'applied') {
@@ -93,7 +93,7 @@ describe('collect.start tap-to-pay', () => {
     expect(after.anonId).toBeNull()
     expect(m.createTerminalPaymentIntent).toHaveBeenCalledWith(expect.objectContaining({
       amount: 10, stripeAccount: ACCT,
-      applicationFee: 1.4, // default fixed EUR 1.00 commission + round(10*1.5% + 0.25) = 0.40
+      applicationFee: 0.4, // CR-002 default (c): no commission; pass-through round(10*1.5% + 0.25) = 0.40
       meta: { type: 'reservation', entityId: r.id, siteId: site.id, collect: true },
     }))
   })
@@ -116,11 +116,11 @@ describe('collect.start tap-to-pay', () => {
     expect((await reload(r.id)).status).toBe('paid-in-cash')
   })
 
-  it('a 150% site fee is capped below the charge (Stripe rejects fee >= amount)', async () => {
+  it('even a 150% site fee takes no commission on Tap to Pay: pass-through only (CR-002 default (c))', async () => {
     const settings = await createTestSettings()
     await createTestServiceFee(settings.id, { siteId: site.id, chargeType: 'percentage', percentage: 150 })
     await startTap()
-    expect(m.createTerminalPaymentIntent.mock.calls[0]![0].applicationFee).toBe(9.99)
+    expect(m.createTerminalPaymentIntent.mock.calls[0]![0].applicationFee).toBe(0.4)
   })
 
   it('demo mode keeps the pi_demo_ short-circuit and never touches Stripe', async () => {

@@ -17,24 +17,18 @@ offer and its admin grant are OUT (M-65 / F-19). Branch `co/CR-002-pricing-catal
 
 ## Resume here
 
-- **Done in run 3 (T-146):** enum `@map`, catalogue, features, seed, data-move migration
-  `20261119150000_pricing_catalogue_data_move`, consumers. Every workspace typechecks (apps/user's
-  14 image-module errors predate this branch: no `next-env.d.ts` in the clone).
-- **Next action (run 4):** partner unit tests were renamed to the new tier literals but NOT run;
-  run `cd apps/partner && npm test` first and fix value assertions (old 6% / OFF_PLATFORM false on
-  Starter, `inspect.test.ts` ladder). The live Stripe subscriptions still need cancel-at-period-end in
-  Stripe (founder, outside the app).
-- **Then (run 4, after the tests):** wire `@repo/data/commission-cap` into the charge and invoice paths. Reserve in
-  `reservation-payment.ts`, `rental-payment.ts`, `checkout.ts`, the user app's Mollie
-  `create-rental-payment` route and `reservation-machine-apply.ts` (Viva, Tap to Pay). Take in
-  `processConfirmedReservation` and `processConfirmedRentalBooking`. Release from `/api/reservations-cleanup`
-  and the failed-payment webhooks. Reverse on refunds that return the application fee. Cap only when
-  `isPlanRateFee(fee)`. Extend `payment.commission-parity.integration.test.ts`.
-- **Then (run 5):** the hamaca limit (inventory create, import, layout, copy site), plan gating as a server
-  check on every charge path (C3 in the CR), cards, the site create and site general fee breakdown,
-  en/es/fi copy, the guard test, fixtures, `/review`.
-- **Open question (founder):** card-present payments (Viva terminal, Tap to Pay) are "card at the venue".
-  The prompt says those carry no commission; today they do. See the CR.
+- **Done in run 4 (T-147):** the cap is wired through `cappedCommission('reserve'|'take')` (`payment.ts`). It
+  covers Mollie (reservation, rental, the user-app rental route), `checkout.ts` (Stripe, Viva online), the Viva
+  terminal sale and both `processConfirmed*` invoice paths. Tap to Pay takes no commission (default (c), M-68
+  unanswered). The cleanup cron releases abandoned entries. Evidence: `payment.commission-cap-parity.integration.test.ts`.
+  The partner suite is green after the run-3 assertion fixes.
+- **Next action (run 5):** wire `reverseCappedCommission` into refunds that return the application fee
+  (`refund.ts`, Stripe `refund_application_fee`, Mollie route reversal). Then the hamaca limit (inventory create,
+  import, layout, copy site), plan gating as a server check on every charge path (C3 in the CR), cards, the site
+  create and site general fee breakdown, en/es/fi copy, the guard test, fixtures, `/review`.
+- **Open (founder):** M-68 card-present. Under default (c), a Viva venue at its monthly cap cannot take Viva card
+  payments (Viva refuses a zero ISV fee) until Viva confirms zero-ISV. See the CR's run-4 section.
+- The live Stripe subscriptions still need cancel-at-period-end in Stripe (founder, outside the app).
 
 ## Roadmap
 
@@ -45,10 +39,15 @@ offer and its admin grant are OUT (M-65 / F-19). Branch `co/CR-002-pricing-catal
   with unit and integration tests: below, at and above the cap; a booking crossing it; refund; month
   rollover; per site; concurrency; collected = invoiced.
 - ✅ Run 3 (2026-11-19, T-146): enum `@map`, catalogue, subscription, seed, data-move migration, consumers.
-- ⏳ Run 4: cap wired into Mollie, Stripe, Viva and the invoices.
+- ✅ Run 4 (2026-11-19, T-147): cap wired into Mollie, Stripe, Viva and the invoices; Tap to Pay 0 commission.
 - ⏳ Run 5: limits, gating, copy, cards, guard test, review, CR closed.
 
 ## Log
+
+- 2026-11-19 run 4: the parity test calls the charge paths for one reservation in sequence (Viva intent, Stripe
+  intent, Mollie). Every call after the first reuses the same `reservation:<id>` entry, which shows the idempotency
+  that makes collected = invoiced. A rental group's ledger key is its lowest booking id, because the paymentRef does
+  not exist yet when the charge is created.
 
 - 2026-11-19 run 3: seed runs found the DB already right after the data move (0 rows written twice):
   migration and seed agree. `tsx` CLI fails in the sandbox (IPC pipe EPERM); `node --import <tsx>/dist/loader.mjs` works.

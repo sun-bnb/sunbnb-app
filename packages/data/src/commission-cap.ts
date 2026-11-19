@@ -162,3 +162,47 @@ export async function reverseCappedCommission(sourceKey: string, reversed: numbe
     })
   })
 }
+
+const DEAD_PAYABLE_STATUSES = ['payment_failed', 'canceled'] // RESERVATION_/RENTAL_ PAYMENT_FAILED, CANCELED
+
+/**
+ * Sweep: release RESERVED entries whose payable is gone (the stale-booking cron deletes
+ * abandoned reservations) or ended without payment (`payment_failed` / `canceled`). Called from
+ * `/api/reservations-cleanup`; one place instead of a release call in every failure webhook.
+ * Entries younger than `minAgeMs` are left alone so an in-flight charge is never released.
+ * Returns the number of entries released. Idempotent.
+ */
+export async function releaseAbandonedCapEntries(minAgeMs = 30 * 60 * 1000, limit = 500): Promise<number> {
+  const entries = await prisma.commissionCapEntry.findMany({
+    where: { status: CAP_ENTRY_STATUS.RESERVED, createdAt: { lt: new Date(Date.now() - minAgeMs) } },
+    select: { sourceKey: true },
+    take: limit,
+  })
+  const ids = (prefix: string) =>
+    entries.filter((e) => e.sourceKey.startsWith(prefix)).map((e) => e.sourceKey.slice(prefix.length))
+  const resIds = ids('reservation:')
+  const rentalIds = ids('rental:')
+  const [reservations, rentals] = await Promise.all([
+    resIds.length
+      ? prisma.reservation.findMany({ where: { id: { in: resIds } }, select: { id: true, status: true } })
+      : [],
+    rentalIds.length
+      ? prisma.rentalBooking.findMany({ where: { id: { in: rentalIds } }, select: { id: true, status: true } })
+      : [],
+  ])
+  const alive = new Set<string>(
+    [
+      ...reservations.map((r) => [`reservation:${r.id}`, r.status] as const),
+      ...rentals.map((r) => [`rental:${r.id}`, r.status] as const),
+    ]
+      .filter(([, status]) => !DEAD_PAYABLE_STATUSES.includes(status))
+      .map(([key]) => key),
+  )
+  const dead = entries.map((e) => e.sourceKey).filter((k) => !alive.has(k))
+  if (dead.length === 0) return 0
+  const res = await prisma.commissionCapEntry.updateMany({
+    where: { sourceKey: { in: dead }, status: CAP_ENTRY_STATUS.RESERVED },
+    data: { status: CAP_ENTRY_STATUS.RELEASED },
+  })
+  return res.count
+}
