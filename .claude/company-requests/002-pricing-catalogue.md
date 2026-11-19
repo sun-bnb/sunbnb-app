@@ -5,8 +5,8 @@ status: in-progress
 priority: 2
 company_ref: A-22 (approved prompt), A-23 / A-28 (build approvals), T-130, F-9 (pricing decision)
 created: 2026-11-19
-track: (opened in run 2, when building starts)
-outcome: Run 1 (2026-11-19). Filed, verified the claims against the code, answered open questions 1-3, 6 and 7, and wrote the migration plan. Building is paused on a founder check of production subscriptions (Q3) and on the decisions listed under "Founder decisions needed".
+track: .claude/tracks/034-pricing-catalogue.md
+outcome: In progress. Run 1 filed the CR and answered the open questions. Run 2 (2026-11-19) recorded the M-65 decisions and committed the expand migration and the commission-cap ledger with tests. Runs 3-5 follow track 034.
 ---
 
 # CR-002: Gratis / Temporada / Grupo pricing catalogue
@@ -104,7 +104,42 @@ right expression for a site. But the gate has to be **plan-derived and server-en
 - There is no balinese-bed type in the data, so a balinese bed counts as 1 automatically (as one row). If it is ever
   modelled as a multi-seat item, this needs revisiting.
 
-## Founder decisions needed (not settled by the code)
+## Founder decisions (M-65, 2026-11-19)
+
+1. **No paying subscriptions in production.** Mapping: STARTER→**Gratis**, or **Temporada** when online sales are on
+   (any site with `type='paid' AND app_sales_enabled`). PRO and BUSINESS→**Temporada**. Every Stripe subscription
+   cancels at period end, with no refund.
+2. **Over-limit venues are grandfathered.** They keep everything they have and cannot add more. Nothing is deleted or
+   hidden.
+3. **Launch offer dropped entirely** (F-19). No free Temporada for the first five venues, no 0% grant mechanism, no
+   `validUntil` column. Change-list item 9 and its acceptance line are out of scope.
+4. **Cap month** = the Europe/Madrid calendar month in which the payment was created. This replaces the run-1
+   proposal of the site's own timezone.
+
+## Design revisions (run 2)
+
+- **Q2 (enum), revised.** Rename the Prisma enum values with `@map` instead of adding new ones:
+  `GRATIS @map("STARTER")`, `TEMPORADA @map("PRO")`, `GRUPO @map("BUSINESS")`. There is no DDL on the enum, and
+  clients already deployed on the shared TEST database keep reading the same labels. The three-release R1/R2/R3 dance
+  is therefore not needed: one expand release carries the code and an idempotent data-move migration. The database
+  keeps the legacy labels as storage keys, while plan rows carry the new names. Renaming the labels themselves
+  (`ALTER TYPE ... RENAME VALUE`) is optional later cleanup and would need code and database to switch in the same
+  release.
+- **Q1 (cap), built.** Migration `20261119140500_pricing_catalogue_expand` adds the nullable
+  `SubscriptionPlan.max_hamacas_per_site`, `SubscriptionPlan.monthly_commission_cap_per_site` and
+  `CustomSubscription.max_hamacas_per_site`, plus the table `commission_cap_entry` (one row per payable). This is the
+  expand class: additive only. `@repo/data/commission-cap` decides the capped amount once, at charge creation, under
+  an advisory lock on (site, month). The invoice reads that amount back, a failed or expired charge releases it, and
+  a refund that reverses commission lowers it. The ledger replaces the run-1 idea of a `commissionAmount` column on
+  each payable.
+- **Open: card-present payments.** The prompt says bookings the guest pays at the venue ("cash or card at the venue")
+  carry no Sunbnb commission. Today, card-present sales (Viva Cloud Terminal, Stripe Tap to Pay in `apps/mobile`)
+  take the `sunbed-rental` commission. Following the prompt would mean a zero ISV fee on Viva, which is the
+  unresolved Viva question in track 024 (Q2/Q3). The code currently refuses a waived-fee Viva sale rather than send
+  0. Default unless the founder says otherwise: Tap to Pay takes no commission (processing pass-through only), and
+  Viva keeps its current fee until Viva confirms a zero ISV fee.
+
+## Founder decisions needed in run 1 (answered by M-65 above)
 1. **Production paid subscriptions** (Q3 stop condition): check them, and decide whether to refund the current period
    for PRO.
 2. **Q4, venues over the limit**: the default is to grandfather them (block adding, never delete). TEST shows this is
