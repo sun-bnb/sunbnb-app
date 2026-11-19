@@ -169,6 +169,23 @@ export async function createTestPartnerAccount(
   })
 }
 
+/**
+ * Put a venue owner on the Temporada plan (CR-002). A partner with no subscription
+ * resolves to Gratis, which refuses food-and-drink orders and online payment, so any
+ * suite exercising those paths must give its owner a paid-feature plan. Creates the
+ * PartnerAccount when the suite did not.
+ */
+export async function putOwnerOnTemporada(userId: string) {
+  const account =
+    (await prisma.partnerAccount.findUnique({ where: { userId } })) ?? (await createTestPartnerAccount(userId))
+  const plan = await prisma.subscriptionPlan.upsert({
+    where: { tier: 'TEMPORADA' },
+    update: {},
+    create: { tier: 'TEMPORADA', name: 'Temporada', monthlyPrice: 0, maxSites: 3 },
+  })
+  await prisma.subscription.create({ data: { partnerAccountId: account.userId, planId: plan.id, status: 'ACTIVE' } })
+}
+
 export async function createTestRestaurant(
   partnerAccountId: string,
   overrides: Record<string, any> = {}
