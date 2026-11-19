@@ -1,9 +1,9 @@
 ---
 id: CR-001
 title: "Make the partner /legal/verifactu page say what is true today"
-status: new
+status: in-progress
 priority: 1
-company_ref: [M-37, T-57]
+company_ref: [M-37, T-57, T-101, A-20]
 created: 2026-11-18
 track:
 outcome:

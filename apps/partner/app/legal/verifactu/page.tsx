@@ -8,12 +8,15 @@ export default async function VerifactuNoticePage() {
       <div className="max-w-3xl mx-auto px-4 py-8 sm:px-6 sm:py-12 text-sm text-gray-700 leading-relaxed break-words">
 
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1">Veri*factu Compliance Notice for Spanish Partners</h1>
-        <p className="text-xs text-gray-400 mb-8">Sunbnb Partner Programme &middot; Effective: 7 March 2026</p>
+        <p className="text-xs text-gray-400 mb-8">Sunbnb Partner Programme &middot; Effective: 19 November 2026</p>
 
         <section className="mb-8 bg-amber-50 border border-amber-200 rounded-lg p-5">
-          <h2 className="text-base font-semibold text-gray-900 mb-2">Important: Spanish Tax Mandate — Veri*factu (January 2026)</h2>
+          <h2 className="text-base font-semibold text-gray-900 mb-2">Important: Spanish Tax Mandate — Veri*factu (2027 deadlines)</h2>
           <p>
-            The Kingdom of Spain has enacted <strong>Real Decreto 1007/2023</strong>, establishing the <strong>Veri*factu</strong> system as the mandatory framework for electronic invoicing and receipt generation for all businesses operating within Spanish territory. Compliance became obligatory from <strong>1 January 2026</strong>.
+            The Kingdom of Spain has enacted <strong>Real Decreto 1007/2023</strong>, establishing the <strong>Veri*factu</strong> system as the mandatory framework for electronic invoicing and receipt generation for all businesses operating within Spanish territory. Under the deadlines now in force (Real Decreto-ley 15/2025), invoicing systems must comply from <strong>1 January 2027</strong> for businesses that pay corporate tax (Impuesto sobre Sociedades), and from <strong>1 July 2027</strong> for all other obligated taxpayers, including autónomos.
+          </p>
+          <p className="mt-2">
+            The Government has announced a further postponement to October 2028, but it has not yet been published in the BOE. Until it is, the 2027 dates apply.
           </p>
           <p className="mt-2">
             As your Beach Club is the <strong>Seller of Record</strong> for all customer transactions processed through Sunbnb, these obligations apply directly to your business.
