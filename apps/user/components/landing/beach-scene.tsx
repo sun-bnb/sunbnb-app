@@ -1007,8 +1007,12 @@ function Rig({ progress, reduced }: { progress: MutableRefObject<number>; reduce
 
     if (!reduced) {
       const t = clock.getElapsedTime()
-      // less drift in the close-ups
-      const calm = 1 - THREE.MathUtils.smoothstep(p, 0.3, 0.36) + THREE.MathUtils.smoothstep(p, SPIRAL_OUT, 1)
+      // On a phone, no drift at rest: the opening top-down map stays static and level
+      // (a sideways drift swung the camera's yaw, so on a narrow portrait screen the
+      // shoreline and boardwalk visibly tilted). It eases in once the visitor scrolls.
+      // Wider screens keep the drift from the first frame. Less drift in the close-ups.
+      const settle = size.width < 768 ? THREE.MathUtils.smoothstep(p, 0.01, 0.08) : 1
+      const calm = settle * (1 - THREE.MathUtils.smoothstep(p, 0.3, 0.36) + THREE.MathUtils.smoothstep(p, SPIRAL_OUT, 1))
       pos.x += Math.sin(t * 0.18) * 0.5 * calm
       pos.y += Math.sin(t * 0.23) * 0.12 * calm
     }

@@ -30,6 +30,7 @@ import type { CSSProperties, ReactNode } from 'react'
 import SearchBar from '@/components/search/search-bar'
 import BeachStage from '@/components/landing/beach-stage'
 import sunbnbHorizontalBlack from './sunbnb-horizontal-black.png'
+import sunbnbWordmark from './sunbnb-wordmark-black.png'
 
 const display = Fraunces({
   subsets: ['latin'],
@@ -50,6 +51,7 @@ interface BusinessEntity {
 const BEATS = {
   hero: [-0.02, 0, 0.07, 0.13], // fully in at p = 0 (a window starting AT 0 is invisible at rest)
   hint: [-0.02, 0, 0.01, 0.05],
+  brand: [-0.02, 0, 0.004, 0.03], // the wordmark over the water: gone within the first ~90px of scroll
   stage1: [0.13, 0.18, 0.31, 0.36], // the flyover and the travel to the seat
   stage2: [0.38, 0.43, 0.6, 0.65], // arriving: the status device is in view, and stays while we turn around it
   stage3: [0.68, 0.73, 0.84, 0.88], // the turn around the drinks
@@ -59,7 +61,7 @@ const BEATS = {
 /** The pointer-event windows BeachStage switches between — hoisted so the stage's scroll effect binds once. */
 const BEAT_WINDOWS: Record<string, [number, number]> = Object.fromEntries(
   Object.entries(BEATS)
-    .filter(([k]) => k !== 'hint')
+    .filter(([k]) => k !== 'hint' && k !== 'brand')
     .map(([k, [a, , , d]]) => [k, [a, d] as [number, number]]),
 )
 
@@ -140,6 +142,7 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
         .lp-panel[data-beat] { visibility: hidden; }
         .lp-stage[data-beat="hero"]   .lp-panel[data-beat="hero"],
         .lp-stage[data-beat="hero"]   .lp-panel[data-beat="hint"],
+        .lp-stage[data-beat="hero"]   .lp-panel[data-beat="brand"],
         .lp-stage[data-beat="stage1"] .lp-panel[data-beat="stage1"],
         .lp-stage[data-beat="stage2"] .lp-panel[data-beat="stage2"],
         .lp-stage[data-beat="stage3"] .lp-panel[data-beat="stage3"],
@@ -211,6 +214,17 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
               </div>
             </div>
           </div>
+        </Panel>
+
+        {/* The wordmark over the water at the top of the map; the header carries only the monogram */}
+        <Panel beat="brand" className="inset-x-0 top-[12svh] flex justify-center md:top-[2.5svh]">
+          <Image
+            src={sunbnbWordmark}
+            alt="Sunbnb"
+            priority
+            style={{ pointerEvents: 'none' }}
+            className="h-auto w-[clamp(148px,40vw,232px)] brightness-0 invert drop-shadow-[0_1px_10px_rgba(4,60,80,0.35)]"
+          />
         </Panel>
 
         <Panel beat="hint" className="inset-x-0 bottom-4 flex justify-center text-center md:bottom-6">
