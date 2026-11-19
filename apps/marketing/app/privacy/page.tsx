@@ -1,11 +1,24 @@
+import type { Metadata } from 'next'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { getBusinessEntity } from '@repo/data/business-entity'
 import { SiteFooter, SiteHeader } from '@/components/SiteChrome'
 import { CONSENT_VERSION } from '@/lib/demo-request.ts'
 import { localeOrDefault } from '@/lib/places.ts'
 import { privacySections } from '@/lib/privacy-content.ts'
+import { OG_IMAGE, OG_LOCALE, SITE_URL } from '@/lib/seo.ts'
 
 export const dynamic = 'force-dynamic'
+
+/** Its own title and canonical (CR-003); indexable, but deliberately not in the sitemap (lib/seo.ts). */
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('Privacy')
+  const title = `${t('title')} · Sunbnb`
+  return {
+    title,
+    alternates: { canonical: `${SITE_URL}/privacy` },
+    openGraph: { title, url: `${SITE_URL}/privacy`, siteName: 'Sunbnb', locale: OG_LOCALE[localeOrDefault(await getLocale())], type: 'website', images: [OG_IMAGE] },
+  }
+}
 
 /** The notice the demo form's consent checkbox links to; its version is stored on each lead. */
 export default async function PrivacyPage() {

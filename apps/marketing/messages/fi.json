@@ -372,5 +372,10 @@
     "body": "Kiitos kiinnostuksestasi Sunbnb:hen. Tässä linkki rantaan {beach} sellaisena kuin rakensit sen – voit avata sen uudelleen tai jakaa sen tiimillesi. Otamme pian yhteyttä demoa varten.",
     "cta": "Avaa {beach} Sunbnb:ssä",
     "signoff": "Sunbnb-tiimi"
+  },
+  "Content": {
+    "ctaTitle": "Katso rantasi Sunbnb:ssä",
+    "ctaBody": "Kerro rantasi ja aurinkotuoliesi määrä, ja näe ne kartalla valmiina asiakkaiden varattaviksi verkossa.",
+    "ctaButton": "Kokeile Sunbnbiä"
   }
 }

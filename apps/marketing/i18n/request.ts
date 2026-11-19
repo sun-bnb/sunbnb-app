@@ -1,29 +1,17 @@
 import { getRequestConfig } from 'next-intl/server'
 import { cookies, headers } from 'next/headers'
-import { SUPPORTED_LOCALES, type Locale } from '@/lib/places.ts'
+import { ROUTE_LOCALE_HEADER, resolveLocale } from '@/lib/locale.ts'
 
 /**
- * Locale without URL prefixes, same convention as the other apps: NEXT_LOCALE cookie first, then
- * the browser's Accept-Language, then English. Ad links can force one with `?lang=` (handled by
- * the language switcher setting the cookie).
+ * Route language (content pages, via proxy.ts) → NEXT_LOCALE cookie → Accept-Language → English.
+ * Rules and reasons: lib/locale.ts. There is no `?lang=` override: nothing reads that parameter.
  */
-function fromAcceptLanguage(header: string | null): Locale | null {
-  if (!header) return null
-  const ranked = header
-    .split(',')
-    .map((part) => {
-      const [tag, q] = part.trim().split(';q=')
-      return { lang: (tag ?? '').split('-')[0]!.toLowerCase(), q: q ? Number(q) : 1 }
-    })
-    .sort((a, b) => b.q - a.q)
-  return (ranked.find((r) => SUPPORTED_LOCALES.includes(r.lang as Locale))?.lang as Locale) ?? null
-}
-
 export default getRequestConfig(async () => {
-  const cookieLocale = (await cookies()).get('NEXT_LOCALE')?.value as Locale | undefined
-  const locale: Locale =
-    (cookieLocale && SUPPORTED_LOCALES.includes(cookieLocale) ? cookieLocale : null) ??
-    fromAcceptLanguage((await headers()).get('accept-language')) ??
-    'en'
+  const h = await headers()
+  const locale = resolveLocale({
+    routeLocale: h.get(ROUTE_LOCALE_HEADER),
+    cookie: (await cookies()).get('NEXT_LOCALE')?.value,
+    acceptLanguage: h.get('accept-language'),
+  })
   return { locale, messages: (await import(`../messages/${locale}.json`)).default }
 })

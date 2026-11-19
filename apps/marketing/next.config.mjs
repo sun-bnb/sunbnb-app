@@ -33,6 +33,8 @@ const nextConfig = {
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
         ],
       },
+      // Prospect mockups are private links: keep them out of search even if robots.txt is ignored (CR-003).
+      { source: '/m/:path*', headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }] },
     ]
   },
 }

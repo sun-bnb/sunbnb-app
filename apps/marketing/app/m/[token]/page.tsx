@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { LEAD_TOKEN_RE, parseLeadLayout } from '@repo/data/lead-model'
@@ -9,6 +10,11 @@ import { offerFor } from '@/lib/offer.ts'
 import { localeOrDefault } from '@/lib/places.ts'
 
 export const dynamic = 'force-dynamic'
+
+/** A prospect's private mockup: never indexed (CR-003). next.config.mjs also sends X-Robots-Tag on /m/*, and robots.txt disallows /m/. */
+export async function generateMetadata(): Promise<Metadata> {
+  return { robots: { index: false, follow: false } }
+}
 
 /**
  * /m/<token> — a prospect's saved beach, reopened from its link (or reloaded after "Build"). The

@@ -4,17 +4,28 @@ import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages, getTranslations } from 'next-intl/server'
 import ConsentManager from '@/components/ConsentManager'
 import WebVitals from '@/components/WebVitals'
+import { localeOrDefault } from '@/lib/places.ts'
+import { OG_LOCALE, SITE_URL } from '@/lib/seo.ts'
 import './globals.css'
 
 const geistSans = localFont({ src: './fonts/GeistVF.woff', variable: '--font-geist-sans' })
 
+/**
+ * Site-wide defaults (CR-003). Canonical and og:url are per page (a child's `openGraph` replaces
+ * this one wholesale, so pages that set it repeat title/description). og:image: the landing gets
+ * app/opengraph-image.tsx from the file convention, other pages list OG_IMAGE (lib/seo.ts);
+ * metadataBase makes it absolute on the canonical host.
+ */
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('Meta')
+  const locale = localeOrDefault(await getLocale())
   return {
+    metadataBase: new URL(SITE_URL),
     title: t('title'),
     description: t('description'),
     icons: { icon: '/logo.ico' },
-    openGraph: { title: t('title'), description: t('description'), url: 'https://try.sunbnb.app', siteName: 'Sunbnb' },
+    openGraph: { title: t('title'), description: t('description'), siteName: 'Sunbnb', locale: OG_LOCALE[locale], type: 'website' },
+    twitter: { card: 'summary_large_image' },
   }
 }
 
