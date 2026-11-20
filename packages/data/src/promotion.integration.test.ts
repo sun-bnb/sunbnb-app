@@ -165,7 +165,7 @@ describe('orders follow the same rule', () => {
   })
 })
 
-describe('grantLaunchPromotionIfEligible (retired by CR-003)', () => {
+describe('grantLaunchPromotionIfEligible (retired by CR-005)', () => {
   it('grants nothing at signup any more, even to an account created before the cut-off', async () => {
     const user = await createTestUser()
     await createTestPartnerAccount(user.id)

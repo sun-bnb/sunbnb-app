@@ -1,6 +1,6 @@
 /**
  * Offer block + founder-led promise (track 027 D8). There is NO public launch offer: the public
- * "30 days free" offer was retired on 2026-11-19 (CR-003). Terms for any individual offer are agreed
+ * "30 days free" offer was retired on 2026-11-19 (CR-005). Terms for any individual offer are agreed
  * one to one with the venue and are never published here. `null` hides the block entirely;
  * `offer.test.ts` fails the build if a launch offer or placeholder text reappears.
  */
@@ -15,7 +15,7 @@ export interface Offer {
   founderPromise: string | null
 }
 
-// Launch-offer billing (`@repo/data/promotion`) still honours partners granted before CR-003,
+// Launch-offer billing (`@repo/data/promotion`) still honours partners granted before CR-005,
 // but grants no new ones, and nothing public advertises it.
 export const OFFERS: Record<Locale, Offer> = {
   en: {

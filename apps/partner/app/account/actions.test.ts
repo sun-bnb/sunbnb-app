@@ -198,7 +198,7 @@ describe('submitForm', () => {
     })
   })
 
-  it('grants no launch offer to a NEW account (public offer retired, CR-003)', async () => {
+  it('grants no launch offer to a NEW account (public offer retired, CR-005)', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue(null)
     vi.mocked(prisma.partnerAccount.create).mockResolvedValue({} as any)

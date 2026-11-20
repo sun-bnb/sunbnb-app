@@ -22,7 +22,7 @@ export function promotionClockRuns(): boolean {
 }
 
 /**
- * RETIRED (CR-003, 2026-11-19): the public launch offer ended, so signup no longer grants it and
+ * RETIRED (CR-005, 2026-11-19): the public launch offer ended, so signup no longer grants it and
  * this always returns false without writing. Existing grants stay honoured (`getLaunchPromotion`,
  * `isCommissionWaived`, `planTrialEnd`, the clock and the trial-sync cron are unchanged); admins
  * grant one by hand with `grantLaunchPromotion`. `LAUNCH_PROMOTION.joinCutoff` was deliberately

@@ -1,12 +1,12 @@
 ---
-id: CR-003
+id: CR-005
 title: End the public "30 days free" launch offer (hide it, stop new grants, keep existing ones)
 status: done
 priority: 2
 company_ref: A-24 (approved product prompt, granted 2026-11-19), T-141 (split from T-130 / A-22)
 created: 2026-11-19
 track: (none: single-session change)
-outcome: "Done 2026-11-19 on branch co/CR-003-retire-launch-offer (engineer run R20261119-133605-engineer), committed, not pushed. offerFor() returns null in en/es/fi; the site-assistant fact `launch-offer` is removed; signup no longer grants launch-30d, and grantLaunchPromotionIfEligible is a no-op that returns false. Existing grants, the admin grant/revoke buttons, isCommissionWaived, planTrialEnd, the clock and the trial-sync cron are unchanged. TEST DB: 0 partner_promotion rows. Production was not readable from the sandbox."
+outcome: "Done 2026-11-19 on branch co/CR-003-retire-launch-offer (engineer run R20261119-133605-engineer; filed as CR-003, renumbered CR-005 on 2026-11-20 because co/CR-003-try-sunbnb-seo also used CR-003). Landed via co/CR-merge-backlog (T-161). offerFor() returns null in en/es/fi; the site-assistant fact `launch-offer` is removed; signup no longer grants launch-30d, and grantLaunchPromotionIfEligible is a no-op that returns false. Existing grants, the admin grant/revoke buttons, isCommissionWaived, planTrialEnd, the clock and the trial-sync cron are unchanged. TEST DB: 0 partner_promotion rows. Production was not readable from the sandbox."
 ---
 
 Filed by the engineer from the founder-approved product prompt A-24 (task T-141). The prompt text is below,
@@ -91,3 +91,11 @@ lists the knowledge fact ids (only the historical `eval/results/*.json`, left al
 3. *Other uses of `isEligibleForLaunchPromotion` / `joinCutoff`.* None. They were used only by
    `grantLaunchPromotionIfEligible` (now a no-op) and by tests. `isEligibleForLaunchPromotion` is now unused in
    production code; it stays because the prompt rules out removing the module.
+
+## Merge note (2026-11-20, T-161)
+
+Landed in main through `co/CR-merge-backlog` together with CR-001, CR-003 (try.sunbnb.app SEO) and CR-004.
+This change was filed as CR-003 in parallel with the SEO request; it is renumbered CR-005 (file, frontmatter and
+the code comments that cited it). The merge with `app/main` was clean: the plan names and prices in main
+(CR-002 and the founder's later plan rework) are the base truth, and this change touches neither. The prompt
+text above is kept verbatim as approved.

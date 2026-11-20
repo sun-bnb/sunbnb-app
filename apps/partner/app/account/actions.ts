@@ -79,7 +79,7 @@ export async function submitForm(
       })
     }
 
-    // No launch-offer grant at signup: the public launch offer was retired (CR-003). Grants made
+    // No launch-offer grant at signup: the public launch offer was retired (CR-005). Grants made
     // before it keep being honoured by @repo/data/promotion; admins can still grant one by hand.
 
     revalidatePath('/account')

@@ -23,7 +23,7 @@ describe('offer copy guard', () => {
   })
 })
 
-describe('no public launch offer (CR-003: retired; offers are agreed one to one, never published)', () => {
+describe('no public launch offer (CR-005: retired; offers are agreed one to one, never published)', () => {
   it('no locale shows a launch offer, and offerFor hides the block', () => {
     for (const locale of ['en', 'es', 'fi'] as const) {
       expect(OFFERS[locale].launchOffer, locale).toBeNull()
