@@ -11,7 +11,6 @@
  *  - Prices and plan limits are NOT written here — the fact sheet renders them from
  *    `@repo/data/pricing-tiers`, the catalogue billing uses.
  */
-import { OFFERS } from '../offer.ts'
 import type { KnowledgeEntry } from './knowledge-schema.ts'
 
 export const KNOWLEDGE: KnowledgeEntry[] = [
@@ -172,13 +171,5 @@ export const KNOWLEDGE: KnowledgeEntry[] = [
     say: 'The guest and venue apps are available in English, Spanish and Finnish, chosen from the browser\'s language. Prices are in euros.',
     neverClaim: ['any other language', 'any other currency'],
     sources: ['apps/user/messages', 'apps/partner/messages', 'packages/data/src/reservation-payment.ts'],
-  },
-  {
-    id: 'launch-offer',
-    topic: 'Launch offer',
-    status: 'shipped',
-    say: OFFERS.en.launchOffer ?? '',
-    figures: [30, 31, 2027],
-    sources: ['apps/marketing/lib/offer.ts', 'packages/data/src/promotion.ts (enforced by billing)'],
   },
 ]

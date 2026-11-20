@@ -1,8 +1,8 @@
 /**
- * Launch offer + founder-led promise (track 027 D8) — the page's proof, since we use no invented
- * testimonials or numbers. FOUNDER-SUPPLIED TERMS ONLY: `null` hides the block entirely, so the
- * page is honest before the terms exist. Fill per locale; `offer.test.ts` fails the build if any
- * placeholder/TODO text is left in.
+ * Offer block + founder-led promise (track 027 D8). There is NO public launch offer: the public
+ * "30 days free" offer was retired on 2026-11-19 (CR-003). Terms for any individual offer are agreed
+ * one to one with the venue and are never published here. `null` hides the block entirely;
+ * `offer.test.ts` fails the build if a launch offer or placeholder text reappears.
  */
 import type { Locale } from './places.ts'
 
@@ -15,22 +15,22 @@ export interface Offer {
   founderPromise: string | null
 }
 
-// Launch offer: founder decision 2026-10-05, ENFORCED by billing (`@repo/data/promotion`:
-// commission waived at every charge point, Stripe plan trial) — change the copy and the code together.
+// Launch-offer billing (`@repo/data/promotion`) still honours partners granted before CR-003,
+// but grants no new ones, and nothing public advertises it.
 export const OFFERS: Record<Locale, Offer> = {
   en: {
-    launchOffer: 'Launch offer: no commission and no monthly fees for 30 days from your first paid booking — for beaches that join by 31 May 2027.',
-    launchOfferShort: 'Launch offer: 30 days with no commission and no fees',
+    launchOffer: null,
+    launchOfferShort: null,
     founderPromise: null,
   },
   es: {
-    launchOffer: 'Oferta de lanzamiento: sin comisión ni cuotas mensuales durante 30 días desde tu primera reserva pagada, para playas que se unan hasta el 31 de mayo de 2027.',
-    launchOfferShort: 'Oferta de lanzamiento: 30 días sin comisión ni cuotas',
+    launchOffer: null,
+    launchOfferShort: null,
     founderPromise: null,
   },
   fi: {
-    launchOffer: 'Lanseeraustarjous: ei provisiota eikä kuukausimaksuja 30 päivään ensimmäisestä maksetusta varauksesta – rannoille, jotka liittyvät 31.5.2027 mennessä.',
-    launchOfferShort: 'Lanseeraustarjous: 30 päivää ilman provisiota ja maksuja',
+    launchOffer: null,
+    launchOfferShort: null,
     founderPromise: null,
   },
 }

@@ -6,7 +6,6 @@ import prisma from '../index'
 import { isTestMode } from './env'
 import {
   activeLaunchPromotion,
-  isEligibleForLaunchPromotion,
   LAUNCH_PROMOTION,
   promotionEndsAt,
   startsPromotionClock,
@@ -22,19 +21,15 @@ export function promotionClockRuns(): boolean {
   return !isTestMode() || process.env.PROMOTION_CLOCK_IN_TEST === '1'
 }
 
-/** Grant the launch offer to a newly created partner account if it qualifies. Idempotent. */
-export async function grantLaunchPromotionIfEligible(partnerAccountId: string): Promise<boolean> {
-  const account = await prisma.partnerAccount.findUnique({
-    where: { userId: partnerAccountId },
-    select: { createdAt: true, isTestAccount: true },
-  })
-  if (!account || !isEligibleForLaunchPromotion(account)) return false
-  await prisma.partnerPromotion.upsert({
-    where: { partnerAccountId_code: { partnerAccountId, code: LAUNCH_PROMOTION.code } },
-    create: { partnerAccountId, code: LAUNCH_PROMOTION.code, grantedBy: 'signup' },
-    update: {},
-  })
-  return true
+/**
+ * RETIRED (CR-003, 2026-11-19): the public launch offer ended, so signup no longer grants it and
+ * this always returns false without writing. Existing grants stay honoured (`getLaunchPromotion`,
+ * `isCommissionWaived`, `planTrialEnd`, the clock and the trial-sync cron are unchanged); admins
+ * grant one by hand with `grantLaunchPromotion`. `LAUNCH_PROMOTION.joinCutoff` was deliberately
+ * left alone: this is "no new automatic grants", not "the window moved".
+ */
+export async function grantLaunchPromotionIfEligible(_partnerAccountId: string): Promise<boolean> {
+  return false
 }
 
 export async function getLaunchPromotion(partnerAccountId: string): Promise<PromotionState | null> {

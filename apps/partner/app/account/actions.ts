@@ -1,6 +1,5 @@
 'use server'
 
-import { grantLaunchPromotionIfEligible } from '@repo/data/promotion-db'
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
@@ -80,13 +79,8 @@ export async function submitForm(
       })
     }
 
-    // Launch offer (track 027 D9): no commission or plan fees for 30 days from the first live
-    // paid booking, for accounts created by the cut-off. Never allowed to block a signup.
-    try {
-      await grantLaunchPromotionIfEligible(session.user.id)
-    } catch (err) {
-      console.error('[account] launch promotion grant failed', err)
-    }
+    // No launch-offer grant at signup: the public launch offer was retired (CR-003). Grants made
+    // before it keep being honoured by @repo/data/promotion; admins can still grant one by hand.
 
     revalidatePath('/account')
     return { status: 'ok' }
