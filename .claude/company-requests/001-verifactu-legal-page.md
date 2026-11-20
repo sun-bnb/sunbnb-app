@@ -1,12 +1,12 @@
 ---
 id: CR-001
 title: "Make the partner /legal/verifactu page say what is true today"
-status: new
+status: done
 priority: 1
-company_ref: [M-37, T-57]
+company_ref: [M-37, T-57, T-101, A-20]
 created: 2026-11-18
 track:
-outcome:
+outcome: "Done 2026-11-19 on co/CR-001-verifactu-legal-page (2bcd2815), not yet pushed. SCOPE CHANGED by the founder on A-20: Veri*factu goes live in production as the only receipt path, so the compliance wording and check marks stay; only the dates were fixed (1 Jan 2027 corporate-tax payers, 1 Jul 2027 others incl. autónomos, Oct 2028 as announced only; effective date 19 Nov 2026). The softening asked for below was not done."
 ---
 ## Task: make the partner Veri*factu notice page say what is true today
 
