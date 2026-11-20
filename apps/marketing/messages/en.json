@@ -372,5 +372,10 @@
     "body": "Thanks for your interest in Sunbnb. Here is the link to {beach} as you built it, so you can open it again or share it with your team. We’ll be in touch soon about your demo.",
     "cta": "Open {beach} on Sunbnb",
     "signoff": "The Sunbnb team"
+  },
+  "Content": {
+    "ctaTitle": "See your beach on Sunbnb",
+    "ctaBody": "Enter your beach and number of sunbeds and see them on the map, ready for guests to book online.",
+    "ctaButton": "Try Sunbnb"
   }
 }

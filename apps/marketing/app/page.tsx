@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { parseAngle } from '@repo/data/lead-model'
 import { PRICING_TIERS } from '@repo/data/pricing-tiers'
@@ -9,6 +10,39 @@ import ReadingTracker from '@/components/ReadingTracker'
 import TrackOnMount from '@/components/TrackOnMount'
 import { offerFor } from '@/lib/offer.ts'
 import { localeOrDefault } from '@/lib/places.ts'
+import { OG_LOCALE, SITE_URL } from '@/lib/seo.ts'
+
+/**
+ * Every ad URL (`?a=<angle>`, utm_*) is the same page: canonical to the bare origin (CR-003).
+ * The `?a=` headline swap below is unaffected.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('Meta')
+  const locale = localeOrDefault(await getLocale())
+  return {
+    alternates: { canonical: `${SITE_URL}/` },
+    openGraph: { title: t('title'), description: t('description'), url: `${SITE_URL}/`, siteName: 'Sunbnb', locale: OG_LOCALE[locale], type: 'website' },
+  }
+}
+
+/**
+ * Structured data with only facts the page already states (no ratings, prices or counts).
+ * Serialised from constants and the Meta description; `<` is escaped so no string can close the tag.
+ */
+function jsonLd(description: string): string {
+  return JSON.stringify([
+    { '@context': 'https://schema.org', '@type': 'Organization', name: 'Sunbnb', url: `${SITE_URL}/`, logo: `${SITE_URL}/sunbnb-logo.svg` },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'SoftwareApplication',
+      name: 'Sunbnb',
+      url: `${SITE_URL}/`,
+      applicationCategory: 'BusinessApplication',
+      operatingSystem: 'Web',
+      description,
+    },
+  ]).replace(/</g, '\\u003c')
+}
 
 /**
  * try.sunbnb.app — the ad landing page (track 027). Every claim here must be TRUE TODAY:
@@ -48,6 +82,7 @@ export default async function LandingPage({
 
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(t('Meta.description')) }} />
       <TrackOnMount name="landing_view" context={{ angle }} />
       <ReadingTracker />
       <main className="relative bg-sand">
