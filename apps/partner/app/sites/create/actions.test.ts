@@ -53,11 +53,11 @@ beforeEach(() => {
     allowed: true,
     currentCount: 0,
     maxSites: 5,
-    tier: 'GRATIS',
+    tier: 'STARTER',
     overridden: false,
   })
   mockGetEffective.mockResolvedValue({
-    tier: 'GRATIS',
+    tier: 'STARTER',
     name: 'Starter',
     monthlyPrice: 0,
     maxSites: 1,
@@ -85,7 +85,7 @@ describe('createSite', () => {
       allowed: false,
       currentCount: 1,
       maxSites: 1,
-      tier: 'GRATIS',
+      tier: 'STARTER',
       overridden: false,
     })
 
@@ -97,7 +97,7 @@ describe('createSite', () => {
   it('creates a paid site when the plan includes ONLINE_PAYMENTS', async () => {
     authenticateUser()
     mockGetEffective.mockResolvedValue({
-      tier: 'TEMPORADA', name: 'Temporada', monthlyPrice: 0, maxSites: 5, isCustom: false,
+      tier: 'PRO', name: 'Temporada', monthlyPrice: 0, maxSites: 5, isCustom: false,
       features: { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: true, FOOD_AND_BEVERAGE: true },
     } as any)
     vi.mocked(prisma.site.create).mockResolvedValue({ id: 'new-site' } as any)
@@ -112,7 +112,7 @@ describe('createSite', () => {
   it('creates a Gratis partner site UNPAID even when the default/paid type is requested', async () => {
     authenticateUser()
     mockGetEffective.mockResolvedValue({
-      tier: 'GRATIS', name: 'Gratis', monthlyPrice: 0, maxSites: 1, isCustom: false,
+      tier: 'STARTER', name: 'Gratis', monthlyPrice: 0, maxSites: 1, isCustom: false,
       features: { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: false, FOOD_AND_BEVERAGE: false },
     } as any)
     vi.mocked(prisma.site.create).mockResolvedValue({ id: 'new-site' } as any)
@@ -127,7 +127,7 @@ describe('createSite', () => {
   it('rejects type:unpaid when OFF_PLATFORM_BILLING feature is false', async () => {
     authenticateUser()
     mockGetEffective.mockResolvedValue({
-      tier: 'GRATIS',
+      tier: 'STARTER',
       name: 'Starter',
       monthlyPrice: 0,
       maxSites: 1,
@@ -138,14 +138,14 @@ describe('createSite', () => {
     const res = await createSite({ ...baseInput, type: 'unpaid', price: '' })
 
     expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Pay-on-site mode is turned off')
+    expect(res.errors?.[0]).toContain('requires a Pro/Business plan')
     expect(vi.mocked(prisma.site.create)).not.toHaveBeenCalled()
   })
 
   it('allows type:unpaid when OFF_PLATFORM_BILLING feature is true', async () => {
     authenticateUser()
     mockGetEffective.mockResolvedValue({
-      tier: 'TEMPORADA',
+      tier: 'PRO',
       name: 'Pro',
       monthlyPrice: 49,
       maxSites: 5,
@@ -168,7 +168,7 @@ describe('createSite', () => {
     authenticateUser()
     // Simulates a STARTER partner with an admin-granted override
     mockGetEffective.mockResolvedValue({
-      tier: 'GRATIS',
+      tier: 'STARTER',
       name: 'Starter',
       monthlyPrice: 0,
       maxSites: 1,

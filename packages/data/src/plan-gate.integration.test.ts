@@ -24,7 +24,7 @@ async function partnerOn(tier: SubscriptionTier, custom?: { maxSites?: number; m
   const plan = await prisma.subscriptionPlan.upsert({
     where: { tier },
     update: { maxSites: planRowMaxSites(tier), maxHamacasPerSite: spec.maxHamacasPerSite },
-    create: { tier, name: spec.name, monthlyPrice: 0, maxSites: planRowMaxSites(tier), maxHamacasPerSite: spec.maxHamacasPerSite },
+    create: { tier, name: spec.name, monthlyPrice: spec.monthlyPrice, maxSites: planRowMaxSites(tier), maxHamacasPerSite: spec.maxHamacasPerSite },
   })
   await prisma.subscription.create({ data: { partnerAccountId: user.id, planId: plan.id, status: 'ACTIVE' } })
   if (custom) {
@@ -45,17 +45,24 @@ async function seatSite(userId: string, n: number) {
   return site.id
 }
 
-describe('hamaca limits per site (CR-002)', () => {
-  it('Gratis: 100 hamacas fit, the 101st is refused', async () => {
-    const u = await partnerOn('GRATIS')
+describe('hamaca limits per site (no plan limits today; an agreement can set one)', () => {
+  it('no plan limits sunbeds: a Starter site takes any number', async () => {
+    const u = await partnerOn('STARTER')
+    const site = await seatSite(u, 400)
+    expect(await checkHamacaLimit(site, 100)).toMatchObject({ allowed: true, current: 400, limit: null })
+    expect((await checkNewSiteHamacas(u, 1000)).allowed).toBe(true)
+  })
+
+  it('an agreement limit of 100: 100 hamacas fit, the 101st is refused', async () => {
+    const u = await partnerOn('STARTER', { maxHamacasPerSite: 100 })
     const site = await seatSite(u, 99)
     expect(await checkHamacaLimit(site, 1)).toMatchObject({ allowed: true, current: 99, limit: 100 })
     await createTestInventoryItem(u, site, { number: 100 })
-    expect(await checkHamacaLimit(site, 1)).toMatchObject({ allowed: false, current: 100, limit: 100, tier: 'GRATIS' })
+    expect(await checkHamacaLimit(site, 1)).toMatchObject({ allowed: false, current: 100, limit: 100, tier: 'STARTER' })
   })
 
   it('parasols do not count: a SunbedGroup with two seats is 2 hamacas', async () => {
-    const u = await partnerOn('GRATIS')
+    const u = await partnerOn('STARTER')
     const site = await seatSite(u, 0)
     const parasol = await createTestSunbedGroup(site)
     await createTestInventoryItem(u, site, { number: 1, sunbedGroupId: parasol.id })
@@ -63,15 +70,8 @@ describe('hamaca limits per site (CR-002)', () => {
     expect(await countHamacas(site)).toBe(2)
   })
 
-  it('Temporada stops at 300', async () => {
-    const u = await partnerOn('TEMPORADA')
-    const site = await seatSite(u, 300)
-    expect(await checkHamacaLimit(site, 1)).toMatchObject({ allowed: false, current: 300, limit: 300 })
-    expect(await checkHamacaLimit(site, 0)).toMatchObject({ allowed: true })
-  })
-
-  it('Grupo limits come from the custom subscription record', async () => {
-    const u = await partnerOn('GRUPO', { maxSites: 12, maxHamacasPerSite: 450 })
+  it('agreement limits come from the custom subscription record', async () => {
+    const u = await partnerOn('BUSINESS', { maxSites: 12, maxHamacasPerSite: 450 })
     const site = await seatSite(u, 450)
     expect(await checkHamacaLimit(site, 1)).toMatchObject({ allowed: false, limit: 450 })
     expect(await checkNewSiteHamacas(u, 450)).toMatchObject({ allowed: true, limit: 450 })
@@ -79,74 +79,59 @@ describe('hamaca limits per site (CR-002)', () => {
   })
 
   it('an over-limit venue keeps its sunbeds and only cannot add more', async () => {
-    const u = await partnerOn('GRATIS')
+    const u = await partnerOn('STARTER', { maxHamacasPerSite: 100 })
     const site = await seatSite(u, 150)
-    expect(await countHamacas(site)).toBe(150)
     expect(await checkHamacaLimit(site, 0)).toMatchObject({ allowed: true, current: 150 })
     expect(await checkHamacaLimit(site, 1)).toMatchObject({ allowed: false })
     expect(await countHamacas(site)).toBe(150)
   })
-
-  it('copy site: a Gratis partner cannot create a 101-hamaca site', async () => {
-    const u = await partnerOn('GRATIS')
-    expect((await checkNewSiteHamacas(u, 100)).allowed).toBe(true)
-    expect((await checkNewSiteHamacas(u, 101)).allowed).toBe(false)
-  })
 })
 
-describe('site limits (CR-002)', () => {
-  it('Gratis cannot create a second site; Temporada stops at 3', async () => {
-    const g = await partnerOn('GRATIS')
+describe('site limits', () => {
+  it('Starter cannot create a second site; Pro stops at 3; Business at 10', async () => {
+    const g = await partnerOn('STARTER')
     expect((await canCreateSite(g)).allowed).toBe(true)
     await createTestSite(g)
     expect(await canCreateSite(g)).toMatchObject({ allowed: false, currentCount: 1, maxSites: 1 })
 
-    const t = await partnerOn('TEMPORADA')
+    const t = await partnerOn('PRO')
     for (let i = 0; i < 2; i++) await createTestSite(t)
     expect((await canCreateSite(t)).allowed).toBe(true)
     await createTestSite(t)
     expect(await canCreateSite(t)).toMatchObject({ allowed: false, currentCount: 3, maxSites: 3 })
+
+    const b = await partnerOn('BUSINESS')
+    expect(await canCreateSite(b)).toMatchObject({ allowed: true, maxSites: 10 })
   })
 })
 
-describe('server-side charge gating (CR-002)', () => {
-  it('Gratis site: no online card payment for reservations or rentals, no F&B', async () => {
-    const u = await partnerOn('GRATIS')
-    const site = await seatSite(u, 1)
-    for (const kind of ['reservation', 'rental'] as const) {
-      expect(await checkChargeAllowed(kind, { siteId: site })).toMatchObject({ allowed: false, feature: 'ONLINE_PAYMENTS' })
+describe('server-side charge gating', () => {
+  it('every plan allows every charge kind, on sites and restaurants', async () => {
+    for (const tier of ['STARTER', 'PRO', 'BUSINESS'] as const) {
+      const u = await partnerOn(tier)
+      const site = await seatSite(u, 1)
+      const r = await createTestRestaurant(u)
+      for (const kind of ['reservation', 'rental', 'order'] as const) {
+        expect((await checkChargeAllowed(kind, { siteId: site })).allowed).toBe(true)
+      }
+      expect((await checkFoodOrderingAllowed({ siteId: site })).allowed).toBe(true)
+      expect((await checkChargeAllowed('tab', { restaurantId: r.id })).allowed).toBe(true)
+      expect((await checkChargeAllowed('table-deposit', { restaurantId: r.id })).allowed).toBe(true)
     }
-    expect((await checkChargeAllowed('order', { siteId: site })).allowed).toBe(false)
-    expect(await checkFoodOrderingAllowed({ siteId: site })).toMatchObject({ allowed: false, feature: 'FOOD_AND_BEVERAGE' })
   })
 
-  it('Gratis restaurant: tabs and table deposits are refused via Restaurant.partnerAccountId', async () => {
-    const u = await partnerOn('GRATIS')
-    const r = await createTestRestaurant(u)
-    expect((await checkChargeAllowed('tab', { siteId: null, restaurantId: r.id })).allowed).toBe(false)
-    expect((await checkChargeAllowed('table-deposit', { restaurantId: r.id })).allowed).toBe(false)
-  })
-
-  it('Temporada allows every charge kind', async () => {
-    const u = await partnerOn('TEMPORADA')
-    const site = await seatSite(u, 1)
-    const r = await createTestRestaurant(u)
-    for (const kind of ['reservation', 'rental', 'order'] as const) {
-      expect((await checkChargeAllowed(kind, { siteId: site })).allowed).toBe(true)
-    }
-    expect((await checkChargeAllowed('tab', { restaurantId: r.id })).allowed).toBe(true)
-    expect((await checkChargeAllowed('table-deposit', { restaurantId: r.id })).allowed).toBe(true)
-  })
-
-  it('a partner with no subscription is on Gratis; an admin feature override wins', async () => {
+  it('a partner with no subscription is on Starter; an admin feature override wins', async () => {
     const user = await createTestUser()
     await createTestPartnerAccount(user.id)
     const site = await seatSite(user.id, 1)
-    expect((await checkChargeAllowed('reservation', { siteId: site })).allowed).toBe(false)
-    await prisma.customSubscription.create({
-      data: { partnerAccountId: user.id, featureOverrides: { ONLINE_PAYMENTS: true } },
-    })
+    const r = await createTestRestaurant(user.id)
     expect((await checkChargeAllowed('reservation', { siteId: site })).allowed).toBe(true)
+    await prisma.customSubscription.create({
+      data: { partnerAccountId: user.id, featureOverrides: { ONLINE_PAYMENTS: false, FOOD_AND_BEVERAGE: false } },
+    })
+    expect(await checkChargeAllowed('reservation', { siteId: site })).toMatchObject({ allowed: false, feature: 'ONLINE_PAYMENTS' })
+    expect(await checkFoodOrderingAllowed({ siteId: site })).toMatchObject({ allowed: false, feature: 'FOOD_AND_BEVERAGE' })
+    expect((await checkChargeAllowed('tab', { siteId: null, restaurantId: r.id })).allowed).toBe(false)
   })
 
   it('an unknown site fails closed', async () => {

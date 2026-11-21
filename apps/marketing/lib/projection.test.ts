@@ -3,25 +3,30 @@ import { PRICING_TIERS } from '@repo/data/pricing-tiers'
 import { parseProjectionInput, project } from './projection.ts'
 
 describe('project — only the catalogue and their own numbers', () => {
-  it('projects only plans with a public online price — Temporada, not Gratis or Grupo', () => {
+  it('projects every plan with a public online price', () => {
     const p = project({ price: 20, sunbeds: 60 })
-    expect(p.tiers.map((t) => t.tier)).toEqual(['TEMPORADA'])
+    expect(p.tiers.map((t) => t.tier)).toEqual(['STARTER', 'PRO', 'BUSINESS'])
   })
 
   it('commission per online sunbed-day comes straight from the plan catalogue', () => {
-    const t = project({ price: 20, sunbeds: 60 }).tiers.find((l) => l.tier === 'TEMPORADA')!
-    expect(t.commissionPerBed).toBe((20 * PRICING_TIERS.TEMPORADA.commissionPercent['sunbed-rental']) / 100)
-    expect(t.keepPerBed + t.commissionPerBed).toBe(20)
-    expect(t.breakEvenBedDays).toBeNull()
+    const starter = project({ price: 20, sunbeds: 60 }).tiers.find((t) => t.tier === 'STARTER')!
+    expect(starter.commissionPerBed).toBe((20 * PRICING_TIERS.STARTER.commissionPercent['sunbed-rental']) / 100)
+    expect(starter.keepPerBed + starter.commissionPerBed).toBe(20)
   })
 
-  it('the month figure respects the per-venue monthly cap', () => {
-    const cap = PRICING_TIERS.TEMPORADA.monthlyCommissionCapPerSite
-    const small = project({ price: 20, sunbeds: 60, onlinePerDay: 10 }).tiers[0]!
-    expect(small.monthlyCost).toBe((10 * 20 * 30 * 2) / 100)
-    const big = project({ price: 30, sunbeds: 500, onlinePerDay: 400 }).tiers[0]!
-    expect(big.monthlyCost).toBe(cap)
-    expect(big.trace.join(' ')).toMatch(/capped/)
+  it('break-even vs Starter: the paid plan fee ÷ the commission it saves per sunbed-day', () => {
+    // Pro at €20: €29 ÷ (6% − 3%) × €20 = 29 ÷ 0.6 = 48.3 → 49 sunbed-days
+    const pct = (t: 'STARTER' | 'PRO') => PRICING_TIERS[t].commissionPercent['sunbed-rental']
+    const pro = project({ price: 20, sunbeds: 60 }).tiers.find((t) => t.tier === 'PRO')!
+    expect(pro.breakEvenBedDays).toBe(Math.ceil(PRICING_TIERS.PRO.monthlyPrice / ((20 * (pct('STARTER') - pct('PRO'))) / 100)))
+    expect(pro.breakEvenBedDays).toBe(49)
+    expect(project({ price: 20, sunbeds: 60 }).tiers.find((t) => t.tier === 'STARTER')!.breakEvenBedDays).toBeNull()
+  })
+
+  it('the month figure is the plan fee plus the commission (no plan has a cap)', () => {
+    const pro = project({ price: 20, sunbeds: 60, onlinePerDay: 10 }).tiers.find((t) => t.tier === 'PRO')!
+    expect(pro.monthlyCost).toBe(29 + (10 * 20 * 30 * 3) / 100)
+    expect(pro.trace.join(' ')).not.toMatch(/capped/)
   })
 
   it('without their own online estimate there are NO monthly figures', () => {
@@ -33,8 +38,10 @@ describe('project — only the catalogue and their own numbers', () => {
   })
 
   it('with it: monthly cost per plan, and the cheapest one', () => {
+    const few = project({ price: 20, sunbeds: 60, onlinePerDay: 1 })
+    expect(few.cheapest).toBe('STARTER')
     const many = project({ price: 20, sunbeds: 200, onlinePerDay: 100 })
-    expect(many.cheapest).toBe('TEMPORADA')
+    expect(many.cheapest).toBe('BUSINESS')
     expect(many.monthlyOnline).toBe(100 * 20 * 30)
   })
 

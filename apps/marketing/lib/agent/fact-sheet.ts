@@ -30,12 +30,18 @@ export function renderFactSheet(): string {
   const plans = PRICING_TIER_ORDER.map((tier) => {
     const p = PRICING_TIERS[tier]
     if (p.quoteOnly) return `- ${p.name}: no public price; venues, sunbeds and fees are agreed per group (quote on request).`
-    const sites = p.maxSites === 1 ? '1 venue' : `up to ${p.maxSites} venues`
-    const beds = `up to ${p.maxHamacasPerSite} sunbeds per venue`
-    const fee = !p.onlinePayments
-      ? 'no monthly fee and no commission; guests pay at the venue (no online card payment, no food & drink ordering)'
-      : `no monthly fee; ${p.commissionPercent['sunbed-rental']}% commission on online-paid sunbed and rental bookings, capped at €${p.monthlyCommissionCapPerSite} per venue per month; 0% on food & drink`
-    return `- ${p.name}: ${fee}, ${sites}, ${beds}.`
+    const sites = p.maxSites === null ? 'unlimited venues' : p.maxSites === 1 ? '1 venue' : `up to ${p.maxSites} venues`
+    const beds = p.maxHamacasPerSite === null ? '' : `, up to ${p.maxHamacasPerSite} sunbeds per venue`
+    const monthly = p.monthlyPrice === 0 ? 'free, no monthly fee' : `€${p.monthlyPrice} a month`
+    const pct = p.commissionPercent['sunbed-rental']
+    const cap = p.monthlyCommissionCapPerSite === null ? '' : `, capped at €${p.monthlyCommissionCapPerSite} per venue per month`
+    const fee = p.onlinePayments
+      ? `${monthly}; ${pct}% commission on every purchase made through Sunbnb (sunbeds, food & drink, rentals)${cap}`
+      : `${monthly}; guests pay at the venue (no online card payment)`
+    const extras = [p.offPlatformBilling ? 'pay-on-site (availability-only) venues' : null, p.brandedBookingPage ? 'branded booking page' : null]
+      .filter(Boolean)
+      .join(', ')
+    return `- ${p.name}: ${fee}, ${sites}${beds}${extras ? `; includes ${extras}` : ''}.`
   }).join('\n')
 
   return [
@@ -47,7 +53,8 @@ export function renderFactSheet(): string {
     '',
     'PRICING',
     plans,
-    'Commission is charged only on purchases made through Sunbnb. It is deducted from the venue\'s revenue; guests pay only the venue\'s listed price.',
+    'Commission is charged only on purchases made through Sunbnb, never on cash or on card payments taken at the venue. It is deducted from the venue\'s revenue; guests pay only the venue\'s listed price.',
+    'Pro and Business are billed monthly by card and can be cancelled at any time.',
     'Card processing is billed at the provider\'s cost as its own line, separate from the Sunbnb commission.',
     '',
 

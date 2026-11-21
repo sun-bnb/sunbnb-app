@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Some bookings are not in pending state' }, { status: 400 })
   }
 
-  // CR-002 plan gate: Gratis partners take no online card payment.
+  // Plan gate (CR-002 machinery): a plan or agreement without online payments is refused.
   const gate = await checkChargeAllowed('rental', { siteId: bookings[0]!.siteId })
   if (!gate.allowed) {
     return Response.json({ error: gate.message }, { status: 403 })

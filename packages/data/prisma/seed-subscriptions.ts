@@ -1,11 +1,11 @@
 /**
- * Pricing-plan seed (CR-002: Gratis / Temporada / Grupo).
+ * Pricing-plan seed (Starter / Pro / Business).
  *
  * Projects the published catalogue (`PRICING_TIERS` in src/pricing-tiers.ts)
  * onto the database:
  *
- *   1. `SubscriptionPlan` — exactly one row per plan (name, price 0, site and
- *                           hamaca limits, monthly commission cap).
+ *   1. `SubscriptionPlan` — exactly one row per plan (name, monthly price, site
+ *                           and hamaca limits, monthly commission cap).
  *   2. `ServiceFee`       — the platform commission, one row per
  *                           tier × commissioned service code, on EVERY
  *                           `Settings` row. Settings are matched by country at
@@ -13,14 +13,13 @@
  *                           country entity without tier rows would silently
  *                           fall back to the tier-null default instead of the
  *                           advertised rate.
- *                           The commission is per service code: F&B is an
- *                           explicit 0% row on every plan.
- *   3. Backfill           — partners with no subscription get Gratis.
+ *   3. Backfill           — partners with no subscription get Starter.
  *
  * Idempotent: re-running changes nothing (rows are only written when a catalog
- * field differs). Stripe product / price IDs are not set here: no plan bills a
- * monthly price, and the data-move migration NULLs the legacy ones. Negotiated site- or account-level fees are never touched either;
- * this only writes platform-level rows (siteId = NULL, accountId = NULL).
+ * field differs). Stripe product / price IDs are per environment and set on the
+ * Pro and Business rows out of band (admin or SQL), never here. Negotiated
+ * site- or account-level fees are never touched either; this only writes
+ * platform-level rows (siteId = NULL, accountId = NULL).
  *
  * Run with POSTGRES_URL pointing at the target DB:
  *   source .env.local && npx tsx prisma/seed-subscriptions.ts

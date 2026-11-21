@@ -119,7 +119,7 @@ export async function POST(
     return Response.json({ error: 'Not authorized' }, { status: 403 })
   }
 
-  // CR-002 plan gate: Gratis partners take no online card payment.
+  // Plan gate (CR-002 machinery): a plan or agreement without online payments is refused.
   const gate = await checkChargeAllowed('table-deposit', { restaurantId: tableReservation.restaurantId })
   if (!gate.allowed) {
     return Response.json({ error: gate.message }, { status: 403 })

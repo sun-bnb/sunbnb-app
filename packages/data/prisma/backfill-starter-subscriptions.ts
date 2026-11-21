@@ -6,9 +6,9 @@ const adapter = new PrismaPg({ connectionString })
 const prisma = new PrismaClient({ adapter })
 
 async function main() {
-  const starterPlan = await prisma.subscriptionPlan.findUnique({ where: { tier: 'GRATIS' } })
+  const starterPlan = await prisma.subscriptionPlan.findUnique({ where: { tier: 'STARTER' } })
   if (!starterPlan) {
-    console.log('No GRATIS plan found')
+    console.log('No STARTER plan found')
     return
   }
 
@@ -27,7 +27,7 @@ async function main() {
         status: 'ACTIVE',
       },
     })
-    console.log(`Created Gratis subscription for ${pa.userId}`)
+    console.log(`Created Starter subscription for ${pa.userId}`)
   }
 }
 

@@ -46,10 +46,11 @@ export async function getSubscriptionData() {
 }
 
 /**
- * The partner switches its own plan between the self-serve plans (Free ⇄ Pro).
- * Business is a custom agreement set up by us in admin, so `setPartnerPlan`
- * refuses it here, and refuses a downgrade the partner's venues don't fit
- * (`issues` names what is over). No billing: no plan has a monthly price.
+ * The partner moves itself onto the free plan (Starter) when it has no paid
+ * Stripe subscription, e.g. off a complimentary plan an admin set. Paid plans
+ * are bought through Stripe Checkout (/api/subscription/checkout) and a paying
+ * partner changes or cancels in the billing portal; `setPartnerPlan` refuses
+ * both here, and refuses a downgrade the partner's venues don't fit (`issues`).
  */
 export async function switchPlan(
   tier: string,

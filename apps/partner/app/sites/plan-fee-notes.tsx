@@ -30,7 +30,7 @@ export default function PlanFeeNotes({ tier }: { tier: string }) {
       <p>{t('noGuestFee')}</p>
       {!spec.onlinePayments && (
         <p className="pt-1 text-amber-700 font-medium">
-          {t('gratisUpgrade', { plan: PRICING_TIERS.TEMPORADA.name })}{' '}
+          {t('gratisUpgrade', { plan: PRICING_TIERS.PRO.name })}{' '}
           <Link href="/account/subscription" className="underline underline-offset-2">
             {t('seePlans')}
           </Link>

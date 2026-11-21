@@ -67,8 +67,8 @@ export async function submitForm(
       data: accountData
     })
 
-    // Auto-assign the Gratis subscription to new partner accounts
-    const starterPlan = await prisma.subscriptionPlan.findUnique({ where: { tier: 'GRATIS' } })
+    // Auto-assign the Starter subscription to new partner accounts
+    const starterPlan = await prisma.subscriptionPlan.findUnique({ where: { tier: 'STARTER' } })
     if (starterPlan) {
       await prisma.subscription.create({
         data: {

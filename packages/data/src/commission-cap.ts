@@ -1,5 +1,6 @@
 /**
- * Monthly per-site commission cap (CR-002, Temporada: 2% capped at EUR 199 per site per month).
+ * Monthly per-site commission cap (CR-002). No plan has a cap today (all null, so the ledger is
+ * never written); kept for a capped plan or agreement later. CR-002 ran 2% capped at EUR 199.
  *
  * WHY A LEDGER: the commission is computed twice, at charge creation (Mollie `applicationFee`,
  * Stripe `application_fee_amount`, Viva `isvAmount`) and again when the PLATFORM invoice is

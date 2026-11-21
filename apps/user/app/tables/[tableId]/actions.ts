@@ -123,7 +123,7 @@ export async function placeTabOrder(
   const restaurant = table.restaurant
   const restaurantId = restaurant.id
 
-  // CR-002 plan gate: Gratis partners take no food & drink ordering.
+  // Plan gate (CR-002 machinery): a plan or agreement without food & drink ordering is refused.
   const foodGate = await checkFoodOrderingAllowed({ siteId: restaurant.siteId, restaurantId })
   if (!foodGate.allowed) {
     return { status: 'error', errors: [foodGate.message] }

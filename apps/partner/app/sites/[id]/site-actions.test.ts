@@ -174,7 +174,7 @@ describe('saveGeneral', () => {
     // type:'unpaid' requires the off-platform-billing entitlement; grant it so the
     // update proceeds (this test exercises price-null logic, not the gate).
     vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValueOnce({
-      tier: 'GRUPO', name: 'Business', monthlyPrice: 0, maxSites: 999,
+      tier: 'BUSINESS', name: 'Business', monthlyPrice: 0, maxSites: 999,
       isCustom: false, features: { OFF_PLATFORM_BILLING: true },
     } as any)
 
@@ -608,7 +608,7 @@ describe('saveGeneral — off-platform billing entitlement', () => {
   it('rejects type:unpaid when OFF_PLATFORM_BILLING feature is false', async () => {
     authorizeOwner()
     mockGetEffective.mockResolvedValue({
-      tier: 'GRATIS',
+      tier: 'STARTER',
       name: 'Starter',
       monthlyPrice: 0,
       maxSites: 1,
@@ -619,14 +619,14 @@ describe('saveGeneral — off-platform billing entitlement', () => {
     const res = await saveGeneral(baseInput)
 
     expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Pay-on-site mode is turned off')
+    expect(res.errors?.[0]).toContain('requires a Pro/Business plan')
     expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
   })
 
   it('allows type:unpaid when OFF_PLATFORM_BILLING feature is true', async () => {
     authorizeOwner()
     mockGetEffective.mockResolvedValue({
-      tier: 'TEMPORADA',
+      tier: 'PRO',
       name: 'Pro',
       monthlyPrice: 49,
       maxSites: 5,
@@ -711,7 +711,7 @@ describe('submitForm — off-platform billing entitlement', () => {
   it('rejects type:unpaid when OFF_PLATFORM_BILLING feature is false', async () => {
     mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
     mockGetEffective.mockResolvedValue({
-      tier: 'GRATIS',
+      tier: 'STARTER',
       name: 'Starter',
       monthlyPrice: 0,
       maxSites: 1,
@@ -728,14 +728,14 @@ describe('submitForm — off-platform billing entitlement', () => {
     const res = await submitForm({ status: '' }, formData)
 
     expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Pay-on-site mode is turned off')
+    expect(res.errors?.[0]).toContain('requires a Pro/Business plan')
     expect(vi.mocked(prisma.site.create)).not.toHaveBeenCalled()
   })
 
   it('allows type:unpaid when OFF_PLATFORM_BILLING feature is true', async () => {
     mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
     mockGetEffective.mockResolvedValue({
-      tier: 'TEMPORADA',
+      tier: 'PRO',
       name: 'Pro',
       monthlyPrice: 49,
       maxSites: 5,

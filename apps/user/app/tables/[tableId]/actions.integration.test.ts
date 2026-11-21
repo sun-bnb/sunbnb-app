@@ -34,7 +34,7 @@ import {
   createTestTable,
   createTestTableTab,
   createTestMenuItem,
-  putOwnerOnTemporada,
+  putOwnerOnPro,
 } from '@/app/test/fixtures'
 import { ORDER_COMPLETE } from '@repo/data/reservation-status'
 
@@ -51,7 +51,7 @@ async function buildLinkedDineSetup(overrides: {
 } = {}) {
   const owner = await createTestUser()
   const partnerAccount = await createTestPartnerAccount(owner.id)
-  await putOwnerOnTemporada(owner.id)
+  await putOwnerOnPro(owner.id)
   const site = await createTestSite(owner.id, {
     appSalesEnabled: true,
     ...overrides.siteOverrides,
@@ -80,7 +80,7 @@ async function buildStandaloneDineSetup(overrides: {
 } = {}) {
   const owner = await createTestUser()
   const partnerAccount = await createTestPartnerAccount(owner.id)
-  await putOwnerOnTemporada(owner.id)
+  await putOwnerOnPro(owner.id)
   const restaurant = await createTestRestaurant(partnerAccount.userId, {
     siteId: null,
     dineInEnabled: true,

@@ -43,7 +43,7 @@ export default function BrandView() {
   // presentation, and stays the customer's to change.
   const isCustomBrand = resolveBrandRender(site).mode === 'custom'
 
-  // The Grupo gate gets skipped for a bespoke site. A custom page is
+  // The Business-plan gate gets skipped for a bespoke site. A custom page is
   // platform-delivered work, not a plan entitlement, so pitching its owner an
   // upgrade for "a branded booking page" they already have would be absurd —
   // and it would take the slug control with it, which D2 says stays theirs
@@ -66,13 +66,13 @@ export default function BrandView() {
             <li className="flex items-start gap-2"><span className="text-indigo-500 mt-0.5">&#x2713;</span> Branded reservation pages</li>
           </ul>
           <p className="text-xs text-gray-400 mb-4">
-            Available on the <span className="font-semibold text-indigo-500">{PRICING_TIERS.GRUPO.name}</span> plan
+            Available on the <span className="font-semibold text-indigo-500">{PRICING_TIERS.BUSINESS.name}</span> plan
           </p>
           <a
             href="/account/subscription"
             className="inline-flex items-center px-5 py-2 rounded-lg bg-indigo-500 text-white text-sm font-medium hover:bg-indigo-600 transition-colors"
           >
-            See the {PRICING_TIERS.GRUPO.name} plan
+            See the {PRICING_TIERS.BUSINESS.name} plan
           </a>
         </div>
       </div>

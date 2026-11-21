@@ -160,8 +160,8 @@ function regimeExplanation(regime: TaxRegime): string {
 }
 
 function tierBadgeColor(tier: string) {
-  if (tier === "GRUPO") return "bg-purple-400/20 text-purple-300"
-  if (tier === "TEMPORADA") return "bg-blue-400/20 text-blue-300"
+  if (tier === "BUSINESS") return "bg-purple-400/20 text-purple-300"
+  if (tier === "PRO") return "bg-blue-400/20 text-blue-300"
   return "bg-gray-700 text-gray-300"
 }
 
@@ -408,8 +408,8 @@ export default function PartnerDetailView({
   const [tierInput, setTierInput] = useState(baseTier)
   const [tierSaving, setTierSaving] = useState(false)
   const [tierErrors, setTierErrors] = useState<string[]>([])
-  const isBusiness = !PRICING_TIERS[baseTier as keyof typeof PRICING_TIERS]?.selfServe
-  const leavingBusiness = isBusiness && tierInput !== baseTier
+  const isAgreementPlan = !PRICING_TIERS[baseTier as keyof typeof PRICING_TIERS]?.selfServe
+  const leavingAgreement = isAgreementPlan && tierInput !== baseTier
 
   async function handleSaveTier() {
     setTierSaving(true)
@@ -616,10 +616,10 @@ export default function PartnerDetailView({
       <div className="mb-6">
         <h3 className="text-sm font-semibold text-gray-200 mb-1">Plan</h3>
         <p className="text-xs text-gray-500 mb-4">
-          Free and Pro are fixed plans the partner can also switch between themselves.
-          Business is a custom agreement set up only here: its limits, features and commission
-          are the agreement fields below (blank = unlimited / every feature / Pro&rsquo;s rates).
-          Moving a partner off Business deletes the agreement and its partner commission rows.
+          Partners buy Pro and Business themselves through Stripe Checkout and cancel in the
+          billing portal (back to Starter). A plan set here is complimentary: no Stripe billing.
+          Changing the plan of a partner who pays through Stripe does not change their Stripe
+          subscription; the next Stripe update sets the plan back.
         </p>
         {tierErrors.length > 0 && (
           <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 mb-3">
@@ -657,9 +657,9 @@ export default function PartnerDetailView({
             )}
           </Button>
         </div>
-        {leavingBusiness && (
+        {leavingAgreement && (
           <p className="mt-2 text-xs text-amber-400">
-            This deletes the Business agreement (limits, feature overrides) and every partner-level
+            This deletes the custom agreement (limits, feature overrides) and every partner-level
             commission row for this partner.
           </p>
         )}
@@ -694,11 +694,11 @@ export default function PartnerDetailView({
       {/* ── Custom subscription panel ───────────────────────────── */}
       <div className="mb-8">
         <h3 className="text-sm font-semibold text-gray-200 mb-1">
-          {isBusiness ? "Business agreement: limits" : "Custom Subscription Override"}
+          {isAgreementPlan ? "Agreement: limits" : "Custom Subscription Override"}
         </h3>
         <p className="text-xs text-gray-500 mb-4">
           Override the plan&rsquo;s site and sunbed limits for this partner. Leave blank to inherit
-          from the plan (on Business: unlimited).
+          from the plan (no plan limits sunbeds today).
         </p>
 
         {maxSitesErrors.length > 0 && (

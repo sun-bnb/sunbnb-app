@@ -7,13 +7,13 @@ export function canAddHamacas(limit: number | null, current: number, adding: num
   return current + adding <= limit
 }
 
-export const checkHamacaLimit = vi.fn().mockResolvedValue({ allowed: true, current: 0, limit: 100, adding: 0, tier: 'GRATIS' })
-export const checkNewSiteHamacas = vi.fn().mockResolvedValue({ allowed: true, current: 0, limit: 100, adding: 0, tier: 'GRATIS' })
+export const checkHamacaLimit = vi.fn().mockResolvedValue({ allowed: true, current: 0, limit: 100, adding: 0, tier: 'STARTER' })
+export const checkNewSiteHamacas = vi.fn().mockResolvedValue({ allowed: true, current: 0, limit: 100, adding: 0, tier: 'STARTER' })
 export const countHamacas = vi.fn().mockResolvedValue(0)
 export const hamacaLimitMessage = (r: { current: number; limit: number | null }) =>
   `Your plan allows ${r.limit} hamacas per site and this site has ${r.current}. Existing sunbeds stay; upgrade your plan to add more.`
 export const effectiveSubscriptionForPartnerUser = vi.fn().mockResolvedValue({
-  tier: 'GRATIS',
+  tier: 'STARTER',
   maxHamacasPerSite: 100,
   features: { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: false, FOOD_AND_BEVERAGE: false },
 })

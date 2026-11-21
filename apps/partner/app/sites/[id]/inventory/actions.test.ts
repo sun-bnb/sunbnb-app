@@ -1186,7 +1186,7 @@ describe('syncChairsWithLayout — plan hamaca limit (CR-002)', () => {
 
   it('refuses a new parcel that would pass the limit, with no group or seats written', async () => {
     vi.mocked(prisma.site.findUnique).mockResolvedValue({ layoutMode: 'geo' } as any)
-    vi.mocked(checkHamacaLimit).mockResolvedValueOnce({ allowed: false, current: 100, limit: 100, adding: 2, tier: 'GRATIS' })
+    vi.mocked(checkHamacaLimit).mockResolvedValueOnce({ allowed: false, current: 100, limit: 100, adding: 2, tier: 'STARTER' })
 
     const res = await syncChairsWithLayout(SITE_ID, config as any, 'create')
 
@@ -1198,7 +1198,7 @@ describe('syncChairsWithLayout — plan hamaca limit (CR-002)', () => {
 
   it('rearranging an over-limit parcel without growing it is never blocked', async () => {
     vi.mocked(prisma.site.findUnique).mockResolvedValue({ layoutMode: 'geo' } as any)
-    vi.mocked(checkHamacaLimit).mockResolvedValue({ allowed: false, current: 150, limit: 100, adding: 1, tier: 'GRATIS' })
+    vi.mocked(checkHamacaLimit).mockResolvedValue({ allowed: false, current: 150, limit: 100, adding: 1, tier: 'STARTER' })
     vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([
       { id: 'a', number: 1, itemGroupId: 'g-1', sunbedGroupId: null, locationLat: '60.1', locationLng: '24.9', schematicX: null, schematicY: null },
       { id: 'b', number: 2, itemGroupId: 'g-1', sunbedGroupId: null, locationLat: '60.1', locationLng: '24.9', schematicX: null, schematicY: null },
@@ -1210,6 +1210,6 @@ describe('syncChairsWithLayout — plan hamaca limit (CR-002)', () => {
     expect(res).not.toEqual(expect.objectContaining({ status: 'error' }))
     expect(vi.mocked(checkHamacaLimit)).not.toHaveBeenCalled()
     expect(vi.mocked(prisma.inventoryItem.createMany)).not.toHaveBeenCalled()
-    vi.mocked(checkHamacaLimit).mockResolvedValue({ allowed: true, current: 0, limit: 100, adding: 0, tier: 'GRATIS' })
+    vi.mocked(checkHamacaLimit).mockResolvedValue({ allowed: true, current: 0, limit: 100, adding: 0, tier: 'STARTER' })
   })
 })

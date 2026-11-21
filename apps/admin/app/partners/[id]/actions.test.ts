@@ -13,7 +13,7 @@ vi.mock('next/cache', () => ({
 // separately in fees/actions.test.ts.
 vi.mock('@repo/data/subscription', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@repo/data/subscription')>()),
-  setPartnerPlan: vi.fn().mockResolvedValue({ status: 'ok', tier: 'GRUPO', changed: true }),
+  setPartnerPlan: vi.fn().mockResolvedValue({ status: 'ok', tier: 'BUSINESS', changed: true }),
 }))
 
 vi.mock('../../fees/actions', () => ({
@@ -543,14 +543,14 @@ describe('setPartnerTier', () => {
   it('rejects non-sudo callers and changes nothing', async () => {
     mockAuth.mockResolvedValue({ user: { id: 'u-1' } } as any)
     vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
-    await expect(setPartnerTier('acc-1', 'GRUPO')).rejects.toThrow()
+    await expect(setPartnerTier('acc-1', 'BUSINESS')).rejects.toThrow()
     expect(vi.mocked(setPartnerPlan)).not.toHaveBeenCalled()
   })
 
   it('moves the partner as admin, so Business is allowed', async () => {
     authenticateAsSudo()
-    expect(await setPartnerTier('acc-1', 'GRUPO')).toEqual({ status: 'ok' })
-    expect(vi.mocked(setPartnerPlan)).toHaveBeenCalledWith('acc-1', 'GRUPO', 'admin')
+    expect(await setPartnerTier('acc-1', 'BUSINESS')).toEqual({ status: 'ok' })
+    expect(vi.mocked(setPartnerPlan)).toHaveBeenCalledWith('acc-1', 'BUSINESS', 'admin')
   })
 
   it('refuses an unknown plan', async () => {

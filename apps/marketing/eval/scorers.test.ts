@@ -18,8 +18,9 @@ describe('invented-figure detection — the agent must not make up numbers', () 
   })
 
   it('passes the real price ladder, read from the billing source of truth', () => {
-    const { GRATIS, TEMPORADA } = PRICING_TIERS
-    const reply = `Gratis is free and allows ${GRATIS.maxHamacasPerSite} sunbeds; Temporada takes ${TEMPORADA.commissionPercent['sunbed-rental']}% capped at €${TEMPORADA.monthlyCommissionCapPerSite} per venue a month, up to ${TEMPORADA.maxSites} venues.`
+    const { PRO, BUSINESS, STARTER } = PRICING_TIERS
+    const pct = (t: typeof STARTER | typeof PRO | typeof BUSINESS) => t.commissionPercent['sunbed-rental']
+    const reply = `Starter is free with ${pct(STARTER)}% commission, Pro is €${PRO.monthlyPrice} with ${pct(PRO)}% for up to ${PRO.maxSites} venues, Business €${BUSINESS.monthlyPrice} with ${pct(BUSINESS)}%.`
     expect(runCheck({ kind: 'no_invented_figures' }, transcript([reply]))).toEqual([])
   })
 
@@ -38,7 +39,7 @@ describe('invented-figure detection — the agent must not make up numbers', () 
 
   it('builds the allow-list from the fact sheet plus the prospect', () => {
     const allowed = allowedFigures(['we have 140 sunbeds'])
-    expect(allowed.has(PRICING_TIERS.TEMPORADA.monthlyCommissionCapPerSite)).toBe(true)
+    expect(allowed.has(PRICING_TIERS.PRO.monthlyPrice)).toBe(true)
     expect(allowed.has(140)).toBe(true)
     expect(allowed.has(35)).toBe(false)
   })
@@ -99,7 +100,7 @@ describe('parseFigure — thousands vs decimals', () => {
     expect(parseFigure('6,5')).toBe(6.5)
     expect(parseFigure('1.5')).toBe(1.5)
     expect(parseFigure('1,234.50')).toBe(1234.5)
-    expect(extractClaimedFigures('Gratis would be €1,800 and Temporada €929')).toEqual([1800, 929])
+    expect(extractClaimedFigures('Starter would be €1,800 and Pro €929')).toEqual([1800, 929])
     expect(extractClaimedFigures('1 800 € al mes')).toEqual([1800])
   })
 })

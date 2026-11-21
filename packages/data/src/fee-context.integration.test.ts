@@ -148,12 +148,12 @@ describe('loadFeeContext', () => {
     const partner = await createTestPartnerAccount(user.id)
     const site = await createTestSite(user.id)
     const settings = await createTestSettings()
-    await createTestSubscription(partner.userId, 'GRATIS')
+    await createTestSubscription(partner.userId, 'STARTER')
 
     // Tier-specific fee
     await createTestServiceFee(settings.id, {
       feeAmount: 0.5,
-      subscriptionTier: 'GRATIS',
+      subscriptionTier: 'STARTER',
     })
     // Default (null-tier) fee
     await createTestServiceFee(settings.id, {
@@ -173,7 +173,7 @@ describe('loadFeeContext', () => {
     )
 
     expect(resolved!.feeAmount).toBe(0.5)
-    expect(resolved!.subscriptionTier).toBe('GRATIS')
+    expect(resolved!.subscriptionTier).toBe('STARTER')
   })
 
   it('throws for non-existent site', async () => {
@@ -186,7 +186,7 @@ describe('loadFeeContext', () => {
     const user = await createTestUser()
     const partner = await createTestPartnerAccount(user.id, { country: 'ES' })
     const site = await createTestSite(user.id)
-    await createTestSubscription(partner.userId, 'GRATIS')
+    await createTestSubscription(partner.userId, 'STARTER')
 
     // FI Settings — only a tier-NULL 1€ default (mirrors the production FI row)
     const fiSettings = await createTestSettings({ country: 'FI' })
@@ -199,7 +199,7 @@ describe('loadFeeContext', () => {
       chargeType: 'percentage',
       feeAmount: null,
       percentage: 5,
-      subscriptionTier: 'GRATIS',
+      subscriptionTier: 'STARTER',
     })
 
     const ctx = await loadFeeContext(site.id, 'sunbed-rental')
@@ -214,7 +214,7 @@ describe('loadFeeContext', () => {
       'sunbed-rental',
       tier
     )
-    expect(resolved!.subscriptionTier).toBe('GRATIS')
+    expect(resolved!.subscriptionTier).toBe('STARTER')
     expect(resolved!.chargeType).toBe('percentage')
     expect(resolved!.percentage).toBe(5)
   })
@@ -277,21 +277,21 @@ describe('loadFeeContext', () => {
     const user = await createTestUser()
     const partner = await createTestPartnerAccount(user.id, { country: 'ES' })
     const site = await createTestSite(user.id)
-    await createTestSubscription(partner.userId, 'GRATIS')
+    await createTestSubscription(partner.userId, 'STARTER')
     const settings = await createTestSettings({ country: 'ES' })
     await createTestServiceFee(settings.id, {
       serviceCode: 'sunbed-rental',
       chargeType: 'percentage',
       feeAmount: null,
       percentage: 5,
-      subscriptionTier: 'GRATIS',
+      subscriptionTier: 'STARTER',
     })
     await createTestServiceFee(settings.id, {
       serviceCode: 'food-and-beverage',
       chargeType: 'percentage',
       feeAmount: null,
       percentage: 5,
-      subscriptionTier: 'GRATIS',
+      subscriptionTier: 'STARTER',
     })
 
     const fees = await resolveSiteFees(site.id, [
@@ -305,13 +305,13 @@ describe('loadFeeContext', () => {
       'food-and-beverage',
       'sunbed-rental',
     ])
-    expect(fees.every((f) => f.subscriptionTier === 'GRATIS')).toBe(true)
+    expect(fees.every((f) => f.subscriptionTier === 'STARTER')).toBe(true)
   })
 
   it('getPartnerFeeContext resolves country-matched Settings without a site', async () => {
     const user = await createTestUser()
     const partner = await createTestPartnerAccount(user.id, { country: 'ES' })
-    await createTestSubscription(partner.userId, 'TEMPORADA')
+    await createTestSubscription(partner.userId, 'PRO')
 
     const fiSettings = await createTestSettings({ country: 'FI' })
     await createTestServiceFee(fiSettings.id, { feeAmount: 1.0 })
@@ -320,12 +320,12 @@ describe('loadFeeContext', () => {
       chargeType: 'percentage',
       feeAmount: null,
       percentage: 2,
-      subscriptionTier: 'TEMPORADA',
+      subscriptionTier: 'PRO',
     })
 
     const ctx = await getPartnerFeeContext(user.id)
     expect(ctx.settings!.id).toBe(esSettings.id)
-    expect(ctx.tier).toBe('TEMPORADA')
+    expect(ctx.tier).toBe('PRO')
     expect(ctx.partnerAccount?.country).toBe('ES')
   })
 

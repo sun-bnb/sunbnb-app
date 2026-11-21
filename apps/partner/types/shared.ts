@@ -70,7 +70,7 @@ export interface SiteProps {
   status?: string | null
   services: string[]
   serviceFees?: ServiceFee[]
-  subscriptionTier?: 'GRATIS' | 'TEMPORADA' | 'GRUPO' | null
+  subscriptionTier?: 'STARTER' | 'PRO' | 'BUSINESS' | null
   appSalesEnabled?: boolean
   paymentProvider?: string
   noShowDeadlineMinutes?: number | null

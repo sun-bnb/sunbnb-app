@@ -142,7 +142,7 @@ export async function saveGeneral(input: {
       if (!effective.features.OFF_PLATFORM_BILLING) {
         return {
           status: 'error',
-          errors: ['Pay-on-site mode is turned off for this account; contact Sunbnb support'],
+          errors: ['Off-platform billing requires a Pro/Business plan or an admin override'],
         }
       }
     }
@@ -251,7 +251,7 @@ export async function submitForm(
       if (!effective.features.OFF_PLATFORM_BILLING) {
         return {
           status: 'error',
-          errors: ['Pay-on-site mode is turned off for this account; contact Sunbnb support'],
+          errors: ['Off-platform billing requires a Pro/Business plan or an admin override'],
         }
       }
     }

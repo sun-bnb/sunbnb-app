@@ -10,10 +10,10 @@
  * Commission is charged on the price the guest pays (`calculateServiceFeeAmount` in
  * @repo/data/payment applies the percentage to the listed, VAT-inclusive price).
  *
- * CR-002 catalogue (Gratis / Temporada / Grupo): only plans that take online card payments
- * and have a public price are projected — Gratis takes no online payments (guests pay on
- * site, no commission) and Grupo is quote-only. Today that is Temporada: the sunbed-rental
- * rate, with the monthly per-site commission cap applied to the month figure.
+ * Plans (Starter free + 6%, Pro EUR 29 / month + 3%, Business EUR 79 / month + 1.5%): every
+ * plan that takes online card payments and has a public price is projected. A paid plan
+ * shows its break-even against the free plan; a monthly per-site commission cap (none
+ * today) is applied to the month figure.
  */
 import { PRICING_TIERS, PRICING_TIER_ORDER } from '@repo/data/pricing-tiers'
 
@@ -41,7 +41,7 @@ export interface TierLine {
   /** Commission on one online-booked sunbed-day, and what the venue keeps of it. */
   commissionPerBed: number
   keepPerBed: number
-  /** Legacy break-even vs a free plan. Always null: no plan has a fixed monthly fee any more. */
+  /** Online sunbed-days a month at which this paid plan costs no more than the free plan; null on the free plan. */
   breakEvenBedDays: number | null
   /** Monthly per-site commission cap (EUR), or null when uncapped. */
   monthlyCap: number | null
@@ -81,6 +81,8 @@ export function project(input: ProjectionInput): Projection {
   const price = r2(input.price)
   const online = input.onlinePerDay ?? null
   const monthlyOnline = online === null ? null : r2(online * price * MONTH_DAYS)
+  const freeTier = PROJECTED_TIERS.find((t) => PRICING_TIERS[t].monthlyPrice === 0)
+  const free = freeTier ? PRICING_TIERS[freeTier] : null
 
   const tiers: TierLine[] = PROJECTED_TIERS.map((tier) => {
     const t = PRICING_TIERS[tier]
@@ -88,16 +90,29 @@ export function project(input: ProjectionInput): Projection {
     const cap = t.monthlyCommissionCapPerSite
     const commissionPerBed = r2((price * pct) / 100)
     const trace = [`${t.name}: ${pct}% × ${eur(price)} = ${eur(commissionPerBed)} commission per online sunbed-day; you keep ${eur(r2(price - commissionPerBed))}.`]
+    let breakEvenBedDays: number | null = null
+    if (free && t.monthlyPrice > 0) {
+      const freePct = free.commissionPercent['sunbed-rental']
+      const savedPerBed = (price * (freePct - pct)) / 100
+      if (savedPerBed > 0) {
+        breakEvenBedDays = Math.ceil(t.monthlyPrice / savedPerBed)
+        trace.push(
+          `${t.name} vs ${free.name}: ${eur(t.monthlyPrice)} a month ÷ (${freePct}% − ${pct}%) × ${eur(price)} = ${breakEvenBedDays} online sunbed-days a month to break even.`,
+        )
+      }
+    }
     let monthlyCost: number | null = null
     if (monthlyOnline !== null) {
-      const uncapped = r2(t.monthlyPrice + (monthlyOnline * pct) / 100)
-      monthlyCost = cap === null ? uncapped : Math.min(uncapped, r2(t.monthlyPrice + cap))
+      const commission = r2((monthlyOnline * pct) / 100)
+      const capped = cap === null ? commission : Math.min(commission, cap)
+      monthlyCost = r2(t.monthlyPrice + capped)
       trace.push(
-        `${t.name} for a ${MONTH_DAYS}-day month: ${pct}% × ${eur(monthlyOnline)} = ${eur(uncapped)}` +
-          (cap === null ? '.' : `, capped at ${eur(cap)} per venue per month → ${eur(monthlyCost)}.`),
+        `${t.name} for a ${MONTH_DAYS}-day month: ${eur(t.monthlyPrice)} + ${pct}% × ${eur(monthlyOnline)}` +
+          (cap === null || capped === commission ? '' : ` (commission capped at ${eur(cap)} per venue)`) +
+          ` = ${eur(monthlyCost)}.`,
       )
     }
-    return { tier, name: t.name, monthlyPrice: t.monthlyPrice, commissionPercent: pct, commissionPerBed, keepPerBed: r2(price - commissionPerBed), breakEvenBedDays: null, monthlyCap: cap, monthlyCost, trace }
+    return { tier, name: t.name, monthlyPrice: t.monthlyPrice, commissionPercent: pct, commissionPerBed, keepPerBed: r2(price - commissionPerBed), breakEvenBedDays, monthlyCap: cap, monthlyCost, trace }
   })
 
   let cheapest: Tier | null = null

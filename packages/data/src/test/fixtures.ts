@@ -408,14 +408,14 @@ export async function createTestTableTab(
 
 export async function createTestSubscription(
   partnerAccountId: string,
-  tier: 'GRATIS' | 'TEMPORADA' | 'GRUPO' = 'GRATIS'
+  tier: 'STARTER' | 'PRO' | 'BUSINESS' = 'STARTER'
 ) {
   const plan = await prisma.subscriptionPlan.create({
     data: {
       tier,
       name: `${tier} Plan`,
-      monthlyPrice: tier === 'GRATIS' ? 9.99 : tier === 'TEMPORADA' ? 29.99 : 79.99,
-      maxSites: tier === 'GRATIS' ? 1 : tier === 'TEMPORADA' ? 5 : 20,
+      monthlyPrice: tier === 'STARTER' ? 9.99 : tier === 'PRO' ? 29.99 : 79.99,
+      maxSites: tier === 'STARTER' ? 1 : tier === 'PRO' ? 5 : 20,
     },
   })
 

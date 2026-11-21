@@ -47,7 +47,7 @@ export default async function SubscriptionPage({
   return (
     <>
       {purchase && <TrackEvent name="purchase" params={purchase} onceKey={`purchase:${purchase.transaction_id}`} />}
-      <SubscriptionView data={data} />
+      <SubscriptionView data={data} checkout={checkout === 'success' || checkout === 'canceled' ? checkout : null} />
     </>
   )
 }

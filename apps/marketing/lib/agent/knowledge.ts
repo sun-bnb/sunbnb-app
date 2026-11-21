@@ -129,7 +129,7 @@ export const KNOWLEDGE: KnowledgeEntry[] = [
     id: 'branded-page',
     topic: 'Branded booking page',
     status: 'shipped',
-    say: 'A venue can have its own booking page with its colours, logo and tagline.',
+    say: 'On the Business plan, the venue gets its own booking page with its colours, logo and tagline.',
     sources: ['apps/user/brands', 'apps/partner/app/sites/[id]/brand/view.tsx'],
   },
   {

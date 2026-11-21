@@ -36,7 +36,7 @@ import {
   createTestProduct,
   createTestReservation,
   createTestInventoryItem,
-  putOwnerOnTemporada,
+  putOwnerOnPro,
 } from '@/app/test/fixtures'
 import { ORDER_PENDING } from '@repo/data/reservation-status'
 
@@ -60,7 +60,7 @@ describe('createOrder', () => {
   it('creates order and order items in DB with prices from DB', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id, { appSalesEnabled: true })
-    await putOwnerOnTemporada(user.id)
+    await putOwnerOnPro(user.id)
     // DB price is 8.00 / totalPrice 9.12 — client cannot override this
     const product = await createTestProduct(site.id, { price: 8.0, totalPrice: 9.12, tax: 14 })
 
@@ -92,7 +92,7 @@ describe('createOrder', () => {
   it('creates order with multiple distinct products', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id, { appSalesEnabled: true })
-    await putOwnerOnTemporada(user.id)
+    await putOwnerOnPro(user.id)
     const beer = await createTestProduct(site.id, { name: 'Beer', price: 5.0, totalPrice: 6.0 })
     const water = await createTestProduct(site.id, { name: 'Water', price: 2.0, totalPrice: 2.4 })
 
@@ -119,7 +119,7 @@ describe('createOrder', () => {
   it('rejects sold-out product (verified against real DB soldOut field)', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id, { appSalesEnabled: true })
-    await putOwnerOnTemporada(user.id)
+    await putOwnerOnPro(user.id)
     const product = await createTestProduct(site.id, { soldOut: true })
 
     mockAuth.mockResolvedValue({ user: { id: user.id } } as any)
@@ -139,7 +139,7 @@ describe('createOrder', () => {
   it('rejects order when site has appSalesEnabled=false', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id, { appSalesEnabled: false })
-    await putOwnerOnTemporada(user.id)
+    await putOwnerOnPro(user.id)
     const product = await createTestProduct(site.id)
 
     mockAuth.mockResolvedValue({ user: { id: user.id } } as any)
@@ -156,7 +156,7 @@ describe('createOrder', () => {
   it('stores anonId and uses site owner userId for anonymous orders', async () => {
     const owner = await createTestUser()
     const site = await createTestSite(owner.id, { appSalesEnabled: true })
-    await putOwnerOnTemporada(owner.id)
+    await putOwnerOnPro(owner.id)
     const product = await createTestProduct(site.id)
 
     // No session

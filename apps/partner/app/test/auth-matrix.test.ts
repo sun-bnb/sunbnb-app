@@ -82,7 +82,7 @@ vi.mock('@repo/data/subscription', () => ({
     features: { OFF_PLATFORM_BILLING: false },
   }),
   resolveEffectiveFeatures: vi.fn().mockResolvedValue({}),
-  canCreateSite: vi.fn().mockResolvedValue({ allowed: true, currentCount: 0, maxSites: 5, tier: 'TEMPORADA', overridden: false }),
+  canCreateSite: vi.fn().mockResolvedValue({ allowed: true, currentCount: 0, maxSites: 5, tier: 'PRO', overridden: false }),
 }))
 
 // Mock @/app/flags (used by lib/auth-helpers requireSiteOwnerWithFlag)

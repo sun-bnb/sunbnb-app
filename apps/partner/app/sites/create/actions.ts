@@ -51,7 +51,7 @@ export async function createSite(
     if (!effective.features.OFF_PLATFORM_BILLING) {
       return {
         status: 'error',
-        errors: ['Pay-on-site mode is turned off for this account; contact Sunbnb support'],
+        errors: ['Off-platform billing requires a Pro/Business plan or an admin override'],
       }
     }
   }
@@ -59,8 +59,8 @@ export async function createSite(
   const price = Number(input.price)
   const vat = Number(input.vat)
 
-  // CR-002: the default site type is 'paid' (online payments). A partner whose plan lacks
-  // ONLINE_PAYMENTS (Gratis) gets an unpaid, pay-on-site venue instead of a refusal.
+  // The default site type is "paid" (online payments). A partner whose plan or agreement lacks
+  // ONLINE_PAYMENTS (no plan today; CR-002 had one) gets an unpaid, pay-on-site venue instead.
   let siteType = input.type || 'paid'
   if (siteType === 'paid') {
     const gate = await planGateError(session.user.id!, ['ONLINE_PAYMENTS'])

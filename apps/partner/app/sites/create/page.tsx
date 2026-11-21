@@ -18,7 +18,7 @@ export default async function CreateSitePage() {
   // Resolve the sunbed-rental fee for the price-breakdown preview. There's no
   // site yet, so we use the partner-only context (matches by country).
   const ctx = await getPartnerFeeContext(session.user.id!)
-  const tier = ctx.tier ?? 'GRATIS'
+  const tier = ctx.tier ?? 'STARTER'
   const serviceFee = resolveServiceFee(
     [],
     ctx.partnerAccount?.serviceFees ?? [],

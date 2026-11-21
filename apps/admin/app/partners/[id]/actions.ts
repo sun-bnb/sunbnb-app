@@ -29,10 +29,10 @@ async function requireSudo() {
 // ─── Set the partner's plan ─────────────────────────────────────────────────
 
 /**
- * Admin moves a partner between plans, including onto and off Business (a custom
- * agreement only we set up). Goes through `setPartnerPlan` as 'admin': no
- * self-serve or limit checks (existing sites and sunbeds are kept), and leaving
- * Business deletes the agreement (CustomSubscription + partner-level ServiceFee rows).
+ * Admin sets a partner's plan without Stripe billing (a complimentary plan).
+ * Goes through `setPartnerPlan` as 'admin': no self-serve, billing or limit
+ * checks (existing sites and sunbeds are kept); leaving an admin-only plan
+ * (`selfServe: false`, none today) deletes its agreement.
  */
 export async function setPartnerTier(
   accountId: string,

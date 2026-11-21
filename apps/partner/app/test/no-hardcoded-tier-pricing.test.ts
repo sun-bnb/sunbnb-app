@@ -8,7 +8,7 @@
  *
  * Flags, in non-test .ts/.tsx under app/ and lib/:
  *   1. Declaring a TIER_FEES / TIER_PRICES / TIER_COMMISSIONS-style constant.
- *   2. An object entry keyed by a tier (GRATIS|TEMPORADA|GRUPO) whose value is a
+ *   2. An object entry keyed by a tier (STARTER|PRO|BUSINESS) whose value is a
  *      number or percent/price string literal, e.g. `PRO: '2%'`, `BUSINESS: 79`.
  * Tier-keyed entries with other values (labels, icons, enums) are not flagged.
  */
@@ -22,7 +22,7 @@ const PARTNER_ROOT = path.resolve(__dirname, '../..')
 const CONSTANT_RE = /\bTIER_(?:FEES?|PRICES?|COMMISSIONS?|RATES?)\b/
 // `PRO: '2%'`, `PRO: "€29"`, `BUSINESS: 79`, `STARTER: 1.5,` — value is only a number / money / percent literal
 const TIER_KEYED_LITERAL_RE =
-  /\b(?:GRATIS|TEMPORADA|GRUPO)\s*:\s*(?:(['"`])\s*[€$]?\s*\d+(?:[.,]\d+)?\s*[%€$]?\s*\1|\d+(?:\.\d+)?)\s*[,}\n]/
+  /\b(?:STARTER|PRO|BUSINESS)\s*:\s*(?:(['"`])\s*[€$]?\s*\d+(?:[.,]\d+)?\s*[%€$]?\s*\1|\d+(?:\.\d+)?)\s*[,}\n]/
 
 export function findTierPricingViolations(src: string): { line: number; snippet: string }[] {
   const out: { line: number; snippet: string }[] = []
@@ -36,16 +36,16 @@ export function findTierPricingViolations(src: string): { line: number; snippet:
 
 describe('No-hardcoded-tier-pricing guard', () => {
   it('matcher flags the legacy stale constants and tier-keyed literals', () => {
-    const legacy = "const TIER_FEES: Record<string, string> = { GRATIS: '0%', TEMPORADA: '2%', GRUPO: '0%' }"
+    const legacy = "const TIER_FEES: Record<string, string> = { STARTER: '0%', PRO: '2%', BUSINESS: '0%' }"
     expect(findTierPricingViolations(legacy)).toHaveLength(1)
-    expect(findTierPricingViolations('  TEMPORADA: 29,')).toHaveLength(1)
-    expect(findTierPricingViolations("  GRUPO: '€79',")).toHaveLength(1)
+    expect(findTierPricingViolations('  PRO: 29,')).toHaveLength(1)
+    expect(findTierPricingViolations("  BUSINESS: '€79',")).toHaveLength(1)
   })
 
   it('matcher ignores unrelated tier keys and percentages', () => {
-    expect(findTierPricingViolations("const x = { TEMPORADA: 'Temporada', GRUPO: 'Grupo' }")).toHaveLength(0)
+    expect(findTierPricingViolations("const x = { PRO: 'Temporada', BUSINESS: 'Grupo' }")).toHaveLength(0)
     expect(findTierPricingViolations('<div className="w-[50%]" style={{ width: "100%" }} />')).toHaveLength(0)
-    expect(findTierPricingViolations('const vat = { TEMPORADA: PRICING_TIERS.TEMPORADA.monthlyPrice }')).toHaveLength(0)
+    expect(findTierPricingViolations('const vat = { PRO: PRICING_TIERS.PRO.monthlyPrice }')).toHaveLength(0)
     expect(findTierPricingViolations("const tax = '21%'")).toHaveLength(0)
   })
 

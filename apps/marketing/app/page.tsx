@@ -69,14 +69,14 @@ export default async function LandingPage({
     checkin: t('Hero.slides.checkin.tag'),
     invoice: t('Hero.slides.invoice.tag'),
   }
-  // Faq.costA reads the Temporada rate and cap from the catalogue billing uses (CR-002).
-  const temporada = PRICING_TIERS.TEMPORADA
+  // Faq.costA reads the rates from the catalogue billing uses.
+  const rate = (tier: keyof typeof PRICING_TIERS) => PRICING_TIERS[tier].commissionPercent['sunbed-rental']
   const faq = [
     ['noPhone', {}],
     ['hardware', {}],
     ['assistant', {}],
     ['paid', {}],
-    ['cost', { pct: temporada.commissionPercent['sunbed-rental'], cap: temporada.monthlyCommissionCapPerSite ?? 0 }],
+    ['cost', { pct: rate('STARTER'), pro: rate('PRO'), business: rate('BUSINESS') }],
     ['languages', {}],
   ] as const
 

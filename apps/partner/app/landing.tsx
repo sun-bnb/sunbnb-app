@@ -1,5 +1,7 @@
 'use client'
 
+import { PRICING_TIERS, PRICING_TIER_ORDER, FEATURED_TIER } from '@repo/data/pricing-tiers'
+import { planCard } from '@/lib/plan-card-lines'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -121,22 +123,25 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
     body: t(`more.${k}.body`),
   }))
 
-  // The price list shown here is the PUBLISHED one (Starter 6% / Pro €29 + 3% /
-  // Business €79 + 1.5%), deliberately NOT PRICING_TIERS: the funding deck went
-  // out with these numbers, so the public page keeps them until we choose to
-  // publish the new plans. Display only — billing, the in-app subscription page
-  // and admin all run on PRICING_TIERS (Free / Pro / Business). To switch the
-  // page over, restore the planCard(...) cards from git (commit 5a7087fd).
-  const tp = useTranslations('Landing.publishedPlans')
-  const publishedPlans = [
-    { key: 'starter', name: 'Starter', monthly: 0, commission: 6, featured: false,
-      features: [tp('oneVenue'), tp('starterAll'), tp('supportCommunity')] },
-    { key: 'pro', name: 'Pro', monthly: 29, commission: 3, featured: true,
-      features: [tp('upToVenues', { count: 3 }), tp('everythingIn', { plan: 'Starter' }), tp('offPlatform'), tp('supportPriority')] },
-    { key: 'business', name: 'Business', monthly: 79, commission: 1.5, featured: false,
-      features: [tp('upToVenues', { count: 10 }), tp('everythingIn', { plan: 'Pro' }), tp('branded'), tp('supportDedicated')] },
-  ]
-  const publishedRates = { starter: 6, pro: 3, business: 1.5 }
+  // Card copy per tier. Every number (price, commission, venues) comes from
+  // PRICING_TIERS, the same catalogue the DB is seeded from, so the page can't
+  // advertise a rate the cascade doesn't charge. Only the wording is translated.
+  const tp = useTranslations('Landing.plans')
+
+  // Interpolated into money.commission.body.
+  const commissionRates = {
+    starter: PRICING_TIERS.STARTER.commissionPercent['sunbed-rental'],
+    pro: PRICING_TIERS.PRO.commissionPercent['sunbed-rental'],
+    business: PRICING_TIERS.BUSINESS.commissionPercent['sunbed-rental'],
+  }
+
+  const plans = PRICING_TIER_ORDER.map((tier) => ({
+    tier,
+    name: PRICING_TIERS[tier].name,
+    quoteOnly: PRICING_TIERS[tier].quoteOnly,
+    featured: tier === FEATURED_TIER,
+    ...planCard(tier, tp),
+  }))
 
   return (
     <div className="min-h-screen bg-white text-gray-900">
@@ -215,9 +220,7 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
             {(['merchant', 'listed', 'commission', 'cash'] as const).map((k) => (
               <li key={k} className="border-t border-white/15 pt-4">
                 <p className="font-semibold">{t(`money.${k}.title`)}</p>
-                <p className="mt-1 text-sm leading-relaxed text-gray-400">
-                  {k === 'commission' ? tp('commissionBody', publishedRates) : t(`money.${k}.body`)}
-                </p>
+<p className="mt-1 text-sm leading-relaxed text-gray-400">{t(`money.${k}.body`, commissionRates)}</p>
               </li>
             ))}
           </ul>
@@ -227,11 +230,11 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
       {/* Pricing */}
       <section className="mx-auto max-w-5xl xl:max-w-6xl px-4 sm:px-6 lg:px-8 py-14 sm:py-20">
         <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">{t('plans.title')}</h2>
-        <p className="mt-2 text-gray-600">{tp('subtitle')}</p>
+        <p className="mt-2 text-gray-600">{t('plans.subtitle')}</p>
         <div className="mt-10 grid gap-6 md:grid-cols-3 md:gap-4 lg:gap-6 xl:gap-8">
-          {publishedPlans.map((p) => (
+          {plans.map((p) => (
             <div
-              key={p.key}
+              key={p.tier}
               className={`flex flex-col rounded-xl border bg-white p-6 md:p-5 lg:p-6 xl:p-8 ${p.featured ? 'border-2 border-gray-900' : 'border-gray-200'}`}
             >
               <div className="flex items-center justify-between">
@@ -244,13 +247,15 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
               </div>
               {/* Commission is the headline term of the deal: what a partner pays on every sale. */}
               <p className="mt-5">
-                <span className="text-4xl font-bold tracking-tight">{p.commission}%</span>
+                <span className="text-4xl font-bold tracking-tight">{p.headline}</span>
               </p>
-              <p className="text-sm text-gray-500">{tp('commissionLabel')}</p>
-              <p className="mt-4 border-t border-gray-100 pt-4">
-                <span className="text-xl font-semibold">{p.monthly === 0 ? tp('free') : `€${p.monthly}`}</span>
-                <span className="ml-1 text-sm text-gray-500">{p.monthly === 0 ? tp('freeNote') : tp('perMonth')}</span>
-              </p>
+              <p className="text-sm text-gray-500">{p.headlineNote}</p>
+              {p.price && (
+                <p className="mt-4 border-t border-gray-100 pt-4">
+                  <span className="text-xl font-semibold">{p.price}</span>
+                  <span className="ml-1 text-sm text-gray-500">{p.priceNote}</span>
+                </p>
+              )}
               <ul className="mt-4 flex-1 space-y-2">
                 {p.features.map((f) => (
                   <li key={f} className="flex gap-2 text-sm text-gray-600">
@@ -261,14 +266,24 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
                   </li>
                 ))}
               </ul>
-              <SignInLink
-                cta={`pricing-${p.key}`}
-                className={`mt-6 w-full text-center ${
-                  p.featured ? 'btn-primary' : 'rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-gray-50'
-                }`}
-              >
-                {t('plans.cta')}
-              </SignInLink>
+              {p.quoteOnly ? (
+                <a
+                  href={`mailto:partners@sunbnb.app?subject=${encodeURIComponent(t('plans.quoteSubject'))}`}
+                  onClick={() => trackCta(`pricing-${p.tier.toLowerCase()}`, 'generate_lead')}
+                  className="mt-6 w-full rounded-lg border border-gray-300 px-4 py-2.5 text-center text-sm font-medium transition-colors hover:bg-gray-50"
+                >
+                  {t('plans.quote')}
+                </a>
+              ) : (
+                <SignInLink
+                  cta={`pricing-${p.tier.toLowerCase()}`}
+                  className={`mt-6 w-full text-center ${
+                    p.featured ? 'btn-primary' : 'rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-gray-50'
+                  }`}
+                >
+                  {t('plans.cta')}
+                </SignInLink>
+              )}
             </div>
           ))}
         </div>

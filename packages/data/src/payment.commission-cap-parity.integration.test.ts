@@ -1,5 +1,6 @@
 /**
- * CR-002 acceptance: the EUR 199 / site / month cap on Temporada's 2% commission, pinned across
+ * The commission cap machinery (CR-002: EUR 199 / site / month on 2%; no published plan has a cap
+ * today, so a capped plan row is set up here), pinned across
  * EVERY charge path and the PLATFORM invoice to the cent. Charge sides: the checkout intent
  * (Viva online `isvAmount` and Stripe `application_fee_amount` both take `intent.applicationFee`;
  * Stripe adds its processing pass-through on top as a separate line), the body actually sent to
@@ -66,13 +67,18 @@ function stubMollie(paymentId: string) {
   return () => sent
 }
 
-/** A Temporada partner with the seed's platform rows (2% sunbeds + rentals, 0% F&B). */
-async function temporadaSite(accountFee?: Record<string, unknown>) {
+/**
+ * A partner on a CAPPED plan: the cap machinery stays for later even though no
+ * published plan has a cap today, so the plan row is given the CR-002 terms
+ * explicitly (2% on sunbeds + rentals, 0% F&B, EUR 199 per site per month).
+ */
+const CAPPED_RATES: Record<string, number> = { 'sunbed-rental': 2, 'equipment-rental': 2, 'food-and-beverage': 0 }
+async function cappedPlanSite(accountFee?: Record<string, unknown>) {
   const user = await createTestUser()
   await createTestPartnerAccount(user.id, { mollieAccessToken: 'tok', mollieProfileId: 'pfl_1' })
   const plan = await prisma.subscriptionPlan.upsert({
-    where: { tier: 'TEMPORADA' },
-    create: { tier: 'TEMPORADA', name: 'Temporada', monthlyPrice: 0, maxSites: 3, monthlyCommissionCapPerSite: 199 },
+    where: { tier: 'PRO' },
+    create: { tier: 'PRO', name: 'Pro', monthlyPrice: 29, maxSites: 3, monthlyCommissionCapPerSite: 199 },
     update: { monthlyCommissionCapPerSite: 199 },
   })
   await prisma.subscription.create({ data: { partnerAccountId: user.id, planId: plan.id } })
@@ -81,7 +87,7 @@ async function temporadaSite(accountFee?: Record<string, unknown>) {
   for (const code of COMMISSIONED_SERVICE_CODES) {
     await createTestServiceFee(settings.id, {
       serviceCode: code, chargeType: 'percentage', feeAmount: null,
-      percentage: PRICING_TIERS.TEMPORADA.commissionPercent[code], subscriptionTier: 'TEMPORADA',
+      percentage: CAPPED_RATES[code], subscriptionTier: 'PRO',
     })
   }
   if (accountFee) {
@@ -116,16 +122,16 @@ async function reservationAllPaths(userId: string, siteId: string, total: number
   }
 }
 
-describe('CR-002 cap: collected === invoiced on Temporada', () => {
+describe('commission cap (capped plan): collected === invoiced', () => {
   it('EUR 100 online takes EUR 2.00 on Mollie, Stripe, Viva and the invoice', async () => {
-    const { user, site } = await temporadaSite()
+    const { user, site } = await cappedPlanSite()
     const r = await reservationAllPaths(user.id, site.id, 100, 'tr_cap1')
-    console.log('[cap] EUR 100 on Temporada →', JSON.stringify(r))
+    console.log('[cap] EUR 100 on the capped plan →', JSON.stringify(r))
     expect(r).toEqual({ viva: 2, stripe: 2, mollie: 2, invoice: 2 })
   })
 
   it('a site already at EUR 199 this month takes 0 everywhere (no PLATFORM invoice)', async () => {
-    const { user, site } = await temporadaSite()
+    const { user, site } = await cappedPlanSite()
     await usedBefore(site.id, 199)
     const r = await reservationAllPaths(user.id, site.id, 100, 'tr_cap2')
     console.log('[cap] at EUR 199 →', JSON.stringify(r))
@@ -133,7 +139,7 @@ describe('CR-002 cap: collected === invoiced on Temporada', () => {
   })
 
   it('a booking crossing the cap takes only the headroom (EUR 198.50 used → 0.50)', async () => {
-    const { user, site } = await temporadaSite()
+    const { user, site } = await cappedPlanSite()
     await usedBefore(site.id, 198.5)
     const r = await reservationAllPaths(user.id, site.id, 100, 'tr_cap3')
     console.log('[cap] crossing →', JSON.stringify(r))
@@ -141,7 +147,7 @@ describe('CR-002 cap: collected === invoiced on Temporada', () => {
   })
 
   it('the next month restarts: EUR 199 last month does not cap this month', async () => {
-    const { user, site } = await temporadaSite()
+    const { user, site } = await cappedPlanSite()
     await usedBefore(site.id, 199, capMonthKey(new Date(Date.now() - 40 * 24 * 3600 * 1000)))
     const r = await reservationAllPaths(user.id, site.id, 100, 'tr_cap4')
     console.log('[cap] next month →', JSON.stringify(r))
@@ -149,7 +155,7 @@ describe('CR-002 cap: collected === invoiced on Temporada', () => {
   })
 
   it('the cap is per site: a second site of the same partner is unaffected', async () => {
-    const { user, site } = await temporadaSite()
+    const { user, site } = await cappedPlanSite()
     await usedBefore(site.id, 199)
     const other = await createTestSite(user.id, { vat: 21 })
     const r = await reservationAllPaths(user.id, other.id, 100, 'tr_cap5')
@@ -157,7 +163,7 @@ describe('CR-002 cap: collected === invoiced on Temporada', () => {
   })
 
   it('rentals share the site cap: at EUR 199 a rental takes 0 on intent, Mollie and invoice', async () => {
-    const { user, site } = await temporadaSite()
+    const { user, site } = await cappedPlanSite()
     await usedBefore(site.id, 199)
     const item = await createTestRentalItem(site.id, { name: 'Board' })
     const b = await createTestRentalBooking(user.id, site.id, item.id, {
@@ -173,7 +179,7 @@ describe('CR-002 cap: collected === invoiced on Temporada', () => {
   })
 
   it('a rental of EUR 100 below the cap takes 2.00 on every side', async () => {
-    const { user, site } = await temporadaSite()
+    const { user, site } = await cappedPlanSite()
     const item = await createTestRentalItem(site.id, { name: 'Kayak' })
     const b = await createTestRentalBooking(user.id, site.id, item.id, {
       status: 'pending', paymentRef: null, paymentAmount: 100, totalPrice: 100,
@@ -188,7 +194,7 @@ describe('CR-002 cap: collected === invoiced on Temporada', () => {
   })
 
   it('a negotiated account fee wins the cascade and is NOT capped (5% at the cap → 5.00)', async () => {
-    const { user, site } = await temporadaSite({ serviceCode: 'sunbed-rental', chargeType: 'percentage', percentage: 5, feeAmount: null })
+    const { user, site } = await cappedPlanSite({ serviceCode: 'sunbed-rental', chargeType: 'percentage', percentage: 5, feeAmount: null })
     await usedBefore(site.id, 199)
     const r = await reservationAllPaths(user.id, site.id, 100, 'tr_cap8')
     console.log('[cap] negotiated 5% at cap →', JSON.stringify(r))
@@ -196,7 +202,7 @@ describe('CR-002 cap: collected === invoiced on Temporada', () => {
   })
 
   it('an abandoned charge gives its headroom back via the cleanup sweep', async () => {
-    const { user, site } = await temporadaSite()
+    const { user, site } = await cappedPlanSite()
     await usedBefore(site.id, 190)
     const a = await createTestInventoryItem(user.id, site.id, { number: 1 })
     const res = await createTestReservation(user.id, site.id, [a.id], { paymentAmount: 500, paymentRef: null })
@@ -224,7 +230,7 @@ describe('CR-002 (M-68): card at the venue takes 0 commission and never touches 
   }
 
   it('Viva terminal (viva_): PARTNER invoice gross, NO PLATFORM invoice, no cap entry', async () => {
-    const { user, site } = await temporadaSite()
+    const { user, site } = await cappedPlanSite()
     const { res, platform, partner } = await cardPresent(user.id, site.id, 100, 'viva_sess-cardpresent-1')
     expect(partner.totalAmount).toBe(100)
     expect(platform).toBeNull() // collected (ISV fee 0) === invoiced (0)
@@ -233,7 +239,7 @@ describe('CR-002 (M-68): card at the venue takes 0 commission and never touches 
   })
 
   it('Tap to Pay (stripe_pi_): PLATFORM invoice carries the processing pass-through only, no commission, no cap entry', async () => {
-    const { user, site } = await temporadaSite()
+    const { user, site } = await cappedPlanSite()
     const { platform } = await cardPresent(user.id, site.id, 100, 'stripe_pi_cardpresent_1')
     // A Stripe ref still gets a processing-only PLATFORM invoice; its whole total is the pass-through.
     expect(platform).not.toBeNull()
@@ -243,7 +249,7 @@ describe('CR-002 (M-68): card at the venue takes 0 commission and never touches 
   })
 
   it('card-present sales leave the month\'s headroom intact: EUR 198 used + a EUR 500 card sale → the next online booking still takes the EUR 1.00 headroom', async () => {
-    const { user, site } = await temporadaSite()
+    const { user, site } = await cappedPlanSite()
     await usedBefore(site.id, 198)
     await cardPresent(user.id, site.id, 500, 'viva_sess-cardpresent-2')
     await cardPresent(user.id, site.id, 500, 'stripe_pi_cardpresent_2')
@@ -252,13 +258,13 @@ describe('CR-002 (M-68): card at the venue takes 0 commission and never touches 
   })
 
   it('even a negotiated account fee is not charged on card at the venue', async () => {
-    const { user, site } = await temporadaSite({ serviceCode: 'sunbed-rental', chargeType: 'percentage', percentage: 5, feeAmount: null })
+    const { user, site } = await cappedPlanSite({ serviceCode: 'sunbed-rental', chargeType: 'percentage', percentage: 5, feeAmount: null })
     const { platform } = await cardPresent(user.id, site.id, 100, 'viva_sess-cardpresent-3')
     expect(platform).toBeNull()
   })
 })
 
-describe('CR-002: F&B takes 0 commission on every plan; negotiated fees still win', () => {
+describe('plan rates: the same % on F&B as on sunbeds; negotiated fees still win', () => {
   const platformRows = PRICING_TIER_ORDER.flatMap((tier) =>
     COMMISSIONED_SERVICE_CODES.map((code) => ({
       siteId: null, accountId: null, serviceCode: code, subscriptionTier: tier as SubscriptionTier,
@@ -266,17 +272,16 @@ describe('CR-002: F&B takes 0 commission on every plan; negotiated fees still wi
     })),
   ) as never[]
 
-  it.each(PRICING_TIER_ORDER)('%s: a EUR 100 F&B order takes 0', (tier) => {
+  it.each(PRICING_TIER_ORDER)('%s: a EUR 100 F&B order takes the plan rate', (tier) => {
     const fee = resolveServiceFee([], [], platformRows, 'food-and-beverage', tier)
-    console.log(`[fnb] ${tier} →`, calculateServiceFeeAmount(fee, 100))
-    expect(calculateServiceFeeAmount(fee, 100)).toBe(0)
+    expect(calculateServiceFeeAmount(fee, 100)).toBe(PRICING_TIERS[tier].commissionPercent['sunbed-rental'])
   })
 
   it('a site fee beats an account fee beats the plan rate', () => {
     const site = [{ siteId: 's', accountId: null, serviceCode: 'sunbed-rental', chargeType: 'percentage', percentage: 1, feeAmount: null }] as never[]
     const account = [{ siteId: null, accountId: 'a', serviceCode: 'sunbed-rental', chargeType: 'percentage', percentage: 4, feeAmount: null }] as never[]
-    expect(calculateServiceFeeAmount(resolveServiceFee(site, account, platformRows, 'sunbed-rental', 'TEMPORADA'), 100)).toBe(1)
-    expect(calculateServiceFeeAmount(resolveServiceFee([], account, platformRows, 'sunbed-rental', 'TEMPORADA'), 100)).toBe(4)
-    expect(calculateServiceFeeAmount(resolveServiceFee([], [], platformRows, 'sunbed-rental', 'TEMPORADA'), 100)).toBe(2)
+    expect(calculateServiceFeeAmount(resolveServiceFee(site, account, platformRows, 'sunbed-rental', 'PRO'), 100)).toBe(1)
+    expect(calculateServiceFeeAmount(resolveServiceFee([], account, platformRows, 'sunbed-rental', 'PRO'), 100)).toBe(4)
+    expect(calculateServiceFeeAmount(resolveServiceFee([], [], platformRows, 'sunbed-rental', 'PRO'), 100)).toBe(3)
   })
 })

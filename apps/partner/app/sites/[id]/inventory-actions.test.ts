@@ -408,7 +408,7 @@ describe('deleteItemsByGroup', () => {
 describe('createInventoryItem — plan hamaca limit', () => {
   it('Gratis site at 100 hamacas cannot add a 101st: refused, nothing written', async () => {
     authorizeOwner()
-    vi.mocked(checkHamacaLimit).mockResolvedValueOnce({ allowed: false, current: 100, limit: 100, adding: 2, tier: 'GRATIS' })
+    vi.mocked(checkHamacaLimit).mockResolvedValueOnce({ allowed: false, current: 100, limit: 100, adding: 2, tier: 'STARTER' })
 
     const res = await createInventoryItem({ siteId: SITE_ID })
 
@@ -422,7 +422,7 @@ describe('createInventoryItem — plan hamaca limit', () => {
 
   it('Temporada site at 300 hamacas is refused too', async () => {
     authorizeOwner()
-    vi.mocked(checkHamacaLimit).mockResolvedValueOnce({ allowed: false, current: 300, limit: 300, adding: 2, tier: 'TEMPORADA' })
+    vi.mocked(checkHamacaLimit).mockResolvedValueOnce({ allowed: false, current: 300, limit: 300, adding: 2, tier: 'PRO' })
 
     const res = await createInventoryItem({ siteId: SITE_ID })
 
@@ -433,7 +433,7 @@ describe('createInventoryItem — plan hamaca limit', () => {
 
   it('an over-limit (150 on Gratis) site can still save properties and location without adding', async () => {
     authorizeOwner()
-    vi.mocked(checkHamacaLimit).mockResolvedValue({ allowed: false, current: 150, limit: 100, adding: 1, tier: 'GRATIS' })
+    vi.mocked(checkHamacaLimit).mockResolvedValue({ allowed: false, current: 150, limit: 100, adding: 1, tier: 'STARTER' })
     vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({ siteId: SITE_ID, site: { userId: OWNER_ID } } as any)
     vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
 
@@ -443,6 +443,6 @@ describe('createInventoryItem — plan hamaca limit', () => {
     expect(a.status).toBe('ok')
     expect(b.status).toBe('ok')
     expect(vi.mocked(checkHamacaLimit)).not.toHaveBeenCalled()
-    vi.mocked(checkHamacaLimit).mockResolvedValue({ allowed: true, current: 0, limit: 100, adding: 0, tier: 'GRATIS' })
+    vi.mocked(checkHamacaLimit).mockResolvedValue({ allowed: true, current: 0, limit: 100, adding: 0, tier: 'STARTER' })
   })
 })

@@ -1,10 +1,12 @@
 /**
- * Plan gating and hamaca limits (CR-002) — SERVER-ONLY.
+ * Plan gating and hamaca limits — SERVER-ONLY.
  *
- * Gratis: guests pay on site only, so no online card payment and no food-and-drink
- * ordering. "Pay on site" (an unpaid site, cash or card at the venue) is the normal
- * Gratis mode and is never blocked here. Temporada / Grupo: allowed. A per-partner
- * `CustomSubscription.featureOverrides` wins over the plan default.
+ * Each plan's defaults come from the catalogue (PRICING_TIERS → TIER_FEATURE_DEFAULTS):
+ * online card payments and food-and-drink ordering are on for every plan today, and
+ * off-platform billing (an unpaid, pay-on-site site) needs Pro or Business. A
+ * per-partner `CustomSubscription.featureOverrides` wins over the plan default.
+ * Kept as live machinery so a plan or an agreement can switch a feature off later
+ * (CR-002 ran a free plan without online payments).
  *
  * The UI hides gated options, but the guest UI is not a security boundary: every
  * charge-creating path (Mollie routes, `createOnlineCheckout` for Stripe / Viva) calls
@@ -12,8 +14,8 @@
  * tabs and table deposits, from `Restaurant.partnerAccountId` (a User.id).
  *
  * Hamacas: one `InventoryItem` row = one lounger (a balinese bed is one row). Parasols
- * are `SunbedGroup` units and never count. A venue already over its limit keeps every
- * sunbed (grandfathered, founder decision M-65); it only cannot add more.
+ * are `SunbedGroup` units and never count. No plan limits them today (null); a venue
+ * over a limit keeps every sunbed, it only cannot add more.
  */
 import prisma from '../index'
 import { resolveEffectiveSubscription, type SubscriptionFeatureKey } from './subscription'
@@ -125,11 +127,11 @@ export async function countHamacas(siteId: string): Promise<number> {
 
 /**
  * Check adding `adding` hamacas to an existing site against its owner's plan
- * (Gratis 100, Temporada 300, Grupo from CustomSubscription.maxHamacasPerSite).
+ * (null = no limit; a CustomSubscription.maxHamacasPerSite wins).
  */
 export async function checkHamacaLimit(siteId: string, adding: number): Promise<HamacaLimitResult> {
   const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
-  if (!site) return { allowed: false, current: 0, limit: 0, adding, tier: 'GRATIS' }
+  if (!site) return { allowed: false, current: 0, limit: 0, adding, tier: 'STARTER' }
   const [effective, current] = await Promise.all([
     effectiveSubscriptionForPartnerUser(site.userId),
     countHamacas(siteId),

@@ -2,9 +2,8 @@
  * Subscription Service
  *
  * Provides helpers to query a partner's subscription and enforce plan limits
- * (sites per account, hamacas per site) and plan features (CR-002: Free / Pro /
- * Business, code keys GRATIS / TEMPORADA / GRUPO), and changes a partner's plan
- * (`setPartnerPlan`).
+ * (sites per account, hamacas per site) and plan features (Starter / Pro /
+ * Business), and changes a partner's plan (`setPartnerPlan`, Stripe webhooks).
  *
  * SECURITY / TRUST BOUNDARY:
  *   `syncStripeSubscription` and `handleSubscriptionCanceled` mutate
@@ -27,7 +26,6 @@ export {
   PRICING_TIER_ORDER,
   FEATURED_TIER,
   DEFAULT_TIER,
-  GRUPO_DEFAULT_MAX_SITES,
   UNLIMITED_SITES,
   COMMISSIONED_SERVICE_CODES,
   CAPPED_SERVICE_CODES,
@@ -63,16 +61,21 @@ export const SUBSCRIPTION_FEATURES = {
 export type SubscriptionFeatureKey = keyof typeof SUBSCRIPTION_FEATURES
 
 /**
- * Per-tier default entitlements.
- * Source of truth for server-side enforcement. Marketing copy in the apps
- * is separate and should align with this map over time.
+ * Per-tier default entitlements, read from the catalogue (PRICING_TIERS).
+ * Source of truth for server-side enforcement; a CustomSubscription's
+ * `featureOverrides` wins per partner.
  */
-export const TIER_FEATURE_DEFAULTS: Record<SubscriptionTier, Record<SubscriptionFeatureKey, boolean>> = {
-  // Gratis: "pay on site" is the normal mode, so off-platform is always allowed.
-  GRATIS:    { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: false, FOOD_AND_BEVERAGE: false },
-  TEMPORADA: { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: true,  FOOD_AND_BEVERAGE: true },
-  GRUPO:     { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: true,  FOOD_AND_BEVERAGE: true },
-}
+export const TIER_FEATURE_DEFAULTS: Record<SubscriptionTier, Record<SubscriptionFeatureKey, boolean>> =
+  Object.fromEntries(
+    (Object.keys(PRICING_TIERS) as SubscriptionTier[]).map((tier) => [
+      tier,
+      {
+        OFF_PLATFORM_BILLING: PRICING_TIERS[tier].offPlatformBilling,
+        ONLINE_PAYMENTS: PRICING_TIERS[tier].onlinePayments,
+        FOOD_AND_BEVERAGE: PRICING_TIERS[tier].foodAndBeverage,
+      },
+    ]),
+  ) as Record<SubscriptionTier, Record<SubscriptionFeatureKey, boolean>>
 
 /**
  * Resolve the effective feature entitlements for a partner.
@@ -121,24 +124,22 @@ export function resolveEffectiveSubscription(
 ) {
   const tier = plan?.tier ?? DEFAULT_TIER
   const fallback = PRICING_TIERS[DEFAULT_TIER]
-  // A plan row written before the CR-002 expand migration has NULL limits;
-  // `undefined` (column not selected) falls back to the catalogue too. A NULL
-  // hamaca limit on a seeded row means "no limit" (Grupo without agreement).
+  // `undefined` (column not selected) falls back to the catalogue. A NULL
+  // hamaca limit on a seeded row means "no limit".
   const planHamacas = plan
     ? plan.maxHamacasPerSite !== undefined ? plan.maxHamacasPerSite : PRICING_TIERS[plan.tier].maxHamacasPerSite
     : fallback.maxHamacasPerSite
   return {
     tier,
-    // The catalogue name, not the row's: plans were renamed Free / Pro / Business
-    // after the rows were seeded as Gratis / Temporada / Grupo.
+    // The catalogue name, not the row's, so a stale row name never shows.
     name:              PRICING_TIERS[tier].name,
     monthlyPrice:      plan?.monthlyPrice ?? 0,
-    // A plan without a catalogue limit (Business) is unlimited until its agreement
-    // sets one; the stored row value is not consulted for it.
+    // A plan without a catalogue limit is unlimited until an agreement sets one;
+    // the stored row value is not consulted for it.
     maxSites:
       custom?.maxSites ??
       (PRICING_TIERS[tier].maxSites === null ? UNLIMITED_SITES : (plan?.maxSites ?? fallback.maxSites ?? 1)),
-    /** null = no limit. Custom (Grupo agreement) wins over the plan. */
+    /** null = no limit. A custom agreement wins over the plan. */
     maxHamacasPerSite: custom?.maxHamacasPerSite ?? planHamacas,
     /** null = uncapped. Read by the commission-cap ledger for plan-rate fees only. */
     monthlyCommissionCapPerSite: plan
@@ -215,8 +216,13 @@ export type PlanChangeResult =
   | { status: 'ok'; tier: SubscriptionTier; changed: boolean }
   | {
       status: 'error'
-      /** not_self_serve: Business picked by a partner · custom_agreement: a Business partner tried to leave by itself · over_limits: downgrade refused */
-      code: 'no_account' | 'no_plan_row' | 'not_self_serve' | 'custom_agreement' | 'over_limits'
+      /**
+       * not_self_serve: an admin-only plan picked by a partner · custom_agreement: a partner on an admin-only
+       * plan tried to leave by itself · needs_checkout: a paid plan, bought through Stripe Checkout ·
+       * manage_billing: the partner pays for its plan, so it changes or cancels it in the Stripe billing
+       * portal · over_limits: downgrade refused
+       */
+      code: 'no_account' | 'no_plan_row' | 'not_self_serve' | 'custom_agreement' | 'needs_checkout' | 'manage_billing' | 'over_limits'
       errors: string[]
       issues?: PlanFitIssues
     }
@@ -225,17 +231,18 @@ export type PlanChangeResult =
  * THE writer of a partner's plan (Subscription.planId), for the partner's
  * subscription page and for admin.
  *
- * - A partner may move only between self-serve plans (Free ⇄ Pro). Business is a
- *   custom agreement set up by us, so a partner can neither pick it nor leave it.
+ * - A partner moves itself here only onto a FREE self-serve plan (Starter), and only
+ *   while it has no paid Stripe subscription. A paid plan is bought through Stripe
+ *   Checkout (`syncStripeSubscription` sets it from the webhook); a paying partner
+ *   changes or cancels through the Stripe billing portal (cancel → back to Starter
+ *   in `handleSubscriptionCanceled`).
+ * - Plans with `selfServe: false` (none today) are custom agreements set up by us:
+ *   a partner can neither pick nor leave one, and leaving one drops its agreement —
+ *   the CustomSubscription row and the partner-level ServiceFee rows.
  * - A partner's move to a plan whose limits it already exceeds is refused, with
- *   the sites and sunbeds that are over (founder decision 2026-11-19: block for now).
- *   Admin may move anyone anywhere: existing sites and sunbeds are kept, the
+ *   the sites and sunbeds that are over. Admin may move anyone anywhere without
+ *   billing (a complimentary plan): existing sites and sunbeds are kept, the
  *   limits only stop adding more.
- * - Leaving Business drops its agreement: the CustomSubscription row (limits,
- *   feature overrides) and the partner-level ServiceFee rows (negotiated rates),
- *   so the partner falls back to the plain catalogue terms of its new plan.
- *
- * No billing: no plan has a monthly price, and Business billing is out of scope.
  */
 export async function setPartnerPlan(
   partnerAccountId: string,
@@ -244,7 +251,10 @@ export async function setPartnerPlan(
 ): Promise<PlanChangeResult> {
   const account = await prisma.partnerAccount.findUnique({
     where: { userId: partnerAccountId },
-    select: { userId: true, subscription: { select: { plan: { select: { tier: true } } } } },
+    select: {
+      userId: true,
+      subscription: { select: { stripeSubscriptionId: true, plan: { select: { tier: true } } } },
+    },
   })
   if (!account) return { status: 'error', code: 'no_account', errors: ['Partner account not found'] }
   const currentTier = account.subscription?.plan.tier ?? DEFAULT_TIER
@@ -255,6 +265,12 @@ export async function setPartnerPlan(
     }
     if (!PRICING_TIERS[currentTier].selfServe) {
       return { status: 'error', code: 'custom_agreement', errors: [`Your ${PRICING_TIERS[currentTier].name} plan is set up with us. Contact us to change it.`] }
+    }
+    if (tier !== currentTier && PRICING_TIERS[tier].monthlyPrice > 0) {
+      return { status: 'error', code: 'needs_checkout', errors: [`${PRICING_TIERS[tier].name} is a paid plan. Subscribe through checkout.`] }
+    }
+    if (tier !== currentTier && account.subscription?.stripeSubscriptionId) {
+      return { status: 'error', code: 'manage_billing', errors: ['You pay for your plan. Change or cancel it in billing.'] }
     }
     if (tier !== currentTier) {
       const sites = await prisma.site.findMany({
@@ -363,14 +379,16 @@ export async function syncStripeSubscription(
 }
 
 /**
- * Handle subscription cancellation from Stripe.
- *
- * CR-002: no plan bills a monthly price any more, so the legacy Pro/Business
- * Stripe subscriptions are cancelled at period end (no refund, founder decision
- * M-65) and the partner STAYS on its current plan (Temporada after the data
- * move). Only the Stripe linkage is cleared — never a downgrade to Gratis.
+ * Handle subscription cancellation from Stripe: the partner goes back to the
+ * default free plan (Starter) and the Stripe linkage is cleared.
  */
 export async function handleSubscriptionCanceled(partnerAccountId: string) {
+  const defaultPlan = await prisma.subscriptionPlan.findUnique({ where: { tier: DEFAULT_TIER } })
+  if (!defaultPlan) {
+    console.error(`[Subscription] ${DEFAULT_TIER} plan not found for downgrade`)
+    return
+  }
+
   const existing = await prisma.subscription.findUnique({
     where: { partnerAccountId },
     select: { id: true },
@@ -383,6 +401,7 @@ export async function handleSubscriptionCanceled(partnerAccountId: string) {
   await prisma.subscription.update({
     where: { partnerAccountId },
     data: {
+      planId: defaultPlan.id,
       status: 'ACTIVE',
       stripeSubscriptionId: null,
       stripeCustomerId: null,
@@ -391,5 +410,5 @@ export async function handleSubscriptionCanceled(partnerAccountId: string) {
     },
   })
 
-  console.log(`[Subscription] Stripe subscription ended for ${partnerAccountId}; plan kept`)
+  console.log(`[Subscription] Canceled & downgraded ${partnerAccountId} → ${DEFAULT_TIER}`)
 }

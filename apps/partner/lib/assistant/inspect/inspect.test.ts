@@ -101,7 +101,7 @@ describe('inspect tool: scope and safety', () => {
   })
 
   it('every provider reads only the ctx site / account (never anything else)', async () => {
-    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValue({ tier: 'TEMPORADA', name: 'Pro', monthlyPrice: 29, maxSites: 3, isCustom: false, features: { OFF_PLATFORM_BILLING: true } } as never)
+    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValue({ tier: 'PRO', name: 'Pro', monthlyPrice: 29, maxSites: 3, isCustom: false, features: { OFF_PLATFORM_BILLING: true } } as never)
     vi.mocked(getFlagStates).mockResolvedValue({ assistant: { name: 'assistant', enabled: true, source: 'account' }, devices: { name: 'devices', enabled: false, source: 'default' } } as never)
     vi.mocked(prisma.site.count).mockResolvedValue(1 as never)
     vi.mocked(prisma.siteWorkingHours.count).mockResolvedValue(2 as never)
@@ -331,8 +331,8 @@ describe('space', () => {
 
 describe('features', () => {
   const sub = (tier: string, over: Record<string, unknown> = {}) => ({
-    tier, name: tier === 'GRATIS' ? 'Free' : 'Pro', monthlyPrice: 0, maxSites: tier === 'GRATIS' ? 1 : 3, isCustom: false,
-    features: { OFF_PLATFORM_BILLING: true, ONLINE_PAYMENTS: tier !== 'GRATIS', FOOD_AND_BEVERAGE: tier !== 'GRATIS' }, ...over,
+    tier, name: tier === 'STARTER' ? 'Starter' : 'Pro', monthlyPrice: tier === 'STARTER' ? 0 : 29, maxSites: tier === 'STARTER' ? 1 : 3, isCustom: false,
+    features: { OFF_PLATFORM_BILLING: tier !== 'STARTER', ONLINE_PAYMENTS: true, FOOD_AND_BEVERAGE: true }, ...over,
   })
   beforeEach(() => {
     vi.mocked(prisma.site.count).mockResolvedValue(1 as never)
@@ -340,20 +340,20 @@ describe('features', () => {
     vi.mocked(prisma.subscription.findUnique).mockResolvedValue({ status: 'ACTIVE', currentPeriodEnd: new Date('2026-11-01T00:00:00Z'), stripeSubscriptionId: 'sub_SECRET', stripeCustomerId: 'cus_SECRET' } as never)
   })
 
-  it('explains what a Free plan locks and which plan unlocks it', async () => {
-    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValue(sub('GRATIS') as never)
+  it('explains what a Starter plan locks and which plan unlocks it', async () => {
+    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValue(sub('STARTER') as never)
     const r = await inspect('features')
-    expect(r.plan).toMatchObject({ tier: 'GRATIS', maxSites: 1, sitesUsed: 1, canAddSite: false, commissionPercent: { 'sunbed-rental': 0, 'food-and-beverage': 0 }, subscriptionStatus: 'ACTIVE', currentPeriodEnd: '2026-11-01' })
-    expect(r.entitlements[0]).toMatchObject({ key: 'OFF_PLATFORM_BILLING', enabled: true })
-    const online = r.entitlements.find((e: any) => e.key === 'ONLINE_PAYMENTS')
-    expect(online).toMatchObject({ enabled: false, unlockedBy: ['Pro', 'Business', 'or an admin override'] })
-    expect(online.whyLocked).toMatch(/Free/)
-    expect(r.ladder.map((l: any) => l.tier)).toEqual(['GRATIS', 'TEMPORADA', 'GRUPO'])
+    expect(r.plan).toMatchObject({ tier: 'STARTER', maxSites: 1, sitesUsed: 1, canAddSite: false, commissionPercent: { 'sunbed-rental': 6, 'food-and-beverage': 6 }, subscriptionStatus: 'ACTIVE', currentPeriodEnd: '2026-11-01' })
+    const offPlatform = r.entitlements.find((e: any) => e.key === 'OFF_PLATFORM_BILLING')
+    expect(offPlatform).toMatchObject({ enabled: false, unlockedBy: ['Pro', 'Business', 'or an admin override'] })
+    expect(offPlatform.whyLocked).toMatch(/Starter/)
+    expect(r.entitlements.find((e: any) => e.key === 'ONLINE_PAYMENTS')).toMatchObject({ enabled: true })
+    expect(r.ladder.map((l: any) => l.tier)).toEqual(['STARTER', 'PRO', 'BUSINESS'])
     expect(JSON.stringify(r)).not.toMatch(/SECRET/)
   })
 
   it('a Pro plan has it unlocked, with flags (state + source) and site features', async () => {
-    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValue(sub('TEMPORADA') as never)
+    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValue(sub('PRO') as never)
     const r = await inspect('features')
     expect(r.entitlements[0]).toEqual(expect.objectContaining({ enabled: true }))
     expect(r.entitlements[0].whyLocked).toBeUndefined()
@@ -422,7 +422,7 @@ describe('money', () => {
     vi.mocked(getSiteFeeContext).mockResolvedValue(feeCtx({ accountFees: [fee('sunbed-rental', 5)] }) as never)
     const r = await inspect('money')
     expect(r.services.find((s: any) => s.service === 'sunbed-rental')).toMatchObject({ source: 'account override', fee: '5% of the total', chargedNow: '5% of the total' })
-    expect(r.services.find((s: any) => s.service === 'food-and-beverage')).toMatchObject({ source: 'platform fee for the TEMPORADA plan', fee: '3% of the total' })
+    expect(r.services.find((s: any) => s.service === 'food-and-beverage')).toMatchObject({ source: 'platform fee for the PRO plan', fee: '3% of the total' })
     expect(r.example).toMatchObject({
       guestPays: 20,
       partnerInvoice: { gross: 20, net: 16.53, vat: 3.47 },
@@ -504,7 +504,7 @@ describe('output size caps', () => {
   })
 
   it('every aspect stays within the cap with realistic data', async () => {
-    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValue({ tier: 'TEMPORADA', name: 'Pro', monthlyPrice: 29, maxSites: 3, isCustom: false, features: { OFF_PLATFORM_BILLING: true } } as never)
+    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValue({ tier: 'PRO', name: 'Pro', monthlyPrice: 29, maxSites: 3, isCustom: false, features: { OFF_PLATFORM_BILLING: true } } as never)
     vi.mocked(getFlagStates).mockResolvedValue({} as never)
     vi.mocked(prisma.site.count).mockResolvedValue(1 as never)
     vi.mocked(prisma.siteWorkingHours.count).mockResolvedValue(3 as never)
@@ -531,10 +531,10 @@ function fee(serviceCode: string, percentage: number, over: Record<string, unkno
 }
 
 function feeCtx(o: { siteFees?: any[]; accountFees?: any[]; tier?: string | null; promotions?: any[]; provider?: string; partnerCountry?: string; businessId?: string | null } = {}) {
-  const tier = o.tier === undefined ? 'TEMPORADA' : o.tier
+  const tier = o.tier === undefined ? 'PRO' : o.tier
   const settingsFees = ['sunbed-rental', 'food-and-beverage', 'equipment-rental'].flatMap((code) => [
     fee(code, 6),
-    fee(code, 3, { subscriptionTier: 'TEMPORADA' }),
+    fee(code, 3, { subscriptionTier: 'PRO' }),
   ])
   return {
     site: { id: SITE, vat: 21, rentalVat: 10, price: 10, paymentProvider: o.provider ?? 'mollie', serviceFees: o.siteFees ?? [] },

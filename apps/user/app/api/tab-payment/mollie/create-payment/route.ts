@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Tab not found' }, { status: 404 })
   }
 
-  // CR-002 plan gate: Gratis partners take no online card payment.
+  // Plan gate (CR-002 machinery): a plan or agreement without online payments is refused.
   const gate = await checkChargeAllowed('tab', { siteId: tab.siteId, restaurantId: tab.restaurantId })
   if (!gate.allowed) {
     await revertClaim()

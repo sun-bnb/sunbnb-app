@@ -204,7 +204,7 @@ export async function createOrder(order: {
     return { status: 'error', errors: ['Product ordering is not available for this site'] }
   }
 
-  // CR-002 plan gate: Gratis partners take no food & drink ordering.
+  // Plan gate (CR-002 machinery): a plan or agreement without food & drink ordering is refused.
   const foodGate = await checkFoodOrderingAllowed({ siteId: order.siteId })
   if (!foodGate.allowed) {
     return { status: 'error', errors: [foodGate.message] }
